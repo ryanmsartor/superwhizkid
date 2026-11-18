@@ -106,7 +106,6 @@ void gamateReset(struct Gamate* g) {
 	g->frameDone = false;
 	g->irq = g->nmi = false;
 	g->buttons = 0xFF; // all controls are active low
-	g->pendingPresses = 0;
 	g->openBus = 0xFF;
 	g->uartTx = g->uartRx = g->uartTxBits = g->uartRxBits = 0;
 	g->uartTxLine = false;
@@ -199,8 +198,7 @@ uint8_t gamateRead(struct Gamate* g, uint16_t address) {
 	}
 	if ((address & 0xFC00) == 0x4400) {
 		g->diagnostics.controllerReads++;
-		value = g->buttons & (uint8_t) ~g->pendingPresses;
-		g->pendingPresses = 0;
+		value = g->buttons;
 		g->diagnostics.pressedControllerReads += value != 0xFF;
 		goto done;
 	}
@@ -490,12 +488,6 @@ void gamateRunClocks(struct Gamate* g, unsigned clocks) {
 			g->frameDone = true;
 		}
 	}
-}
-
-// Games poll every 24 IRQs or more, so a press is held until the next read to catch quick taps.
-void gamateSetButtons(struct Gamate* g, uint8_t buttons) {
-	g->buttons = buttons;
-	g->pendingPresses |= (uint8_t) ~buttons;
 }
 
 void gamateRunFrame(struct Gamate* g) {

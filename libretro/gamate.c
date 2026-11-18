@@ -18,6 +18,7 @@ static bool loaded;
 static uint16_t video[GAMATE_WIDTH * GAMATE_HEIGHT];
 static int16_t audio[2048 * 2];
 static bool tapLatch, skipIntro;
+static uint8_t pendingPresses;
 static const uint16_t* activePalette;
 static const uint16_t originalPalette[4] = { 0xCE93, 0x8CEB, 0x5327, 0x1102 };
 static const uint16_t accuratePalette[4] = { 0x9CEC, 0x6B89, 0x3A08, 0x10C4 };
@@ -191,6 +192,7 @@ static void runIntro(void) {
 
 void retro_reset(void) {
 	if (!loaded) return;
+	pendingPresses = 0;
 	gamateReset(&gamate);
 	if (skipIntro) runIntro();
 	lcdSnap = true;
@@ -210,10 +212,11 @@ static void readInput(void) {
 	BUTTON(RETRO_DEVICE_ID_JOYPAD_SELECT, 7);
 #undef BUTTON
 	if (tapLatch) {
-		gamateSetButtons(&gamate, buttons);
+		pendingPresses |= (uint8_t) ~buttons;
+		gamate.buttons = buttons & (uint8_t) ~pendingPresses;
 	} else {
 		gamate.buttons = buttons;
-		gamate.pendingPresses = 0;
+		pendingPresses = 0;
 	}
 }
 
@@ -222,8 +225,10 @@ void retro_run(void) {
 	bool updated = false;
 	if (environCb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated) readOptions();
 	readInput();
+	uint64_t controllerReads = gamate.diagnostics.controllerReads;
 	gamateSetAudio(&gamate, audio, sizeof(audio) / sizeof(audio[0]) / 2, 48000);
 	gamateRunFrame(&gamate);
+	if (gamate.diagnostics.controllerReads != controllerReads) pendingPresses = 0;
 	renderLcd();
 	videoCb(video, GAMATE_WIDTH, GAMATE_HEIGHT, GAMATE_WIDTH * sizeof(*video));
 	size_t frames = gamate.audioCount < gamate.audioCapacity ? gamate.audioCount : gamate.audioCapacity;
@@ -265,6 +270,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 		return false;
 	}
 	readOptions();
+	pendingPresses = 0;
 	if (skipIntro) runIntro();
 	lcdSnap = true;
 	loaded = true;
@@ -277,6 +283,7 @@ bool retro_load_game_special(unsigned type, const struct retro_game_info* info, 
 }
 
 void retro_unload_game(void) {
+	pendingPresses = 0;
 	gamateFree(&gamate);
 	loaded = false;
 }

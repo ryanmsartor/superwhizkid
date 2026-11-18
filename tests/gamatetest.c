@@ -623,22 +623,8 @@ static void testAudio(void) {
 	gamateFree(&g);
 }
 
-static void testControllerTapLatch(void) {
-	struct Gamate g;
-	gamateInit(&g);
-	gamateSetButtons(&g, 0xBF);
-	gamateSetButtons(&g, 0xFF);
-	assert(gamateRead(&g, 0x4400) == 0xBF); // released before the read: still seen once
-	assert(gamateRead(&g, 0x4400) == 0xFF);
-	gamateSetButtons(&g, 0xFE);
-	assert(gamateRead(&g, 0x4400) == 0xFE);
-	assert(gamateRead(&g, 0x4400) == 0xFE); // held
-	gamateFree(&g);
-}
-
 int main(void) {
 	testMemory();
-	testControllerTapLatch();
 	testUart();
 	testVideo();
 	testVideoWindows();

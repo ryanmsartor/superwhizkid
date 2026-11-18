@@ -16,6 +16,7 @@ static char systemDirectory[] = "/tmp/superwhizkid-coretest-XXXXXX";
 static unsigned activeButton = ~0u, polls, videoFrames, audioBatches;
 static bool videoVaries, audioActive;
 static const char* paletteOption = "original";
+static const char* tapLatchOption = "off";
 static bool optionUpdate, paletteOptionRegistered;
 static bool sawPaletteLight, frameIsGreyscale;
 
@@ -34,6 +35,10 @@ static bool environment(unsigned command, void* data) {
 		struct retro_variable* variable = data;
 		if (!strcmp(variable->key, "superwhizkid_palette")) {
 			variable->value = paletteOption;
+			return true;
+		}
+		if (!strcmp(variable->key, "superwhizkid_tap_latch")) {
+			variable->value = tapLatchOption;
 			return true;
 		}
 		return false;
@@ -91,7 +96,8 @@ static int16_t inputState(unsigned port, unsigned device, unsigned index, unsign
 static void writeTestFirmware(void) {
 	uint8_t firmware[0x1000] = { 0 };
 	// Purpose-written test program: initialize one AY tone and a visible pixel, then mirror $4400
-	// to RAM. The temporary discovery filename below does not imply commercial firmware contents.
+	// to RAM whenever RAM $0002 is nonzero. Tests can pause controller reads by clearing that byte.
+	// The temporary discovery filename below does not imply commercial firmware contents.
 	static const uint8_t program[] = {
 		0x78,                         // SEI
 		0xD8,                         // CLD
@@ -102,7 +108,9 @@ static void writeTestFirmware(void) {
 		0xA9, 0x00, 0x8D, 0x04, 0x50, // plane 0, X address 0
 		0xA9, 0x0A, 0x8D, 0x05, 0x50, // row 10 (initial visible top row)
 		0xA9, 0x80, 0x8D, 0x07, 0x50, // set its first pixel
-		0xAD, 0x00, 0x44,             // loop: LDA $4400
+		0xAD, 0x02, 0x00,             // loop: LDA $0002
+		0xF0, 0xFB,                   // BEQ loop
+		0xAD, 0x00, 0x44,             // LDA $4400
 		0x8D, 0x00, 0x00,             // STA $0000
 		0xEE, 0x01, 0x00,             // INC $0001
 		0x4C, 0x25, 0xE0              // JMP loop
@@ -175,6 +183,7 @@ int main(int argc, char** argv) {
 	assert(p_retro_serialize_size() == stateSizeBeforeLoad);
 	uint8_t* ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
 	assert(ram);
+	ram[2] = 1;
 	static const unsigned ids[8] = {
 		RETRO_DEVICE_ID_JOYPAD_UP, RETRO_DEVICE_ID_JOYPAD_DOWN,
 		RETRO_DEVICE_ID_JOYPAD_LEFT, RETRO_DEVICE_ID_JOYPAD_RIGHT,
@@ -193,7 +202,40 @@ int main(int argc, char** argv) {
 	assert(sawPaletteLight && frameIsGreyscale);
 
 	void* state = malloc(stateSizeBeforeLoad);
-	assert(state && p_retro_serialize(state, stateSizeBeforeLoad));
+	assert(state);
+
+	// The convenience latch belongs to the libretro adapter: loading machine state neither restores
+	// a latch saved earlier nor clears a press accumulated after the save.
+	tapLatchOption = "on";
+	optionUpdate = true;
+	ram[2] = 0;
+	activeButton = ~0u;
+	p_retro_run(); // let the test firmware settle into its no-controller-read loop
+	activeButton = RETRO_DEVICE_ID_JOYPAD_START;
+	p_retro_run();
+	assert(p_retro_serialize(state, stateSizeBeforeLoad));
+	activeButton = ~0u;
+	ram[2] = 1;
+	p_retro_run();
+	assert(ram[0] == 0xBF);
+	assert(p_retro_unserialize(state, stateSizeBeforeLoad));
+	ram[2] = 1;
+	p_retro_run();
+	assert(ram[0] == 0xFF); // loading did not restore the saved frontend latch
+
+	ram[2] = 0;
+	assert(p_retro_serialize(state, stateSizeBeforeLoad));
+	activeButton = RETRO_DEVICE_ID_JOYPAD_START;
+	p_retro_run();
+	assert(p_retro_unserialize(state, stateSizeBeforeLoad));
+	activeButton = ~0u;
+	ram[2] = 1;
+	p_retro_run();
+	assert(ram[0] == 0xBF); // loading did not clear the newer frontend latch
+
+	tapLatchOption = "off";
+	optionUpdate = true;
+	assert(p_retro_serialize(state, stateSizeBeforeLoad));
 	uint8_t savedCounter = ram[1];
 	activeButton = RETRO_DEVICE_ID_JOYPAD_A;
 	p_retro_run();
