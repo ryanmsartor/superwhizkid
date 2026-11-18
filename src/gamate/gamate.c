@@ -40,6 +40,21 @@ struct GamateState {
 	uint16_t lcdClock, lcdRowEvent;
 };
 
+static uint32_t tonePeriodFromRegisters(const struct Gamate* g, unsigned channel) {
+	uint32_t period = g->ayRegisters[channel * 2] |
+		(uint32_t) g->ayRegisters[channel * 2 + 1] << 8;
+	return (period ? period : 1) * 32;
+}
+
+static void updateAyPeriods(struct Gamate* g) {
+	for (unsigned channel = 0; channel < 3; channel++) {
+		g->ayTonePeriod[channel] = tonePeriodFromRegisters(g, channel);
+	}
+	g->ayNoisePeriod = (g->ayRegisters[6] ? g->ayRegisters[6] : 1) * 64;
+	uint32_t envelope = g->ayRegisters[11] | (uint32_t) g->ayRegisters[12] << 8;
+	g->ayEnvelopePeriod = (envelope ? envelope : 1) * 1024;
+}
+
 void gamateInit(struct Gamate* g) {
 	memset(g, 0, sizeof(*g));
 	g->sampleRate = 48000;
@@ -111,6 +126,7 @@ void gamateReset(struct Gamate* g) {
 	g->uartTxLine = false;
 	g->ayAddress = 0;
 	memset(g->ayRegisters, 0, sizeof(g->ayRegisters));
+	updateAyPeriods(g);
 	memset(&g->ay, 0, sizeof(g->ay));
 	g->ay.noiseLfsr = 0x1FFFF;
 	g->ay.noiseLevel = true;
@@ -258,6 +274,14 @@ void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
 		g->diagnostics.ayWrites++;
 		g->diagnostics.ayRegisterWrites[g->ayAddress]++;
 		g->ayRegisters[g->ayAddress] = value & masks[g->ayAddress];
+		if (g->ayAddress <= 5) {
+			g->ayTonePeriod[g->ayAddress >> 1] = tonePeriodFromRegisters(g, g->ayAddress >> 1);
+		} else if (g->ayAddress == 6) {
+			g->ayNoisePeriod = (g->ayRegisters[6] ? g->ayRegisters[6] : 1) * 64;
+		} else if (g->ayAddress == 11 || g->ayAddress == 12) {
+			uint32_t envelope = g->ayRegisters[11] | (uint32_t) g->ayRegisters[12] << 8;
+			g->ayEnvelopePeriod = (envelope ? envelope : 1) * 1024;
+		}
 		if (g->ayAddress == 13) {
 			uint8_t shape = value & 0x0F;
 			g->ay.envelopeAttack = shape & 4 ? 15 : 0;
@@ -325,11 +349,6 @@ void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
 	}
 }
 
-static uint32_t tonePeriod(const struct Gamate* g, int channel) {
-	uint32_t period = g->ayRegisters[channel * 2] | (uint32_t) g->ayRegisters[channel * 2 + 1] << 8;
-	return (period ? period : 1) * 32;
-}
-
 static int channelLevel(const struct Gamate* g, int channel) {
 	static const uint8_t levels[16] = { 0, 1, 2, 3, 5, 7, 11, 15, 22, 31, 45, 63, 90, 127, 180, 255 };
 	bool toneDisabled = g->ayRegisters[7] & (1 << channel);
@@ -343,7 +362,7 @@ static int channelLevel(const struct Gamate* g, int channel) {
 	// A point-sampled square wave above Nyquist aliases into a loud, false whistle. The physical
 	// speaker cannot reproduce these ultrasonic periods; retain their average (50% duty) level so
 	// noise mixing remains correct, then let the output high-pass remove the resulting DC.
-	uint32_t period = tonePeriod(g, channel);
+	uint32_t period = g->ayTonePeriod[channel];
 	if ((uint64_t) period * g->sampleRate <= 4433000) return level / 2;
 	return g->ay.toneLevel[channel] ? level : 0;
 }
@@ -451,18 +470,36 @@ static unsigned earlierEvent(unsigned current, uint32_t counter, uint32_t period
 }
 
 void gamateRunClocks(struct Gamate* g, unsigned clocks) {
+	// Most CPU instructions end before the next observable device edge. Advance those counters in
+	// one step; the event loop below retains the original ordering whenever any boundary is crossed.
+	uint64_t sampleAfter = g->samplePhase + (uint64_t) clocks * g->sampleRate;
+	bool tonesQuiet = true;
+	for (int channel = 0; channel < 3; channel++) {
+		tonesQuiet &= g->ay.toneCounter[channel] + clocks < g->ayTonePeriod[channel];
+	}
+	if (tonesQuiet && g->ay.noiseCounter + clocks < g->ayNoisePeriod &&
+			g->ay.envelopeCounter + clocks < g->ayEnvelopePeriod && sampleAfter < 4433000 &&
+			(g->irqClocks >= IRQ_PERIOD || g->irqClocks + clocks < IRQ_PERIOD) &&
+			(g->displayStopped || g->lcdClock >= 162 || g->lcdClock + clocks < 162) &&
+			(g->frameClocks >= GAMATE_CLOCKS_PER_FRAME ||
+				g->frameClocks + clocks < GAMATE_CLOCKS_PER_FRAME)) {
+		g->masterClocks += clocks;
+		for (int channel = 0; channel < 3; channel++) g->ay.toneCounter[channel] += clocks;
+		g->ay.noiseCounter += clocks;
+		g->ay.envelopeCounter += clocks;
+		g->samplePhase = sampleAfter;
+		g->irqClocks += clocks;
+		if (!g->displayStopped) g->lcdClock += clocks;
+		g->frameClocks += clocks;
+		return;
+	}
 	while (clocks) {
 		unsigned step = clocks;
-		uint32_t tonePeriods[3];
 		for (int channel = 0; channel < 3; channel++) {
-			tonePeriods[channel] = tonePeriod(g, channel);
-			step = earlierEvent(step, g->ay.toneCounter[channel], tonePeriods[channel]);
+			step = earlierEvent(step, g->ay.toneCounter[channel], g->ayTonePeriod[channel]);
 		}
-		uint32_t noisePeriod = (g->ayRegisters[6] ? g->ayRegisters[6] : 1) * 64;
-		uint32_t envelope = g->ayRegisters[11] | (uint32_t) g->ayRegisters[12] << 8;
-		uint32_t envelopePeriod = (envelope ? envelope : 1) * 1024;
-		step = earlierEvent(step, g->ay.noiseCounter, noisePeriod);
-		step = earlierEvent(step, g->ay.envelopeCounter, envelopePeriod);
+		step = earlierEvent(step, g->ay.noiseCounter, g->ayNoisePeriod);
+		step = earlierEvent(step, g->ay.envelopeCounter, g->ayEnvelopePeriod);
 		if (g->sampleRate) {
 			uint64_t remaining = g->samplePhase < 4433000 ? 4433000 - g->samplePhase : 0;
 			uint64_t untilSample = remaining ?
@@ -482,20 +519,20 @@ void gamateRunClocks(struct Gamate* g, unsigned clocks) {
 		g->masterClocks += step;
 		for (int channel = 0; channel < 3; channel++) {
 			g->ay.toneCounter[channel] += step;
-			if (g->ay.toneCounter[channel] >= tonePeriods[channel]) {
+			if (g->ay.toneCounter[channel] >= g->ayTonePeriod[channel]) {
 				g->ay.toneCounter[channel] = 0;
 				g->ay.toneLevel[channel] = !g->ay.toneLevel[channel];
 			}
 		}
 		g->ay.noiseCounter += step;
-		if (g->ay.noiseCounter >= noisePeriod) {
+		if (g->ay.noiseCounter >= g->ayNoisePeriod) {
 			g->ay.noiseCounter = 0;
 			uint32_t feedback = (g->ay.noiseLfsr ^ (g->ay.noiseLfsr >> 3)) & 1;
 			g->ay.noiseLfsr = g->ay.noiseLfsr >> 1 | feedback << 16;
 			g->ay.noiseLevel = g->ay.noiseLfsr & 1;
 		}
 		g->ay.envelopeCounter += step;
-		if (g->ay.envelopeCounter >= envelopePeriod) {
+		if (g->ay.envelopeCounter >= g->ayEnvelopePeriod) {
 			g->ay.envelopeCounter = 0;
 			if (!g->ay.envelopeHolding && --g->ay.envelopeStep < 0) {
 				if (g->ay.envelopeHold) {
@@ -628,5 +665,6 @@ bool gamateLoadState(struct Gamate* g, const void* data, size_t size) {
 	memcpy(g->lcdAccum, state.lcdAccum, sizeof(g->lcdAccum));
 	memcpy(g->frameBuffer, state.frameBuffer, sizeof(g->frameBuffer));
 	memcpy(g->ayRegisters, state.ayRegisters, sizeof(g->ayRegisters));
+	updateAyPeriods(g);
 	return true;
 }

@@ -88,7 +88,7 @@ static void sbc(struct GamateCpu* c, uint8_t value) {
 			high--;
 		}
 		if (high < 0) high -= 6;
-		c->a = (high << 4) | (low & 0x0F);
+		c->a = (uint8_t) high << 4 | (low & 0x0F);
 	} else {
 		c->a = binary;
 	}

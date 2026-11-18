@@ -567,6 +567,26 @@ into the repository, build output, tests, or releases.
   byte-for-byte; their video/audio hashes, machine diagnostics, and reported state remained exact.
   These measurements justified only event batching, an avoidable-ROM-modulo guard, and a direct
   raw-palette frontend path when both presentation filters are disabled; no timing was omitted.
+- A second profile after link integration still placed clock-event processing first. AY tone, noise,
+  and envelope periods are now derived once on reset/load and their relevant register writes instead
+  of being rebuilt on every instruction's clock advance. They remain derived runtime values outside
+  the state format. This reduced the same 5,000-frame Brick Blaster benchmark from about 4.80 to 4.69
+  seconds with exact output. CMake's official `CheckIPOSupported` module documentation
+  (<https://cmake.org/cmake/help/latest/module/CheckIPOSupported.html>) was used while evaluating
+  release IPO/LTO. Once the event-free fast path was present, otherwise identical local GCC builds
+  measured about 4.29 seconds both with and without IPO. It was therefore not enabled in the final
+  build, avoiding extra release-toolchain risk for no demonstrated gain. No source-level emulator
+  implementation was consulted.
+- The same profile motivated an event-free fast path for the overwhelmingly common case where one
+  CPU instruction crosses no AY, audio-sample, IRQ, LCD-row, or frame boundary. It advances exactly
+  the same counters once and falls back to the ordered event loop at every boundary. Together with
+  cached AY periods, the current release build reduced the 5,000-frame Brick Blaster benchmark from
+  about 4.80 to 4.29 seconds (approximately 10.6%). The batched-versus-single-clock equivalence test,
+  four byte-identical 1,000-frame game reports, and the complete 116-case/two-BIOS 300-frame sweep
+  all passed after this second pass. An undefined-behavior sanitizer run also identified a pre-existing
+  signed left shift in the decimal-SBC wrap calculation; it was replaced with an explicit eight-bit
+  conversion and the exhaustive decimal test's independent reference calculation was updated to
+  express the same defined wrap. Normal and debug suites retain the same exhaustive results.
 
 ## Still needed
 

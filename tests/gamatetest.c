@@ -465,7 +465,7 @@ static void testCpuDecimal(void) {
 					int high = (a >> 4) - (value >> 4);
 					if (low < 0) { low -= 6; high--; }
 					if (high < 0) high -= 6;
-					expected = (unsigned) ((high << 4) | (low & 0x0F)) & 0xFF;
+					expected = ((unsigned) (uint8_t) high << 4 | (low & 0x0F)) & 0xFF;
 					expectedFlags |= binary < 0x100;
 					expectedFlags |= binary & 0x80;
 					expectedFlags |= ((a ^ value) & (a ^ binary) & 0x80) ? 0x40 : 0;

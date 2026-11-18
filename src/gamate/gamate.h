@@ -69,6 +69,7 @@ struct Gamate {
 
 	uint8_t ayAddress;
 	uint8_t ayRegisters[16];
+	uint32_t ayTonePeriod[3], ayNoisePeriod, ayEnvelopePeriod;
 	struct GamateAy ay;
 	int16_t* audioOut;
 	size_t audioCapacity, audioCount;
