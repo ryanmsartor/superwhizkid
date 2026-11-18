@@ -106,8 +106,9 @@ hardware measurements take precedence where they conflict with an emulator.
   two reported Gamate panel types all prevent a single photograph-derived palette from being exact.
 - Implementation impact: the libretro frontend offers `Original`, `Accurate`, and `Greyscale`.
   `Original` preserves the core's initial uncited visual approximation exactly. `Accurate` uses
-  RGB565 `9CEC/6B89/3A08/10C4`; its darker driven shades shift from the panel's olive background
-  toward the cool, low-saturation ink appearance visible in the hardware references. `Greyscale`
+  RGB565 `8C69/6348/3208/1906`; its background is a darker, more yellow-olive panel tone, while
+  progressively driven shades shift toward a slightly lighter navy ink. The adjustment remains a
+  visual interpretation of the same uncalibrated hardware references rather than a new measurement. `Greyscale`
   uses neutral 255/170/85/0 levels. Palette selection only
   maps completed two-bit pixels to output colors and does not change emulated LCD state or timing.
 

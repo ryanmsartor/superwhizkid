@@ -25,7 +25,7 @@ static unsigned flickerReduction;
 static uint8_t pendingPresses;
 static const uint16_t* activePalette;
 static const uint16_t originalPalette[4] = { 0xCE93, 0x8CEB, 0x5327, 0x1102 };
-static const uint16_t accuratePalette[4] = { 0x9CEC, 0x6B89, 0x3A08, 0x10C4 };
+static const uint16_t accuratePalette[4] = { 0x8C69, 0x6348, 0x3208, 0x1906 };
 static const uint16_t greyscalePalette[4] = { 0xFFFF, 0xAD55, 0x52AA, 0x0000 };
 static uint16_t shades[3 * 256 + 1];
 static uint16_t lcdLevel[GAMATE_WIDTH * GAMATE_HEIGHT];

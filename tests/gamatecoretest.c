@@ -427,7 +427,7 @@ int main(int argc, char** argv) {
 	paletteOption = "accurate";
 	optionUpdate = true;
 	p_retro_run();
-	assert(firstVideoPixel == 0x6B89);
+	assert(firstVideoPixel == 0x6348);
 	paletteOption = "greyscale";
 	optionUpdate = true;
 	p_retro_run();
