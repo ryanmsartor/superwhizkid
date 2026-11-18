@@ -23,6 +23,8 @@ static const char* skipIntroOption = "off";
 static bool optionUpdate, modernOptions, legacyOptions, supportModernOptions = true;
 static bool sawPaletteLight, frameIsGreyscale;
 static uint16_t firstVideoPixel;
+static unsigned messageCount;
+static char lastMessage[128];
 
 static unsigned optionMask(const char* key) {
 	static const char* keys[] = {
@@ -104,7 +106,8 @@ static bool environment(unsigned command, void* data) {
 	case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS:
 		return true;
 	case RETRO_ENVIRONMENT_SET_MESSAGE:
-		fprintf(stderr, "core message: %s\n", ((const struct retro_message*) data)->msg);
+		messageCount++;
+		snprintf(lastMessage, sizeof(lastMessage), "%s", ((const struct retro_message*) data)->msg);
 		return true;
 	default:
 		return false;
@@ -483,6 +486,21 @@ int main(int argc, char** argv) {
 	ram[3] = 0;
 	p_retro_reset();
 	assert(ram[3] == 0xAA);
+	p_retro_unload_game();
+
+	// A BIOS that never reaches cartridge entry hits the master-clock deadline. Load/reset both
+	// report the failure and return to a clean ordinary reset state instead of continuing mid-BIOS.
+	writeTestFirmware("gamate_bios_umc.bin", 0x55);
+	writeTestFirmware("gamate_bios_bit.bin", 0xAA);
+	biosOption = "umc";
+	unsigned messagesBeforeTimeout = messageCount;
+	assert(p_retro_load_game(&game));
+	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+	assert(ram && ram[3] == 0xFF && messageCount == messagesBeforeTimeout + 1);
+	assert(strstr(lastMessage, "timed out") && strstr(lastMessage, "normal boot"));
+	ram[3] = 0;
+	p_retro_reset();
+	assert(ram[3] == 0xFF && messageCount == messagesBeforeTimeout + 2);
 	p_retro_unload_game();
 
 	skipIntroOption = "off";

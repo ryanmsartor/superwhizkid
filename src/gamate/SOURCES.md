@@ -114,6 +114,23 @@ hardware measurements take precedence where they conflict with an emulator.
   test both preferences, missing-file fallback, preference changes across reset/reload, and invalid
   values without including commercial firmware bytes.
 
+### BIOS intro-skip deadline and fallback
+
+- Local measurements with both 32 KiB Brick Blaster and the 512 KiB Golden Pyramid reached `$6020`
+  after 30,239,372 master clocks using the validated UMC/NCR BIOS and 30,239,430 clocks using the BIT
+  BIOS: approximately 6.82 emulated seconds at the measured 4.433 MHz oscillator. The matching
+  smallest/large-cartridge results are consistent with the earlier representative-size boot matrix.
+  The skip deadline is therefore expressed in hardware time as 53,196,000 master clocks (12 seconds),
+  about 1.76 times these observed boot paths, rather than as a host-dependent or CPU-instruction
+  iteration count.
+- Intro skipping succeeds only after cartridge protection has passed and the CPU is exactly at the
+  documented `$6020` entry. If the deadline expires, the machine is reset to a clean ordinary BIOS
+  boot and the frontend receives a timeout message; execution never continues from the arbitrary
+  point at which accelerated boot stopped.
+- The purpose-written protection-handshake BIOS tests successful skip on load and reset. A separate
+  synthetic BIOS that never reaches `$6020` tests the deadline, message, and clean-reset fallback on
+  both paths. These tests contain no commercial firmware or cartridge bytes.
+
 ### Official libretro core-info example and RetroArch core installation guide
 
 - Core-info template: <https://github.com/libretro/libretro-core-info/blob/master/00_example_libretro.info>

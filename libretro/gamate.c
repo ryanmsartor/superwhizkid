@@ -28,6 +28,8 @@ static uint16_t lcdLevel[GAMATE_WIDTH * GAMATE_HEIGHT];
 static unsigned lcdDarken = 256, lcdFade = 256;
 static bool lcdSnap = true;
 
+enum { INTRO_SKIP_CLOCK_LIMIT = 4433000 * 12 };
+
 static void message(const char* text) {
 	struct retro_message msg = { text, 300 };
 	environCb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
@@ -181,20 +183,29 @@ void retro_set_controller_port_device(unsigned port, unsigned device) {
 }
 
 // Runs the real BIOS boot unseen until it jumps to the cartridge entry.
-static void runIntro(void) {
+static bool runIntro(void) {
+	uint64_t start = gamate.masterClocks;
 	gamateSetAudio(&gamate, audio, sizeof(audio) / sizeof(audio[0]) / 2, 48000);
-	for (unsigned long i = 0; i < 20000000 && !(gamate.protectionPassed && gamate.cpu.pc == 0x6020); i++) {
+	while (!(gamate.protectionPassed && gamate.cpu.pc == 0x6020) &&
+			gamate.masterClocks - start < INTRO_SKIP_CLOCK_LIMIT) {
 		gamate.audioCount = 0;
 		gamateRunClocks(&gamate, gamateCpuStep(&gamate) * 2);
 	}
 	gamate.audioCount = 0;
+	return gamate.protectionPassed && gamate.cpu.pc == 0x6020;
+}
+
+static void skipIntroOrReset(void) {
+	if (runIntro()) return;
+	gamateReset(&gamate);
+	message("superwhizkid: BIOS intro skip timed out; using normal boot");
 }
 
 void retro_reset(void) {
 	if (!loaded) return;
 	pendingPresses = 0;
 	gamateReset(&gamate);
-	if (skipIntro) runIntro();
+	if (skipIntro) skipIntroOrReset();
 	lcdSnap = true;
 }
 
@@ -271,7 +282,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 	}
 	readOptions();
 	pendingPresses = 0;
-	if (skipIntro) runIntro();
+	if (skipIntro) skipIntroOrReset();
 	lcdSnap = true;
 	loaded = true;
 	return true;

@@ -6,19 +6,8 @@
 
 ### 2. [done] Add integration coverage for every core option
 
-### 3. Make BIOS intro skipping bounded and failure-aware
+### 3. [done] Make BIOS intro skipping bounded and failure-aware
 
-`runIntro()` currently runs up to 20 million instructions, returns no status, and silently continues
-from an arbitrary BIOS location if cartridge entry `$6020` is never reached.
-
-- Return an explicit success/failure result.
-- Use a clearly justified instruction- or clock-based limit.
-- Avoid a long unexplained stall for invalid, damaged, or unusual content.
-- On failure, preserve a safe boot path and report a useful frontend message.
-- Add success, timeout, load, and reset tests.
-
-Done when intro skipping either reaches the authentic cartridge-entry state or fails predictably
-without silently changing normal boot behavior.
 
 ### 4. [done] Document and validate LCD ghosting as an estimate
 
