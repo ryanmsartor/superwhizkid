@@ -18,7 +18,9 @@ static struct Gamate gamate;
 static bool loaded;
 static uint16_t video[GAMATE_WIDTH * GAMATE_HEIGHT];
 static int16_t audio[2048 * 2];
-static bool tapLatch, skipIntro, monoAudio;
+static bool tapLatch, skipIntro;
+static unsigned audioOutput;
+static int32_t speakerBass, speakerTreble[2];
 static unsigned flickerReduction;
 static uint8_t pendingPresses;
 static const uint16_t* activePalette;
@@ -45,6 +47,24 @@ static uint64_t linkRemoteBase, linkLocalBase, linkLastRemoteClock;
 static bool linkClockSynchronized;
 
 enum { INTRO_SKIP_CLOCK_LIMIT = 4433000 * 12, LINK_PACKET_HEADER = 13 };
+enum { AUDIO_STEREO, AUDIO_MONO, AUDIO_SPEAKER };
+
+static void resetAudioPresentation(void) {
+	speakerBass = speakerTreble[0] = speakerTreble[1] = 0;
+}
+
+static int32_t distortSpeaker(int32_t sample) {
+	// A moderate drive into a continuous soft knee approximates the audible overload in hardware
+	// recordings without the discontinuity and excessive high harmonics of hard clipping.
+	int32_t driven = sample * 3 / 2;
+	int32_t sign = driven < 0 ? -1 : 1;
+	int32_t magnitude = driven < 0 ? -driven : driven;
+	if (magnitude > 16384) {
+		int32_t excess = magnitude - 16384;
+		magnitude = 16384 + excess * 16384 / (excess + 16384);
+	}
+	return magnitude * sign;
+}
 
 static void write64le(uint8_t* out, uint64_t value) {
 	for (unsigned i = 0; i < 8; i++) out[i] = (uint8_t) (value >> (i * 8));
@@ -220,8 +240,9 @@ void retro_set_environment(retro_environment_t cb) {
 			},
 			"original"
 		},
-		{ "superwhizkid_audio_output", "Audio Output", "Selects the output mix. Stereo sends PSG channel A left, B right, and C equally to both; Mono combines the stereo channels equally and sends the result to both speakers.",
-			{ { "stereo", "Stereo" }, { "mono", "Mono" }, { NULL, NULL } }, "stereo" },
+		{ "superwhizkid_audio_output", "Audio Output", "Selects the output mix. Stereo preserves the Gamate's channel panning; Mono combines both sides equally; Built-in Speaker applies an estimated band-limited, softly distorting response based on recordings of real hardware.",
+			{ { "stereo", "Stereo" }, { "mono", "Mono" },
+				{ "speaker", "Built-in Speaker" }, { NULL, NULL } }, "stereo" },
 		{ "superwhizkid_tap_latch", "Catch quick taps", "Not hardware accurate. Holds a press until the game next reads the controller, so taps between its reads aren't lost.",
 			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting", "Applies an estimated slow-panel response to reduce redraw flicker. Higher settings retain the previous shade longer; Off shows raw LCD-controller output.",
@@ -236,7 +257,7 @@ void retro_set_environment(retro_environment_t cb) {
 	};
 	static const struct retro_variable variables[] = {
 		{ "superwhizkid_palette", "Palette; original|accurate|greyscale" },
-		{ "superwhizkid_audio_output", "Audio Output; stereo|mono" },
+		{ "superwhizkid_audio_output", "Audio Output; stereo|mono|speaker" },
 		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting; off|1|2|3|4|5" },
 		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction; off|1|2" },
@@ -276,8 +297,12 @@ static void readOptions(void) {
 
 	var.key = "superwhizkid_audio_output";
 	var.value = NULL;
-	monoAudio = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value &&
-		!strcmp(var.value, "mono");
+	const char* audioValue = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ?
+		var.value : "stereo";
+	unsigned newAudioOutput = !strcmp(audioValue, "mono") ? AUDIO_MONO :
+		!strcmp(audioValue, "speaker") ? AUDIO_SPEAKER : AUDIO_STEREO;
+	if (newAudioOutput != audioOutput) resetAudioPresentation();
+	audioOutput = newAudioOutput;
 
 	var.key = "superwhizkid_tap_latch";
 	var.value = NULL;
@@ -436,6 +461,7 @@ void retro_reset(void) {
 	pendingPresses = 0;
 	clearReceivedLink();
 	gamateReset(&gamate);
+	resetAudioPresentation();
 	if (skipIntro) skipIntroOrReset();
 	lcdSnap = flickerSnap = true;
 }
@@ -478,9 +504,22 @@ void retro_run(void) {
 	renderLcd();
 	videoCb(video, GAMATE_WIDTH, GAMATE_HEIGHT, GAMATE_WIDTH * sizeof(*video));
 	size_t frames = gamate.audioCount < gamate.audioCapacity ? gamate.audioCount : gamate.audioCapacity;
-	if (monoAudio) {
+	if (audioOutput != AUDIO_STEREO) {
 		for (size_t i = 0; i < frames; i++) {
-			int16_t mixed = (int16_t) (((int) audio[i * 2] + audio[i * 2 + 1]) / 2);
+			int32_t mixed = ((int32_t) audio[i * 2] + audio[i * 2 + 1]) / 2;
+			if (audioOutput == AUDIO_SPEAKER) {
+				// Estimated small-speaker response at 48 kHz: approximately 250 Hz high-pass,
+				// followed by two approximately 6.5 kHz low-pass stages.
+				speakerBass += (mixed - speakerBass) * 1055 / 32768;
+				mixed -= speakerBass;
+				for (unsigned stage = 0; stage < 2; stage++) {
+					speakerTreble[stage] += (mixed - speakerTreble[stage]) * 18777 / 32768;
+					mixed = speakerTreble[stage];
+				}
+				mixed = distortSpeaker(mixed);
+			}
+			if (mixed > 32767) mixed = 32767;
+			if (mixed < -32768) mixed = -32768;
 			audio[i * 2] = audio[i * 2 + 1] = mixed;
 		}
 	}
@@ -526,6 +565,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 	clearReceivedLink();
 	if (skipIntro) skipIntroOrReset();
 	lcdSnap = flickerSnap = true;
+	resetAudioPresentation();
 	loaded = true;
 	return true;
 }
@@ -539,6 +579,7 @@ void retro_unload_game(void) {
 	pendingPresses = 0;
 	linkBitCount = 0;
 	clearReceivedLink();
+	resetAudioPresentation();
 	gamateFree(&gamate);
 	loaded = false;
 }
@@ -550,6 +591,7 @@ bool retro_unserialize(const void* data, size_t size) {
 	if (!loaded || !gamateLoadState(&gamate, data, size)) return false;
 	clearReceivedLink();
 	lcdSnap = flickerSnap = true;
+	resetAudioPresentation();
 	return true;
 }
 void retro_cheat_reset(void) { }

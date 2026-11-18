@@ -15,6 +15,8 @@
 static char systemDirectory[] = "/tmp/superwhizkid-coretest-XXXXXX";
 static unsigned activeButton = ~0u, polls, videoFrames, audioBatches;
 static bool videoVaries, audioActive, audioChannelsDiffer, lastAudioChannelsEqual;
+static int16_t lastAudio[2048 * 2];
+static size_t lastAudioFrames;
 static const char* paletteOption = "original";
 static const char* audioOutputOption = "stereo";
 static const char* tapLatchOption = "off";
@@ -69,15 +71,22 @@ static bool environment(unsigned command, void* data) {
 	case RETRO_ENVIRONMENT_SET_CORE_OPTIONS: {
 		const struct retro_core_option_definition* options = data;
 		unsigned mask = 0;
-		bool defaults = true;
+		bool defaults = true, audioValues = false;
 		for (; options && options->key; options++) {
 			mask |= optionMask(options->key);
+			if (!strcmp(options->key, "superwhizkid_audio_output")) {
+				audioValues = options->values[0].value &&
+					!strcmp(options->values[0].value, "stereo") &&
+					options->values[1].value && !strcmp(options->values[1].value, "mono") &&
+					options->values[2].value && !strcmp(options->values[2].value, "speaker") &&
+					!options->values[3].value;
+			}
 			const char* expected = !strcmp(options->key, "superwhizkid_palette") ? "original" :
 				!strcmp(options->key, "superwhizkid_audio_output") ? "stereo" :
 				!strcmp(options->key, "superwhizkid_bios") ? "umc" : "off";
 			defaults &= options->default_value && !strcmp(options->default_value, expected);
 		}
-		modernOptions = mask == 0x7F && defaults;
+		modernOptions = mask == 0x7F && defaults && audioValues;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_VARIABLES: {
@@ -167,6 +176,9 @@ static void video(const void* data, unsigned width, unsigned height, size_t pitc
 static void audioSample(int16_t left, int16_t right) { (void) left; (void) right; }
 
 static size_t audioBatch(const int16_t* data, size_t frames) {
+	assert(frames <= sizeof(lastAudio) / sizeof(lastAudio[0]) / 2);
+	memcpy(lastAudio, data, frames * 2 * sizeof(*data));
+	lastAudioFrames = frames;
 	lastAudioChannelsEqual = true;
 	for (size_t i = 0; i < frames; i++) {
 		audioActive |= data[i * 2] != 0 || data[i * 2 + 1] != 0;
@@ -392,10 +404,24 @@ int main(int argc, char** argv) {
 	// Mono is a presentation-layer 1:1 downmix and takes effect without reloading content.
 	audioOutputOption = "mono";
 	optionUpdate = true;
+	p_retro_reset();
 	p_retro_run();
 	assert(lastAudioChannelsEqual);
+	int16_t monoAudio[sizeof(lastAudio) / sizeof(lastAudio[0])];
+	size_t monoFrames = lastAudioFrames;
+	assert(monoFrames > 0);
+	memcpy(monoAudio, lastAudio, monoFrames * 2 * sizeof(*monoAudio));
+	audioOutputOption = "speaker";
+	optionUpdate = true;
+	p_retro_reset();
+	p_retro_run();
+	assert(lastAudioChannelsEqual && lastAudioFrames == monoFrames);
+	bool speakerFiltered = false;
+	for (size_t i = 0; i < monoFrames * 2; i++) speakerFiltered |= lastAudio[i] != monoAudio[i];
+	assert(speakerFiltered);
 	audioOutputOption = "stereo";
 	optionUpdate = true;
+	p_retro_reset();
 	p_retro_run();
 	assert(!lastAudioChannelsEqual);
 	paletteOption = "accurate";

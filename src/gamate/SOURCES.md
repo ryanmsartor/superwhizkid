@@ -304,6 +304,32 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   that the default and explicit `Stereo` output have unequal left/right samples, while changing the
   option live to `Mono` produces identical samples on both output channels.
 
+### Recorded built-in-speaker references
+
+- The Retro Future, “Retro Handheld Extravaganza! - Bit Corp Gamate”:
+  <https://www.youtube.com/watch?v=29MwdKRClD8>, especially Cube Up at approximately 9:14–10:25.
+- ReplayRetro, “Bit Corp Gamate Review”:
+  <https://www.youtube.com/watch?v=WdlJGff256g>, especially Cube Up at approximately 12:27–15:00,
+  Devil Castle at 15:00–17:58, and Pharaoh Revenger at 17:58–20:03.
+- Used for: cross-checking the audible bandwidth and mono, mid-focused character of multiple games
+  played through physical Gamate units. Spectral inspection of the marked windows supported retaining
+  useful game harmonics through the upper midrange while rolling off the frequency extremes.
+- Limitations: these are room recordings made through unknown camera microphones and processing.
+  They contain speech, handling noise, room response, microphone coloration, lossy encoding, and
+  possibly automatic gain control. The recordings consistently sound overloaded enough to support
+  modeling speaker distortion as a real characteristic, but they cannot establish its calibrated
+  transfer curve, absolute gain, or unit-to-unit variation. The option description therefore identifies
+  the response as estimated, while the concise user-facing value is `Built-in Speaker`.
+- Implementation impact: the speaker option begins with the documented equal Mono downmix, applies
+  an approximately 250 Hz first-order high-pass, then two approximately 6.5 kHz first-order low-pass
+  stages. It then applies 1.5× drive into a continuous soft knee beginning at half of full scale,
+  progressively compressing loud peaks without hard-clipping discontinuities. This conservative curve
+  represents the audible overload without claiming measurement-level precision. Filter history is
+  presentation state outside save states and is cleared on mode changes, reset, content load/unload,
+  and successful state load.
+- Validation: the libretro integration test verifies that this third value is advertised, remains
+  dual-mono, differs from the unfiltered Mono samples, switches live, and retains Stereo as default.
+
 ## Compatibility reference
 
 ### MAME Gamate implementation
