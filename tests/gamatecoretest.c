@@ -380,9 +380,9 @@ int main(int argc, char** argv) {
 	p_retro_reset();
 	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
 
-	// The compatibility filter suppresses a one-frame light flash, accepts a sustained lightening
-	// on its second frame, and still applies a darker change immediately.
-	flickerOption = "on";
+	// The one-frame filter accepts sustained lightening on its second frame and still applies a
+	// darker change immediately.
+	flickerOption = "1";
 	optionUpdate = true;
 	p_retro_reset();
 	p_retro_run();
@@ -394,6 +394,33 @@ int main(int argc, char** argv) {
 	p_retro_run();
 	assert(firstVideoPixel == 0x8CEB);
 	ram[4] = 0;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
+	p_retro_run();
+	assert(firstVideoPixel == 0xCE93);
+	ram[4] = 0xFF;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
+
+	// The two-frame filter also rejects a two-frame light flash, accepting the change only on its
+	// third consecutive frame. This covers the longest transient cursor erasure in the Brick
+	// Blaster trace without changing the immediate-darkening rule.
+	flickerOption = "2";
+	optionUpdate = true;
+	p_retro_reset();
+	p_retro_run();
+	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+	ram[4] = 0;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
+	ram[4] = 0xFF;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
+	ram[4] = 0;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
 	p_retro_run();
 	assert(firstVideoPixel == 0x8CEB);
 	p_retro_run();

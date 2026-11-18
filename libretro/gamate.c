@@ -18,7 +18,8 @@ static struct Gamate gamate;
 static bool loaded;
 static uint16_t video[GAMATE_WIDTH * GAMATE_HEIGHT];
 static int16_t audio[2048 * 2];
-static bool tapLatch, skipIntro, flickerReduction;
+static bool tapLatch, skipIntro;
+static unsigned flickerReduction;
 static uint8_t pendingPresses;
 static const uint16_t* activePalette;
 static const uint16_t originalPalette[4] = { 0xCE93, 0x8CEB, 0x5327, 0x1102 };
@@ -29,7 +30,7 @@ static uint16_t lcdLevel[GAMATE_WIDTH * GAMATE_HEIGHT];
 static unsigned lcdDarken = 256, lcdFade = 256;
 static uint8_t flickerPixel[GAMATE_WIDTH * GAMATE_HEIGHT];
 static uint8_t flickerPending[GAMATE_WIDTH * GAMATE_HEIGHT];
-static uint8_t flickerPendingValid[GAMATE_WIDTH * GAMATE_HEIGHT];
+static uint8_t flickerPendingFrames[GAMATE_WIDTH * GAMATE_HEIGHT];
 static bool lcdSnap = true, flickerSnap = true;
 
 enum { INTRO_SKIP_CLOCK_LIMIT = 4433000 * 12 };
@@ -57,8 +58,8 @@ void retro_set_environment(retro_environment_t cb) {
 			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting", "Applies an estimated slow-panel response to reduce redraw flicker. Higher settings retain the previous shade longer; Off shows raw LCD-controller output.",
 			{ { "off", "Off" }, { "1", "Very light" }, { "2", "Light" }, { "3", "Medium" }, { "4", "Strong" }, { "5", "Very strong" }, { NULL, NULL } }, "off" },
-		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction", "Suppresses one-frame light flashes caused by games clearing and redrawing objects. This compatibility filter delays genuine lightening changes by one frame.",
-			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
+		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction", "Suppresses brief light flashes caused by games clearing and redrawing objects. The selected number is the maximum transient duration suppressed; genuine lightening changes are delayed by the same number of frames.",
+			{ { "off", "Off" }, { "1", "1 Frame" }, { "2", "2 Frames" }, { NULL, NULL } }, "off" },
 		{ "superwhizkid_bios", "BIOS Priority", "Selects the preferred BIOS at content load; the other is used if it is missing. Reload content to apply a change. Reset continues using the currently loaded BIOS.",
 			{ { "umc", "UMC (gamate_bios_umc.bin)" }, { "bit", "Bit (gamate_bios_bit.bin)" }, { NULL, NULL } }, "umc" },
 		{ "superwhizkid_skip_intro", "Skip BIOS intro", "Runs the BIOS logo sequence instantly at power-on and reset, starting at the cartridge.",
@@ -69,7 +70,7 @@ void retro_set_environment(retro_environment_t cb) {
 		{ "superwhizkid_palette", "Palette; original|accurate|greyscale" },
 		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting; off|1|2|3|4|5" },
-		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction; off|on" },
+		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction; off|1|2" },
 		{ "superwhizkid_bios", "BIOS Priority; umc|bit" },
 		{ "superwhizkid_skip_intro", "Skip BIOS intro; off|on" },
 		{ NULL, NULL }
@@ -123,8 +124,11 @@ static void readOptions(void) {
 
 	var.key = "superwhizkid_flicker_reduction";
 	var.value = NULL;
-	bool reduceFlicker = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value &&
-		!strcmp(var.value, "on");
+	const char* flickerValue = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ?
+		var.value : "off";
+	unsigned reduceFlicker = !strcmp(flickerValue, "on") ? 1 :
+		flickerValue[0] >= '1' && flickerValue[0] <= '2' && !flickerValue[1] ?
+		(unsigned) (flickerValue[0] - '0') : 0;
 	if (reduceFlicker != flickerReduction) flickerSnap = true;
 	flickerReduction = reduceFlicker;
 }
@@ -136,16 +140,19 @@ static void renderLcd(void) {
 		if (flickerReduction) {
 			if (flickerSnap) {
 				flickerPixel[i] = raw;
-				flickerPendingValid[i] = 0;
+				flickerPendingFrames[i] = 0;
 			} else if (raw >= flickerPixel[i]) {
 				flickerPixel[i] = raw;
-				flickerPendingValid[i] = 0;
-			} else if (flickerPendingValid[i] && flickerPending[i] == raw) {
+				flickerPendingFrames[i] = 0;
+			} else if (flickerPendingFrames[i] && flickerPending[i] == raw &&
+					++flickerPendingFrames[i] > flickerReduction) {
 				flickerPixel[i] = raw;
-				flickerPendingValid[i] = 0;
+				flickerPendingFrames[i] = 0;
 			} else {
-				flickerPending[i] = raw;
-				flickerPendingValid[i] = 1;
+				if (!flickerPendingFrames[i] || flickerPending[i] != raw) {
+					flickerPending[i] = raw;
+					flickerPendingFrames[i] = 1;
+				}
 			}
 		} else {
 			flickerPixel[i] = raw;

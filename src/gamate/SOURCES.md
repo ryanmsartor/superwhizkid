@@ -523,6 +523,12 @@ into the repository, build output, tests, or releases.
   serialization. State format version 4 includes in-flight transmit/receive state and a pending NMI.
   Standalone emulation still receives zero unless a caller injects link bits: peer transport,
   electrical timing, and exact NMI/IRQ collision timing are not yet modeled or claimed.
+- Redraw-flicker reduction was tuned from the core's own `/tmp/swk-brick-blaster.trace`, captured
+  during a user-played Brick Blaster session; no external emulator implementation was consulted for
+  this filter. In the title-selection cursor region (raw LCD coordinates x=44-51, y=104-111), its 41
+  non-background pixels were repeatedly absent for one or two frames between longer drawn runs.
+  This evidence was used only to choose the optional presentation filter's one- and two-frame
+  lightening-confirmation limits. It did not change Gamate machine timing or LCD-controller output.
 
 ## Still needed
 
