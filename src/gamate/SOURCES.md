@@ -55,6 +55,38 @@ hardware measurements take precedence where they conflict with an emulator.
 
 ## Libretro integration references
 
+### SundownerSport, pull request #1
+
+- PR: <https://github.com/ryanmsartor/superwhizkid/pull/1>
+- Contributor: SundownerSport (`kilchisblue@aol.com` in the contributed commits).
+- Original contributed commits and scope:
+  - `fb2fef2`, optional tap latch.
+  - `d3ce03d`, optional LCD ghosting filter.
+  - `3519f6f`, UMC/Bit BIOS preference.
+  - `000eb1c`, optional authentic-BIOS intro skip.
+- Authorship: SundownerSport authored the initial implementations of those four options. Ry authored
+  the later palette/option integration, moved the tap latch out of machine state, added and expanded
+  the synthetic integration tests, made state-load and intro-timeout behavior failure-safe, selected
+  the documented option lifecycle/UI wording, and performed the follow-up source documentation.
+- Contributor-reported tap observation: the PR description reports that some games defer `$4400`
+  polling around the BIOS `$F009` wait (24 IRQs is approximately 0.177 seconds at the measured Gamate
+  clock). On Brick Blaster's title screen, SundownerSport reports 76/76 six-frame Start taps accepted
+  with the latch enabled versus 17/76 without it. The PR does not include the automation script or a
+  fuller trial protocol, so these counts are recorded as contributor-reported rather than independently
+  reproduced measurements. Our purpose-written integration firmware independently verifies the latch
+  mechanism, missed-between-read case, consumption, option-off behavior, and save/load boundaries.
+- Contributor-reported display observation: the PR identifies Brick Blaster clearing and redrawing
+  its paddle and ball as the motivation for its persistence filter. Our later 1,338-frame trace
+  independently confirmed the paddle's one-frame erase/restore cadence and exact VRAM changes, as
+  documented below. Neither the PR nor our trace measures physical-panel response time, so the
+  coefficients remain explicitly estimated.
+- BIOS options: the PR introduced filename priority and accelerated execution of the real BIOS until
+  protected cartridge entry, rather than fabricating post-BIOS state. Follow-up tests independently
+  validate both BIOS choices, fallback, `$6020` success, reset/reload lifecycle, and timeout recovery.
+- External-source use: PR #1 cites behavioral observations and the existing superwhizkid interfaces;
+  it does not cite MAME or another emulator as source for these option implementations. The project
+  does not treat the PR's visual coefficients or tap counts as hardware specifications.
+
 ### Real-hardware LCD appearance references
 
 - Nintendo Life, “Meet The Gamate, The Handheld Which Tried To Take On The Game Boy And Failed”:

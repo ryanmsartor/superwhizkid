@@ -1,4 +1,5 @@
 /* Copyright (c) 2026 Ry
+ * Copyright (c) 2026 SundownerSport
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 #include "libretro.h"
