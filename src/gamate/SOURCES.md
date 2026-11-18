@@ -323,9 +323,15 @@ into the repository, build output, tests, or releases.
   one AY tone, writes a visible LCD pixel, and mirrors `$4400` into RAM. The temporary file is named
   `gamate_bios_umc.bin` solely because that is one of the core's firmware-discovery names; its
   contents are not derived from, intended to reproduce, or usable as a replacement for the UMC
-  firmware. The harness verifies all eight active-low input mappings, video and audio callbacks, the
-  fixed state size before/after content load, serialization restoration, reset, unload, and a second
-  content load. This program is test scaffolding authored for superwhizkid; no emulator source or
+  firmware. The harness now generates identifiable UMC/Bit variants plus a second synthetic BIOS
+  that sends the documented `BIT CORPORATION` protection sequence, reads the eight-bit reply, and
+  jumps to `$6020`. These test option-controlled BIOS selection, missing-preference fallback, and
+  intro skipping on load/reset without commercial bytes. The controllable test program also covers
+  modern and legacy option registration, defaults and invalid values, live updates, all palettes,
+  every ghosting level, palette/ghosting interaction, tap-latch behavior across state loads, and a
+  failed state load during an LCD transition. The harness additionally verifies all eight active-low
+  input mappings, video/audio callbacks, fixed state size, serialization restoration, reset, unload,
+  and a second content load. This scaffolding was authored for superwhizkid; no emulator source or
   commercial firmware, BIOS, or game-ROM bytes were used to create it.
 - `tools/gamate-sweep.sh` ran all 58 locally supplied cartridges under both validated BIOS revisions
   for 300 frames after `$6020`: 116/116 combinations booted and produced nonblank video with no

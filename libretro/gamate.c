@@ -292,8 +292,9 @@ unsigned retro_get_region(void) { return RETRO_REGION_NTSC; }
 size_t retro_serialize_size(void) { return gamateStateSize(&gamate); }
 bool retro_serialize(void* data, size_t size) { return loaded && gamateSaveState(&gamate, data, size); }
 bool retro_unserialize(const void* data, size_t size) {
+	if (!loaded || !gamateLoadState(&gamate, data, size)) return false;
 	lcdSnap = true;
-	return loaded && gamateLoadState(&gamate, data, size);
+	return true;
 }
 void retro_cheat_reset(void) { }
 void retro_cheat_set(unsigned index, bool enabled, const char* code) { (void) index; (void) enabled; (void) code; }

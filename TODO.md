@@ -4,21 +4,7 @@
 
 ### 1. [done] Fix tap-latch save-state determinism
 
-### 2. Add integration coverage for every core option
-
-The current libretro integration test covers palette registration and switching, but does not
-exercise most options added by PR #1.
-
-- Test modern core-option registration and the legacy variables fallback.
-- Test defaults, valid values, invalid-value fallback, and runtime option updates.
-- Test tap latch on and off through the libretro boundary.
-- Test every LCD ghosting level, including output identity when disabled.
-- Test UMC and Bit BIOS selection and missing-preferred-BIOS fallback.
-- Test intro skipping on initial load and reset.
-- Test palette switching while LCD ghosting is active.
-
-Done when the public libretro behavior of every option is covered without commercial BIOS or ROM
-bytes in the test suite.
+### 2. [done] Add integration coverage for every core option
 
 ### 3. Make BIOS intro skipping bounded and failure-aware
 
@@ -51,15 +37,7 @@ been established.
 
 Done when the option's behavior and evidentiary status are clear, reproducible, and tested.
 
-### 5. Do not change presentation state after a failed state load
-
-`retro_unserialize()` currently sets `lcdSnap` before confirming that the supplied state loaded.
-A rejected state therefore changes the next rendered frame.
-
-- Set `lcdSnap` only after a successful `gamateLoadState()` call.
-- Add a regression test using an invalid or incompatible state.
-
-Done when a failed unserialize operation has no observable effect on emulation or presentation.
+### 5. [done] Do not change presentation state after a failed state load
 
 ### 6. Clarify and test when BIOS selection takes effect
 
