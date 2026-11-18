@@ -4,8 +4,9 @@ superwhizkid is an accuracy-focused emulator for the Bit Corporation Gamate hand
 a standalone emulation library, a libretro core, and headless validation tools.
 
 The emulator includes cartridge protection and banking, progressive four-shade LCD refresh,
-stereo AY-compatible audio, controller input, save states, and the Gamate link UART boundary. Its
-NMOS 6502-compatible CPU has been validated with focused tests and the Klaus Dormann functional
+stereo AY-compatible audio, controller input, save states, and two-player Gamate link-cable play
+through the libretro Netpacket interface. Its NMOS 6502-compatible CPU has been validated with
+focused tests and the Klaus Dormann functional
 test. Hardware research, comparison sources, and known uncertainties are recorded in
 [`src/gamate/SOURCES.md`](src/gamate/SOURCES.md).
 
@@ -20,6 +21,10 @@ ctest --test-dir build --output-on-failure
 The libretro core is produced as `build/superwhizkid_libretro.so`. It requires an authentic
 `gamate_bios_umc.bin` or `gamate_bios_bit.bin` in the frontend's system directory. No BIOS or game
 images are included.
+
+For link play, both players run the same game and core build, then host or join a standard RetroArch
+netplay room. The transport accepts one remote peer and requires a frontend implementing libretro's
+Netpacket interface.
 
 For local compatibility testing with legally obtained images:
 

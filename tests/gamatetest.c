@@ -7,6 +7,18 @@
 #include <stdlib.h>
 #include <string.h>
 
+struct LinkCapture {
+	struct Gamate* receiver;
+	uint8_t bits, count;
+};
+
+static void captureLinkBit(void* context, bool bit) {
+	struct LinkCapture* capture = context;
+	capture->bits = (uint8_t) (capture->bits << 1 | bit);
+	capture->count++;
+	gamateUartReceiveBit(capture->receiver, bit);
+}
+
 static void testMemory(void) {
 	struct Gamate g;
 	gamateInit(&g);
@@ -47,11 +59,15 @@ static void testMemory(void) {
 }
 
 static void testUart(void) {
-	struct Gamate g;
+	struct Gamate g, peer;
 	gamateInit(&g);
+	gamateInit(&peer);
 	uint8_t bios[GAMATE_BIOS_SIZE] = { 0 }, rom[0x4000] = { 0 };
 	bios[0xFFA] = 0x00; bios[0xFFB] = 0xE2; // NMI vector $E200
 	assert(gamateLoad(&g, rom, sizeof(rom), bios, sizeof(bios)));
+	assert(gamateLoad(&peer, rom, sizeof(rom), bios, sizeof(bios)));
+	struct LinkCapture capture = { .receiver = &peer };
+	gamateSetLink(&g, captureLinkBit, &capture);
 	assert(gamateRead(&g, 0x4800) == 0 && !g.uartTxLine);
 
 	// TX data appears MSB-first immediately. Every read or write in $4C00-$4FFF clocks one bit;
@@ -66,6 +82,11 @@ static void testUart(void) {
 	}
 	gamateRead(&g, 0x4C00);
 	assert(g.uartTxBits == 8 && !g.uartTxLine);
+	assert(capture.count == 9);
+	assert(capture.bits == 0x54);
+	assert(peer.uartRx == 0x54 && peer.uartRxBits == 1 && peer.nmi);
+	assert(g.diagnostics.uartClocks == 9 && peer.diagnostics.uartReceivedBits == 9);
+	peer.nmi = false;
 
 	// Loading new data restarts transmission, and an in-flight byte survives state save/load.
 	gamateWrite(&g, 0x47FF, 0xC0);
@@ -112,6 +133,7 @@ static void testUart(void) {
 	gamateReset(&g);
 	assert(g.uartTx == 0 && g.uartRx == 0 && g.uartTxBits == 0 && g.uartRxBits == 0);
 	assert(!g.uartTxLine && !g.nmi);
+	gamateFree(&peer);
 	gamateFree(&g);
 }
 

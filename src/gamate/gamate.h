@@ -8,10 +8,12 @@
 #include <stddef.h>
 #include <stdint.h>
 
-enum { GAMATE_WIDTH = 160, GAMATE_HEIGHT = 150 };
+enum { GAMATE_WIDTH = 160, GAMATE_HEIGHT = 150, GAMATE_CLOCKS_PER_FRAME = 72900 };
 enum { GAMATE_BIOS_SIZE = 0x1000, GAMATE_MAX_ROM_SIZE = 0x80000 };
 
 enum GamateMapper { GAMATE_MAPPER_PLAIN, GAMATE_MAPPER_BANKED, GAMATE_MAPPER_4IN1 };
+
+typedef void (*GamateLinkBitCallback)(void* context, bool bit);
 
 struct GamateCpu {
 	uint16_t pc;
@@ -23,6 +25,7 @@ struct GamateCpu {
 struct GamateDiagnostics {
 	uint64_t instructions, unsupportedOpcodes, irqsTaken, nmisTaken;
 	uint64_t ayWrites, lcdWrites, vramWrites, bankWrites;
+	uint64_t uartClocks, uartReceivedBits;
 	uint64_t ayRegisterWrites[16], ayActiveSamples[3];
 	uint64_t controllerReads, pressedControllerReads;
 	uint16_t lastUnsupportedPc;
@@ -58,6 +61,8 @@ struct Gamate {
 	uint8_t buttons, openBus;
 	uint8_t uartTx, uartRx, uartTxBits, uartRxBits;
 	bool uartTxLine;
+	GamateLinkBitCallback linkBitCallback;
+	void* linkBitContext;
 	uint64_t masterClocks;
 	uint32_t frameClocks, irqClocks;
 	bool frameDone, irq, nmi;
@@ -88,6 +93,9 @@ uint8_t gamateRead(struct Gamate* gamate, uint16_t address);
 void gamateWrite(struct Gamate* gamate, uint16_t address, uint8_t value);
 void gamateRunClocks(struct Gamate* gamate, unsigned clocks);
 void gamateRunFrame(struct Gamate* gamate);
+// Connect the outgoing UART data sampled by each local transmit-clock access.
+// The callback and context are transport state and are deliberately not serialized.
+void gamateSetLink(struct Gamate* gamate, GamateLinkBitCallback callback, void* context);
 // Supply one rising receiver-clock edge and its data bit from a future link transport.
 void gamateUartReceiveBit(struct Gamate* gamate, bool bit);
 // Immediate diagnostic preview; normal execution builds the picture progressively in run clocks.

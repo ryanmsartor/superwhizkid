@@ -197,11 +197,12 @@ int main(int argc, char** argv) {
 		if (g.diagnostics.unsupportedOpcodes) break;
 	}
 	printf("post-entry: mapper=%d, nonblank=%u/%u, audible=%u/%u peak=%u, IRQs=%llu, AY writes=%llu, "
-		"LCD writes=%llu, VRAM writes=%llu, bank changes=%llu, longest self-loop=%llu\n",
+		"LCD writes=%llu, VRAM writes=%llu, UART clocks=%llu, bank changes=%llu, longest self-loop=%llu\n",
 		g.mapper, nonblank, framesWanted, audible, framesWanted, peak,
 		(unsigned long long) g.diagnostics.irqsTaken, (unsigned long long) g.diagnostics.ayWrites,
 		(unsigned long long) g.diagnostics.lcdWrites,
-		(unsigned long long) g.diagnostics.vramWrites, (unsigned long long) g.diagnostics.bankWrites,
+		(unsigned long long) g.diagnostics.vramWrites, (unsigned long long) g.diagnostics.uartClocks,
+		(unsigned long long) g.diagnostics.bankWrites,
 		(unsigned long long) longestSamePc);
 	printf("AY registers:");
 	for (unsigned i = 0; i < 16; i++) printf(" %02X", g.ayRegisters[i]);

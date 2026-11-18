@@ -32,8 +32,174 @@ static uint8_t flickerPixel[GAMATE_WIDTH * GAMATE_HEIGHT];
 static uint8_t flickerPending[GAMATE_WIDTH * GAMATE_HEIGHT];
 static uint8_t flickerPendingFrames[GAMATE_WIDTH * GAMATE_HEIGHT];
 static bool lcdSnap = true, flickerSnap = true;
+static retro_netpacket_send_t linkSend;
+static uint16_t linkLocalId, linkPeerId;
+static bool linkActive, linkPeerConnected, linkCanSend;
+static uint8_t linkBits[2048];
+static uint64_t linkBitClocks[2048];
+static unsigned linkBitCount;
+static uint8_t linkReceivedBits[4096];
+static uint64_t linkReceivedClocks[4096];
+static unsigned linkReceiveHead, linkReceiveCount;
+static uint64_t linkRemoteBase, linkLocalBase, linkLastRemoteClock;
+static bool linkClockSynchronized;
 
-enum { INTRO_SKIP_CLOCK_LIMIT = 4433000 * 12 };
+enum { INTRO_SKIP_CLOCK_LIMIT = 4433000 * 12, LINK_PACKET_HEADER = 13 };
+
+static void write64le(uint8_t* out, uint64_t value) {
+	for (unsigned i = 0; i < 8; i++) out[i] = (uint8_t) (value >> (i * 8));
+}
+
+static uint64_t read64le(const uint8_t* in) {
+	uint64_t value = 0;
+	for (unsigned i = 0; i < 8; i++) value |= (uint64_t) in[i] << (i * 8);
+	return value;
+}
+
+static void clearReceivedLink(void) {
+	linkReceiveHead = linkReceiveCount = 0;
+	linkClockSynchronized = false;
+	linkLastRemoteClock = 0;
+}
+
+static void flushLink(void) {
+	if (!linkBitCount) return;
+	if (linkSend && linkPeerConnected) {
+		uint8_t packet[LINK_PACKET_HEADER + sizeof(linkBits) * 5];
+		packet[0] = 'G';
+		packet[1] = 'L';
+		packet[2] = 1;
+		packet[3] = (uint8_t) linkBitCount;
+		packet[4] = (uint8_t) (linkBitCount >> 8);
+		uint64_t base = linkBitClocks[0];
+		write64le(packet + 5, base);
+		for (unsigned i = 0; i < linkBitCount; i++) {
+			uint32_t delta = (uint32_t) (linkBitClocks[i] - base);
+			uint8_t* event = packet + LINK_PACKET_HEADER + i * 5;
+			event[0] = (uint8_t) delta;
+			event[1] = (uint8_t) (delta >> 8);
+			event[2] = (uint8_t) (delta >> 16);
+			event[3] = (uint8_t) (delta >> 24);
+			event[4] = linkBits[i];
+		}
+		linkSend(RETRO_NETPACKET_RELIABLE | RETRO_NETPACKET_FLUSH_HINT, packet,
+			LINK_PACKET_HEADER + linkBitCount * 5, linkPeerId);
+	}
+	linkBitCount = 0;
+}
+
+static void queueLinkBit(void* context, bool bit) {
+	(void) context;
+	if (!linkActive || !linkPeerConnected || !linkCanSend) return;
+	linkBits[linkBitCount] = bit;
+	linkBitClocks[linkBitCount] = gamate.masterClocks;
+	if (++linkBitCount == sizeof(linkBits)) flushLink();
+}
+
+static void linkStart(uint16_t clientId, retro_netpacket_send_t send,
+		retro_netpacket_poll_receive_t pollReceive) {
+	(void) pollReceive;
+	linkLocalId = clientId;
+	linkSend = send;
+	linkActive = true;
+	linkPeerConnected = clientId != 0;
+	linkPeerId = 0;
+	linkBitCount = 0;
+	clearReceivedLink();
+}
+
+static void linkReceive(const void* data, size_t size, uint16_t clientId) {
+	if (!linkActive || !linkPeerConnected || !loaded || clientId != linkPeerId || !data ||
+			size < LINK_PACKET_HEADER) return;
+	const uint8_t* packet = data;
+	unsigned count = packet[3] | (unsigned) packet[4] << 8;
+	if (packet[0] != 'G' || packet[1] != 'L' || packet[2] != 1 ||
+			!count || count > sizeof(linkBits) || size != LINK_PACKET_HEADER + count * 5 ||
+			count > sizeof(linkReceivedBits) - linkReceiveCount) return;
+	uint64_t remoteBase = read64le(packet + 5);
+	if (!linkClockSynchronized) {
+		linkRemoteBase = remoteBase;
+		linkLocalBase = gamate.masterClocks;
+		linkLastRemoteClock = remoteBase;
+		linkClockSynchronized = true;
+	} else if (remoteBase < linkLastRemoteClock) {
+		return;
+	}
+	if (!linkReceiveCount) {
+		uint64_t mappedBase = linkLocalBase + (remoteBase - linkRemoteBase);
+		if (mappedBase < gamate.masterClocks) linkLocalBase += gamate.masterClocks - mappedBase;
+	}
+	uint64_t previousClock = linkLastRemoteClock;
+	for (unsigned i = 0; i < count; i++) {
+		const uint8_t* event = packet + LINK_PACKET_HEADER + i * 5;
+		uint32_t delta = event[0] | (uint32_t) event[1] << 8 | (uint32_t) event[2] << 16 |
+			(uint32_t) event[3] << 24;
+		uint64_t remoteClock = remoteBase + delta;
+		if (remoteClock < remoteBase || remoteClock < previousClock) return;
+		previousClock = remoteClock;
+	}
+	for (unsigned i = 0; i < count; i++) {
+		const uint8_t* event = packet + LINK_PACKET_HEADER + i * 5;
+		uint32_t delta = event[0] | (uint32_t) event[1] << 8 | (uint32_t) event[2] << 16 |
+			(uint32_t) event[3] << 24;
+		uint64_t remoteClock = remoteBase + delta;
+		unsigned tail = (linkReceiveHead + linkReceiveCount) % sizeof(linkReceivedBits);
+		linkReceivedBits[tail] = event[4] != 0;
+		linkReceivedClocks[tail] = linkLocalBase + (remoteClock - linkRemoteBase);
+		linkReceiveCount++;
+	}
+	linkLastRemoteClock = previousClock;
+}
+
+static void linkStop(void) {
+	linkSend = NULL;
+	linkActive = linkPeerConnected = linkCanSend = false;
+	linkBitCount = 0;
+	clearReceivedLink();
+}
+
+static void linkPoll(void) { flushLink(); }
+
+static bool linkConnected(uint16_t clientId) {
+	if (!linkActive || linkLocalId != 0 || linkPeerConnected || clientId == 0) return false;
+	linkPeerId = clientId;
+	linkPeerConnected = true;
+	linkBitCount = 0;
+	clearReceivedLink();
+	return true;
+}
+
+static void linkDisconnected(uint16_t clientId) {
+	if (linkLocalId == 0 && linkPeerConnected && clientId == linkPeerId) {
+		linkPeerConnected = false;
+		linkBitCount = 0;
+		clearReceivedLink();
+	}
+}
+
+static void runLinkedFrame(void) {
+	gamate.frameDone = false;
+	gamate.audioCount = 0;
+	while (!gamate.frameDone) {
+		while (linkReceiveCount && linkReceivedClocks[linkReceiveHead] <= gamate.masterClocks) {
+			gamateUartReceiveBit(&gamate, linkReceivedBits[linkReceiveHead]);
+			linkReceiveHead = (linkReceiveHead + 1) % sizeof(linkReceivedBits);
+			linkReceiveCount--;
+		}
+		unsigned clocks = gamateCpuStep(&gamate) * 2;
+		while (linkReceiveCount && linkReceivedClocks[linkReceiveHead] < gamate.masterClocks + clocks) {
+			unsigned beforeEdge = (unsigned) (linkReceivedClocks[linkReceiveHead] - gamate.masterClocks);
+			if (beforeEdge) {
+				gamateRunClocks(&gamate, beforeEdge);
+				clocks -= beforeEdge;
+			}
+			gamateUartReceiveBit(&gamate, linkReceivedBits[linkReceiveHead]);
+			linkReceiveHead = (linkReceiveHead + 1) % sizeof(linkReceivedBits);
+			linkReceiveCount--;
+		}
+		gamateRunClocks(&gamate, clocks);
+	}
+}
 
 static void message(const char* text) {
 	struct retro_message msg = { text, 300 };
@@ -185,6 +351,7 @@ void retro_set_input_state(retro_input_state_t cb) { inputStateCb = cb; }
 
 void retro_init(void) {
 	gamateInit(&gamate);
+	gamateSetLink(&gamate, queueLinkBit, NULL);
 	activePalette = originalPalette;
 	buildShades();
 	enum retro_pixel_format format = RETRO_PIXEL_FORMAT_RGB565;
@@ -204,9 +371,14 @@ void retro_init(void) {
 		{ 0 }
 	};
 	environCb(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, (void*) inputs);
+	static const struct retro_netpacket_callback netpacket = {
+		linkStart, linkReceive, linkStop, linkPoll, linkConnected, linkDisconnected,
+		"superwhizkid-gamate-link-1"
+	};
+	environCb(RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE, (void*) &netpacket);
 }
 
-void retro_deinit(void) { gamateFree(&gamate); }
+void retro_deinit(void) { linkStop(); gamateFree(&gamate); }
 unsigned retro_api_version(void) { return RETRO_API_VERSION; }
 
 void retro_get_system_info(struct retro_system_info* info) {
@@ -254,6 +426,7 @@ static void skipIntroOrReset(void) {
 void retro_reset(void) {
 	if (!loaded) return;
 	pendingPresses = 0;
+	clearReceivedLink();
 	gamateReset(&gamate);
 	if (skipIntro) skipIntroOrReset();
 	lcdSnap = flickerSnap = true;
@@ -288,7 +461,11 @@ void retro_run(void) {
 	readInput();
 	uint64_t controllerReads = gamate.diagnostics.controllerReads;
 	gamateSetAudio(&gamate, audio, sizeof(audio) / sizeof(audio[0]) / 2, 48000);
-	gamateRunFrame(&gamate);
+	linkCanSend = true;
+	if (linkReceiveCount) runLinkedFrame();
+	else gamateRunFrame(&gamate);
+	flushLink();
+	linkCanSend = false;
 	if (gamate.diagnostics.controllerReads != controllerReads) pendingPresses = 0;
 	renderLcd();
 	videoCb(video, GAMATE_WIDTH, GAMATE_HEIGHT, GAMATE_WIDTH * sizeof(*video));
@@ -332,6 +509,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 	}
 	readOptions();
 	pendingPresses = 0;
+	clearReceivedLink();
 	if (skipIntro) skipIntroOrReset();
 	lcdSnap = flickerSnap = true;
 	loaded = true;
@@ -345,6 +523,8 @@ bool retro_load_game_special(unsigned type, const struct retro_game_info* info, 
 
 void retro_unload_game(void) {
 	pendingPresses = 0;
+	linkBitCount = 0;
+	clearReceivedLink();
 	gamateFree(&gamate);
 	loaded = false;
 }
@@ -354,6 +534,7 @@ size_t retro_serialize_size(void) { return gamateStateSize(&gamate); }
 bool retro_serialize(void* data, size_t size) { return loaded && gamateSaveState(&gamate, data, size); }
 bool retro_unserialize(const void* data, size_t size) {
 	if (!loaded || !gamateLoadState(&gamate, data, size)) return false;
+	clearReceivedLink();
 	lcdSnap = flickerSnap = true;
 	return true;
 }

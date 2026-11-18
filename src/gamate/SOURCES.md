@@ -198,6 +198,36 @@ hardware measurements take precedence where they conflict with an emulator.
   implemented by the core. This metadata affects frontend feature discovery only; it does not
   supply or replace serialization behavior.
 
+### Libretro Netpacket interface and RetroArch validation
+
+- Upstream interface: <https://github.com/libretro/libretro-common/blob/master/include/libretro.h>
+- Vendored interface used by the build: `shared/libretro/libretro.h`,
+  `RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE` and `retro_netpacket_callback`.
+- Used for: the two-player session lifecycle, one-peer admission callback, reliable ordered packet
+  sending, protocol-version negotiation, legal send-call contexts, and the frontend-managed
+  disabling of time manipulation while a packet-based multiplayer session is active.
+- Implementation impact: each local `$4C00-$4FFF` UART clock samples the current transmit-data line
+  through an original machine callback. The libretro adapter batches those bits with their sender
+  master-clock offsets, sends them reliably to the sole peer, and replays received edges against the
+  receiver's emulated clock. This preserves separate byte-complete NMI edges instead of injecting a
+  whole network packet instantaneously. Connection, queues, clock alignment, and callback pointers
+  are transport state outside Gamate save states; reset, unload, and successful state load discard
+  queued remote edges. No other emulator implementation supplied this transport code.
+- Synthetic validation: the machine test wires one Gamate directly to another and checks the sampled
+  bit stream, receiver shift state, byte NMI, and diagnostic counts. The libretro test registers a
+  mock Netpacket frontend, rejects a third player, transmits `$A5` through eight real emulated UART
+  accesses, receives `$3C`, and replays a timed two-byte `$A5/$5A` packet while verifying that both
+  byte NMIs execute independently.
+- Cartridge/library validation: a 300-frame, two-BIOS sweep remained 116/116. World Cup Soccer was
+  the only unattended title to exercise the UART, producing 464 transmit clocks under either BIOS;
+  this made it the real-content transport test. Two headless RetroArch 1.20.0 instances connected on
+  localhost with the current protocol and ran World Cup Soccer for several accelerated emulated
+  minutes without connection, protocol-size, or core errors.
+- Limitation: the transport is validated locally and preserves sender-relative edge spacing, but a
+  complete two-player match across separate physical devices has not yet been played. Internet
+  latency is necessarily added before a received frame of edges can be replayed, so game-level
+  timeout behavior still needs interactive cross-device validation.
+
 ## Build and release infrastructure references
 
 ### spruceUI Cores-spruce

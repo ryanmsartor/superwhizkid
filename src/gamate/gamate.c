@@ -7,7 +7,7 @@
 #include <string.h>
 
 // The LCD receives 72,900 clocks per frame from the 4.433 MHz master oscillator.
-enum { CLOCKS_PER_FRAME = 72900, IRQ_PERIOD = 32768 };
+enum { IRQ_PERIOD = 32768 };
 enum { STATE_MAGIC = 0x54414D47, STATE_VERSION = 4 };
 
 static uint32_t crc32(const uint8_t* data, size_t size) {
@@ -171,6 +171,8 @@ static uint8_t protectionRead(struct Gamate* g) {
 }
 
 static void uartClock(struct Gamate* g) {
+	g->diagnostics.uartClocks++;
+	if (g->linkBitCallback) g->linkBitCallback(g->linkBitContext, g->uartTxLine);
 	if (g->uartTxBits < 8) {
 		g->uartTx <<= 1;
 		g->uartTxBits++;
@@ -178,7 +180,13 @@ static void uartClock(struct Gamate* g) {
 	g->uartTxLine = g->uartTxBits < 8 && (g->uartTx & 0x80);
 }
 
+void gamateSetLink(struct Gamate* g, GamateLinkBitCallback callback, void* context) {
+	g->linkBitCallback = callback;
+	g->linkBitContext = context;
+}
+
 void gamateUartReceiveBit(struct Gamate* g, bool bit) {
+	g->diagnostics.uartReceivedBits++;
 	g->uartRx = (uint8_t) (g->uartRx << 1 | bit);
 	if (++g->uartRxBits == 8) {
 		g->uartRxBits = 0;
@@ -467,8 +475,8 @@ void gamateRunClocks(struct Gamate* g, unsigned clocks) {
 		if (!g->displayStopped && g->lcdClock < 162) {
 			step = earlierEvent(step, g->lcdClock, 162);
 		}
-		if (g->frameClocks < CLOCKS_PER_FRAME) {
-			step = earlierEvent(step, g->frameClocks, CLOCKS_PER_FRAME);
+		if (g->frameClocks < GAMATE_CLOCKS_PER_FRAME) {
+			step = earlierEvent(step, g->frameClocks, GAMATE_CLOCKS_PER_FRAME);
 		}
 
 		g->masterClocks += step;
@@ -516,7 +524,7 @@ void gamateRunClocks(struct Gamate* g, unsigned clocks) {
 			}
 		}
 		g->frameClocks += step;
-		if (g->frameClocks == CLOCKS_PER_FRAME) {
+		if (g->frameClocks == GAMATE_CLOCKS_PER_FRAME) {
 			g->frameClocks = 0;
 			g->frameDone = true;
 		}

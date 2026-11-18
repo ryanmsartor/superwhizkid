@@ -26,6 +26,20 @@ static bool sawPaletteLight, frameIsGreyscale;
 static uint16_t firstVideoPixel;
 static unsigned messageCount;
 static char lastMessage[128];
+static struct retro_netpacket_callback netpacket;
+static bool netpacketRegistered;
+static uint8_t sentPacket[512];
+static size_t sentPacketSize;
+static int sentPacketFlags;
+static uint16_t sentPacketClient;
+
+static void netpacketSend(int flags, const void* data, size_t size, uint16_t clientId) {
+	assert(data && size <= sizeof(sentPacket));
+	memcpy(sentPacket, data, size);
+	sentPacketSize = size;
+	sentPacketFlags = flags;
+	sentPacketClient = clientId;
+}
 
 static unsigned optionMask(const char* key) {
 	static const char* keys[] = {
@@ -70,6 +84,13 @@ static bool environment(unsigned command, void* data) {
 		legacyOptions = mask == 0x3F;
 		return true;
 	}
+	case RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE:
+		netpacket = *(const struct retro_netpacket_callback*) data;
+		netpacketRegistered = netpacket.start && netpacket.receive && netpacket.stop &&
+			netpacket.poll && netpacket.connected && netpacket.disconnected &&
+			netpacket.protocol_version && !strcmp(netpacket.protocol_version,
+				"superwhizkid-gamate-link-1");
+		return true;
 	case RETRO_ENVIRONMENT_GET_VARIABLE: {
 		struct retro_variable* variable = data;
 		if (!strcmp(variable->key, "superwhizkid_palette")) {
@@ -164,6 +185,7 @@ static void writeTestFirmware(const char* name, uint8_t marker) {
 	// and a visible pixel, then mirror $4400
 	// to RAM whenever RAM $0002 is nonzero. Tests can pause controller reads by clearing that byte.
 	// RAM $0004 controls the first displayed byte so LCD response can be tested deterministically.
+	// Setting RAM $0005 writes RAM $0006 to the UART and emits its eight clocked data bits once.
 	// The temporary discovery filename below does not imply commercial firmware contents.
 	uint8_t program[] = {
 		0x78,                         // SEI
@@ -185,9 +207,25 @@ static void writeTestFirmware(const char* name, uint8_t marker) {
 		0xA9, 0x0A, 0x8D, 0x05, 0x50, // reset row 10
 		0xAD, 0x04, 0x00,             // read controlled pixel byte
 		0x8D, 0x07, 0x50,             // write controlled pixel byte
+		0xAD, 0x05, 0x00,             // check one-shot UART request
+		0xF0, 0x23,                   // skip UART block when zero
+		0xAD, 0x06, 0x00,             // transmitter data
+		0x8D, 0x00, 0x44,             // load UART transmitter
+		0xAD, 0x00, 0x4C, 0xAD, 0x00, 0x4C, // emit eight UART clocks
+		0xAD, 0x00, 0x4C, 0xAD, 0x00, 0x4C,
+		0xAD, 0x00, 0x4C, 0xAD, 0x00, 0x4C,
+		0xAD, 0x00, 0x4C, 0xAD, 0x00, 0x4C,
+		0xA9, 0x00, 0x8D, 0x05, 0x00, // clear one-shot request
 		0x4C, 0x2A, 0xE0              // JMP loop
 	};
 	memcpy(firmware, program, sizeof(program));
+	uint8_t nmi[] = {
+		0xAD, 0x00, 0x48, 0x8D, 0x07, 0x00, // save received byte
+		0xEE, 0x08, 0x00, 0x40              // count received-byte NMIs, RTI
+	};
+	memcpy(firmware + 0x080, nmi, sizeof(nmi));
+	firmware[0xFFA] = 0x80;
+	firmware[0xFFB] = 0xE0;
 	firmware[0xFFC] = 0x00;
 	firmware[0xFFD] = 0xE0;
 	writeFirmwareFile(name, firmware);
@@ -270,6 +308,7 @@ int main(int argc, char** argv) {
 	p_retro_set_input_poll(inputPoll);
 	p_retro_set_input_state(inputState);
 	p_retro_init();
+	assert(netpacketRegistered);
 	size_t stateSizeBeforeLoad = p_retro_serialize_size();
 	assert(stateSizeBeforeLoad > 0);
 
@@ -279,6 +318,46 @@ int main(int argc, char** argv) {
 	assert(p_retro_serialize_size() == stateSizeBeforeLoad);
 	uint8_t* ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
 	assert(ram);
+	// Netpacket transports each locally clocked UART bit reliably and accepts only one peer.
+	netpacket.start(0, netpacketSend, NULL);
+	assert(netpacket.connected(7));
+	assert(!netpacket.connected(8));
+	ram[5] = 1;
+	ram[6] = 0xA5;
+	p_retro_run();
+	assert(sentPacketSize == 53 && sentPacket[0] == 'G' && sentPacket[1] == 'L' &&
+		sentPacket[2] == 1 && sentPacket[3] == 8 && sentPacket[4] == 0);
+	uint8_t sentByte = 0;
+	for (unsigned bit = 0; bit < 8; bit++) sentByte = (uint8_t) (sentByte << 1 | sentPacket[17 + bit * 5]);
+	assert(sentByte == 0xA5);
+	assert((sentPacketFlags & (RETRO_NETPACKET_RELIABLE | RETRO_NETPACKET_FLUSH_HINT)) ==
+		(RETRO_NETPACKET_RELIABLE | RETRO_NETPACKET_FLUSH_HINT));
+	assert(sentPacketClient == 7 && ram[5] == 0);
+	ram[8] = 0;
+	uint8_t receivedPacket[53] = { 'G', 'L', 1, 8, 0 };
+	for (unsigned bit = 0; bit < 8; bit++) {
+		receivedPacket[13 + bit * 5] = (uint8_t) (bit * 2); // sender-clock delta
+		receivedPacket[17 + bit * 5] = (0x3C >> (7 - bit)) & 1;
+	}
+	netpacket.receive(receivedPacket, sizeof(receivedPacket), 7);
+	p_retro_run();
+	assert(ram[7] == 0x3C && ram[8] == 1); // eight bits requested NMI and exposed the UART byte
+	uint8_t twoBytePacket[93] = { 'G', 'L', 1, 16, 0 };
+	uint64_t secondBase = 73000;
+	for (unsigned byte = 0; byte < 8; byte++) twoBytePacket[5 + byte] = secondBase >> (byte * 8);
+	for (unsigned bit = 0; bit < 16; bit++) {
+		unsigned delta = bit < 8 ? bit * 4 : 200 + (bit - 8) * 4;
+		twoBytePacket[13 + bit * 5] = (uint8_t) delta;
+		twoBytePacket[14 + bit * 5] = (uint8_t) (delta >> 8);
+		uint8_t value = bit < 8 ? 0xA5 : 0x5A;
+		twoBytePacket[17 + bit * 5] = (value >> (7 - (bit & 7))) & 1;
+	}
+	netpacket.receive(twoBytePacket, sizeof(twoBytePacket), 7);
+	p_retro_run();
+	assert(ram[7] == 0x5A && ram[8] == 3); // both NMI edges survived packet delivery
+	netpacket.disconnected(7);
+	assert(netpacket.connected(8));
+	netpacket.disconnected(8);
 	ram[2] = 1;
 	// All defaults: UMC BIOS, original palette, raw LCD output, no tap latch, no intro skip.
 	activeButton = ~0u;
