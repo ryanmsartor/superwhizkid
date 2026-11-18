@@ -55,7 +55,7 @@ struct Gamate {
 	bool protectionPassed, protectionFailed, protectionReply;
 	uint8_t protectionPosition, protectionByte, protectionSequence;
 
-	uint8_t buttons, openBus;
+	uint8_t buttons, pendingPresses, openBus;
 	uint8_t uartTx, uartRx, uartTxBits, uartRxBits;
 	bool uartTxLine;
 	uint64_t masterClocks;
@@ -87,6 +87,7 @@ void gamateReset(struct Gamate* gamate);
 uint8_t gamateRead(struct Gamate* gamate, uint16_t address);
 void gamateWrite(struct Gamate* gamate, uint16_t address, uint8_t value);
 void gamateRunClocks(struct Gamate* gamate, unsigned clocks);
+void gamateSetButtons(struct Gamate* gamate, uint8_t buttons);
 void gamateRunFrame(struct Gamate* gamate);
 // Supply one rising receiver-clock edge and its data bit from a future link transport.
 void gamateUartReceiveBit(struct Gamate* gamate, bool bit);

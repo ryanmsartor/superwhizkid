@@ -17,11 +17,15 @@ static struct Gamate gamate;
 static bool loaded;
 static uint16_t video[GAMATE_WIDTH * GAMATE_HEIGHT];
 static int16_t audio[2048 * 2];
+static bool tapLatch, skipIntro;
 static const uint16_t* activePalette;
-
 static const uint16_t originalPalette[4] = { 0xCE93, 0x8CEB, 0x5327, 0x1102 };
 static const uint16_t accuratePalette[4] = { 0x9CEC, 0x6B89, 0x3A08, 0x10C4 };
 static const uint16_t greyscalePalette[4] = { 0xFFFF, 0xAD55, 0x52AA, 0x0000 };
+static uint16_t shades[3 * 256 + 1];
+static uint16_t lcdLevel[GAMATE_WIDTH * GAMATE_HEIGHT];
+static unsigned lcdDarken = 256, lcdFade = 256;
+static bool lcdSnap = true;
 
 static void message(const char* text) {
 	struct retro_message msg = { text, 300 };
@@ -42,10 +46,22 @@ void retro_set_environment(retro_environment_t cb) {
 			},
 			"original"
 		},
+		{ "superwhizkid_tap_latch", "Catch quick taps", "Not hardware accurate. Holds a press until the game next reads the controller, so taps between its reads aren't lost.",
+			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
+		{ "superwhizkid_lcd_ghosting", "LCD ghosting", "Fades pixels like the slow Gamate LCD, so sprites the game redraws don't flash.",
+			{ { "off", NULL }, { "1", NULL }, { "2", NULL }, { "3", NULL }, { "4", NULL }, { "5", NULL }, { NULL, NULL } }, "off" },
+		{ "superwhizkid_bios", "BIOS", "Which BIOS to boot; the other is used if it's missing. Applies when the game restarts.",
+			{ { "umc", "UMC (gamate_bios_umc.bin)" }, { "bit", "Bit (gamate_bios_bit.bin)" }, { NULL, NULL } }, "umc" },
+		{ "superwhizkid_skip_intro", "Skip BIOS intro", "Runs the BIOS logo sequence instantly at power-on and reset, starting at the cartridge.",
+			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
 		{ NULL, NULL, NULL, { { NULL, NULL } }, NULL }
 	};
 	static const struct retro_variable variables[] = {
 		{ "superwhizkid_palette", "Palette; original|accurate|greyscale" },
+		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
+		{ "superwhizkid_lcd_ghosting", "LCD ghosting; off|1|2|3|4|5" },
+		{ "superwhizkid_bios", "BIOS; umc|bit" },
+		{ "superwhizkid_skip_intro", "Skip BIOS intro; off|on" },
 		{ NULL, NULL }
 	};
 	unsigned version = 0;
@@ -56,12 +72,57 @@ void retro_set_environment(retro_environment_t cb) {
 	}
 }
 
-static void readPaletteOption(void) {
-	struct retro_variable variable = { "superwhizkid_palette", NULL };
-	const char* value = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value ?
-		variable.value : "original";
-	activePalette = !strcmp(value, "accurate") ? accuratePalette :
-		!strcmp(value, "greyscale") ? greyscalePalette : originalPalette;
+static uint16_t blend565(uint16_t a, uint16_t b, unsigned t) {
+	unsigned r = ((a >> 11) * (256 - t) + (b >> 11) * t) >> 8;
+	unsigned g = (((a >> 5) & 63) * (256 - t) + ((b >> 5) & 63) * t) >> 8;
+	unsigned bl = ((a & 31) * (256 - t) + (b & 31) * t) >> 8;
+	return (uint16_t) (r << 11 | g << 5 | bl);
+}
+
+static void buildShades(void) {
+	for (unsigned i = 0; i < sizeof(shades) / sizeof(*shades); i++) {
+		shades[i] = i == 3 * 256 ? activePalette[3] :
+			blend565(activePalette[i >> 8], activePalette[(i >> 8) + 1], i & 255);
+	}
+}
+
+static void readOptions(void) {
+	struct retro_variable var = { "superwhizkid_palette", NULL };
+	const char* palette = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ?
+		var.value : "original";
+	activePalette = !strcmp(palette, "accurate") ? accuratePalette :
+		!strcmp(palette, "greyscale") ? greyscalePalette : originalPalette;
+	buildShades();
+
+	var.key = "superwhizkid_tap_latch";
+	var.value = NULL;
+	tapLatch = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && !strcmp(var.value, "on");
+
+	var.key = "superwhizkid_skip_intro";
+	var.value = NULL;
+	skipIntro = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && !strcmp(var.value, "on");
+
+	var.key = "superwhizkid_lcd_ghosting";
+	var.value = NULL;
+	const char* value = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ? var.value : "off";
+	static const unsigned darken[] = { 256, 256, 248, 240, 224, 208 };
+	static const unsigned fade[] = { 256, 224, 192, 160, 128, 96 };
+	int level = value[0] >= '1' && value[0] <= '5' && !value[1] ? value[0] - '0' : 0;
+	lcdDarken = darken[level];
+	lcdFade = fade[level];
+}
+
+// The Gamate LCD responds slowly, so games can leave sprites erased for a frame without it showing.
+static void renderLcd(void) {
+	for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
+		int target = (gamate.frameBuffer[i] & 3) * 256, level = lcdLevel[i];
+		int rate = target > level ? lcdDarken : lcdFade;
+		int step = (target - level) * rate / 256;
+		level = lcdSnap || !step ? target : level + step;
+		lcdLevel[i] = (uint16_t) level;
+		video[i] = shades[level];
+	}
+	lcdSnap = false;
 }
 void retro_set_video_refresh(retro_video_refresh_t cb) { videoCb = cb; }
 void retro_set_audio_sample(retro_audio_sample_t cb) { (void) cb; }
@@ -72,6 +133,7 @@ void retro_set_input_state(retro_input_state_t cb) { inputStateCb = cb; }
 void retro_init(void) {
 	gamateInit(&gamate);
 	activePalette = originalPalette;
+	buildShades();
 	enum retro_pixel_format format = RETRO_PIXEL_FORMAT_RGB565;
 	environCb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &format);
 	static const struct retro_controller_description ports[] = { { "Gamate", RETRO_DEVICE_JOYPAD } };
@@ -117,8 +179,21 @@ void retro_set_controller_port_device(unsigned port, unsigned device) {
 	(void) device;
 }
 
+// Runs the real BIOS boot unseen until it jumps to the cartridge entry.
+static void runIntro(void) {
+	gamateSetAudio(&gamate, audio, sizeof(audio) / sizeof(audio[0]) / 2, 48000);
+	for (unsigned long i = 0; i < 20000000 && !(gamate.protectionPassed && gamate.cpu.pc == 0x6020); i++) {
+		gamate.audioCount = 0;
+		gamateRunClocks(&gamate, gamateCpuStep(&gamate) * 2);
+	}
+	gamate.audioCount = 0;
+}
+
 void retro_reset(void) {
-	if (loaded) gamateReset(&gamate);
+	if (!loaded) return;
+	gamateReset(&gamate);
+	if (skipIntro) runIntro();
+	lcdSnap = true;
 }
 
 static void readInput(void) {
@@ -134,19 +209,22 @@ static void readInput(void) {
 	BUTTON(RETRO_DEVICE_ID_JOYPAD_START, 6);
 	BUTTON(RETRO_DEVICE_ID_JOYPAD_SELECT, 7);
 #undef BUTTON
-	gamate.buttons = buttons;
+	if (tapLatch) {
+		gamateSetButtons(&gamate, buttons);
+	} else {
+		gamate.buttons = buttons;
+		gamate.pendingPresses = 0;
+	}
 }
 
 void retro_run(void) {
 	if (!loaded) return;
-	bool optionsUpdated = false;
-	if (environCb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &optionsUpdated) && optionsUpdated) {
-		readPaletteOption();
-	}
+	bool updated = false;
+	if (environCb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &updated) && updated) readOptions();
 	readInput();
 	gamateSetAudio(&gamate, audio, sizeof(audio) / sizeof(audio[0]) / 2, 48000);
 	gamateRunFrame(&gamate);
-	for (size_t i = 0; i < sizeof(video) / sizeof(*video); i++) video[i] = activePalette[gamate.frameBuffer[i] & 3];
+	renderLcd();
 	videoCb(video, GAMATE_WIDTH, GAMATE_HEIGHT, GAMATE_WIDTH * sizeof(*video));
 	size_t frames = gamate.audioCount < gamate.audioCapacity ? gamate.audioCount : gamate.audioCapacity;
 	audioCb(audio, frames);
@@ -155,7 +233,13 @@ void retro_run(void) {
 static bool readBios(uint8_t* out) {
 	const char* system = NULL;
 	if (!environCb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &system) || !system) return false;
-	static const char* names[] = { "gamate_bios_umc.bin", "gamate_bios_bit.bin" };
+	struct retro_variable var = { "superwhizkid_bios", NULL };
+	bool bitFirst = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && !strcmp(var.value, "bit");
+	const char* names[] = { "gamate_bios_umc.bin", "gamate_bios_bit.bin" };
+	if (bitFirst) {
+		names[0] = "gamate_bios_bit.bin";
+		names[1] = "gamate_bios_umc.bin";
+	}
 	char path[4096];
 	for (size_t i = 0; i < sizeof(names) / sizeof(*names); i++) {
 		if (snprintf(path, sizeof(path), "%s/%s", system, names[i]) >= (int) sizeof(path)) continue;
@@ -180,7 +264,9 @@ bool retro_load_game(const struct retro_game_info* game) {
 		message("superwhizkid: unsupported cartridge size");
 		return false;
 	}
-	readPaletteOption();
+	readOptions();
+	if (skipIntro) runIntro();
+	lcdSnap = true;
 	loaded = true;
 	return true;
 }
@@ -198,7 +284,10 @@ void retro_unload_game(void) {
 unsigned retro_get_region(void) { return RETRO_REGION_NTSC; }
 size_t retro_serialize_size(void) { return gamateStateSize(&gamate); }
 bool retro_serialize(void* data, size_t size) { return loaded && gamateSaveState(&gamate, data, size); }
-bool retro_unserialize(const void* data, size_t size) { return loaded && gamateLoadState(&gamate, data, size); }
+bool retro_unserialize(const void* data, size_t size) {
+	lcdSnap = true;
+	return loaded && gamateLoadState(&gamate, data, size);
+}
 void retro_cheat_reset(void) { }
 void retro_cheat_set(unsigned index, bool enabled, const char* code) { (void) index; (void) enabled; (void) code; }
 
