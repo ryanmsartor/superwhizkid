@@ -17,13 +17,52 @@ static struct Gamate gamate;
 static bool loaded;
 static uint16_t video[GAMATE_WIDTH * GAMATE_HEIGHT];
 static int16_t audio[2048 * 2];
+static const uint16_t* activePalette;
+
+static const uint16_t originalPalette[4] = { 0xCE93, 0x8CEB, 0x5327, 0x1102 };
+static const uint16_t accuratePalette[4] = { 0x9CEC, 0x6B89, 0x3A08, 0x10C4 };
+static const uint16_t greyscalePalette[4] = { 0xFFFF, 0xAD55, 0x52AA, 0x0000 };
 
 static void message(const char* text) {
 	struct retro_message msg = { text, 300 };
 	environCb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
 }
 
-void retro_set_environment(retro_environment_t cb) { environCb = cb; }
+void retro_set_environment(retro_environment_t cb) {
+	environCb = cb;
+	static const struct retro_core_option_definition options[] = {
+		{
+			"superwhizkid_palette", "Palette",
+			"Selects the colors used for the Gamate's four LCD shades. Accurate is a representative estimate from photographs of real hardware; Original preserves the core's initial palette.",
+			{
+				{ "original", "Original" },
+				{ "accurate", "Accurate" },
+				{ "greyscale", "Greyscale" },
+				{ NULL, NULL }
+			},
+			"original"
+		},
+		{ NULL, NULL, NULL, { { NULL, NULL } }, NULL }
+	};
+	static const struct retro_variable variables[] = {
+		{ "superwhizkid_palette", "Palette; original|accurate|greyscale" },
+		{ NULL, NULL }
+	};
+	unsigned version = 0;
+	if (environCb(RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION, &version) && version >= 1) {
+		environCb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS, (void*) options);
+	} else {
+		environCb(RETRO_ENVIRONMENT_SET_VARIABLES, (void*) variables);
+	}
+}
+
+static void readPaletteOption(void) {
+	struct retro_variable variable = { "superwhizkid_palette", NULL };
+	const char* value = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &variable) && variable.value ?
+		variable.value : "original";
+	activePalette = !strcmp(value, "accurate") ? accuratePalette :
+		!strcmp(value, "greyscale") ? greyscalePalette : originalPalette;
+}
 void retro_set_video_refresh(retro_video_refresh_t cb) { videoCb = cb; }
 void retro_set_audio_sample(retro_audio_sample_t cb) { (void) cb; }
 void retro_set_audio_sample_batch(retro_audio_sample_batch_t cb) { audioCb = cb; }
@@ -32,6 +71,7 @@ void retro_set_input_state(retro_input_state_t cb) { inputStateCb = cb; }
 
 void retro_init(void) {
 	gamateInit(&gamate);
+	activePalette = originalPalette;
 	enum retro_pixel_format format = RETRO_PIXEL_FORMAT_RGB565;
 	environCb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &format);
 	static const struct retro_controller_description ports[] = { { "Gamate", RETRO_DEVICE_JOYPAD } };
@@ -99,11 +139,14 @@ static void readInput(void) {
 
 void retro_run(void) {
 	if (!loaded) return;
+	bool optionsUpdated = false;
+	if (environCb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &optionsUpdated) && optionsUpdated) {
+		readPaletteOption();
+	}
 	readInput();
 	gamateSetAudio(&gamate, audio, sizeof(audio) / sizeof(audio[0]) / 2, 48000);
 	gamateRunFrame(&gamate);
-	static const uint16_t palette[4] = { 0xCE93, 0x8CEB, 0x5327, 0x1102 };
-	for (size_t i = 0; i < sizeof(video) / sizeof(*video); i++) video[i] = palette[gamate.frameBuffer[i] & 3];
+	for (size_t i = 0; i < sizeof(video) / sizeof(*video); i++) video[i] = activePalette[gamate.frameBuffer[i] & 3];
 	videoCb(video, GAMATE_WIDTH, GAMATE_HEIGHT, GAMATE_WIDTH * sizeof(*video));
 	size_t frames = gamate.audioCount < gamate.audioCapacity ? gamate.audioCount : gamate.audioCapacity;
 	audioCb(audio, frames);
@@ -137,6 +180,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 		message("superwhizkid: unsupported cartridge size");
 		return false;
 	}
+	readPaletteOption();
 	loaded = true;
 	return true;
 }

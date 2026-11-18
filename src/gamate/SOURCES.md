@@ -55,6 +55,30 @@ hardware measurements take precedence where they conflict with an emulator.
 
 ## Libretro integration references
 
+### Real-hardware LCD appearance references
+
+- Nintendo Life, “Meet The Gamate, The Handheld Which Tried To Take On The Game Boy And Failed”:
+  <https://www.nintendolife.com/news/2014/02/feature_meet_the_gamate_the_handheld_which_tried_to_take_on_the_game_boy_and_failed>
+- Neo Fuji Gamate game archive: <https://fuji.12bit.club/gamate/games/>
+- Ashens, “Gamate Review”: <https://www.youtube.com/watch?v=aIsKG-pewM0>
+- Museum of Obsolete Media, “Bit Corporation Gamate (1990–1995)”:
+  <https://obsoletemedia.org/gamate/>
+- Used for: choosing a representative olive-green profile for the optional `Accurate` palette and
+  confirming that neutral greyscale is not representative of the original non-backlit panel.
+- Method and limitations: the Nintendo Life/Neo Fuji game images show software on physical Gamate
+  screens, but several were made by scanning a paused LCD and have severe green-channel clipping.
+  The Ashens video thumbnail provides a less saturated view of an unlit physical screen under room
+  lighting. The representative profile therefore follows that screen's olive hue while using the
+  gameplay images only to check shade ordering and contrast. It is a visual estimate, not calibrated
+  colorimetry: camera white balance, exposure, ambient light, contrast-wheel position, aging, and the
+  two reported Gamate panel types all prevent a single photograph-derived palette from being exact.
+- Implementation impact: the libretro frontend offers `Original`, `Accurate`, and `Greyscale`.
+  `Original` preserves the core's initial uncited visual approximation exactly. `Accurate` uses
+  RGB565 `9CEC/6B89/3A08/10C4`; its darker driven shades shift from the panel's olive background
+  toward the cool, low-saturation ink appearance visible in the hardware references. `Greyscale`
+  uses neutral 255/170/85/0 levels. Palette selection only
+  maps completed two-bit pixels to output colors and does not change emulated LCD state or timing.
+
 ### Official libretro core-info example and RetroArch core installation guide
 
 - Core-info template: <https://github.com/libretro/libretro-core-info/blob/master/00_example_libretro.info>

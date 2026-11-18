@@ -15,9 +15,33 @@
 static char systemDirectory[] = "/tmp/superwhizkid-coretest-XXXXXX";
 static unsigned activeButton = ~0u, polls, videoFrames, audioBatches;
 static bool videoVaries, audioActive;
+static const char* paletteOption = "original";
+static bool optionUpdate, paletteOptionRegistered;
+static bool sawPaletteLight, frameIsGreyscale;
 
 static bool environment(unsigned command, void* data) {
 	switch (command) {
+	case RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION:
+		*(unsigned*) data = 1;
+		return true;
+	case RETRO_ENVIRONMENT_SET_CORE_OPTIONS: {
+		const struct retro_core_option_definition* options = data;
+		paletteOptionRegistered = options && options[0].key &&
+			!strcmp(options[0].key, "superwhizkid_palette");
+		return true;
+	}
+	case RETRO_ENVIRONMENT_GET_VARIABLE: {
+		struct retro_variable* variable = data;
+		if (!strcmp(variable->key, "superwhizkid_palette")) {
+			variable->value = paletteOption;
+			return true;
+		}
+		return false;
+	}
+	case RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE:
+		*(bool*) data = optionUpdate;
+		optionUpdate = false;
+		return true;
 	case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
 		*(const char**) data = systemDirectory;
 		return true;
@@ -37,9 +61,15 @@ static bool environment(unsigned command, void* data) {
 static void video(const void* data, unsigned width, unsigned height, size_t pitch) {
 	assert(data && width == 160 && height == 150 && pitch >= width * sizeof(uint16_t));
 	const uint16_t* first = data;
-	for (unsigned y = 0; y < height && !videoVaries; y++) {
+	frameIsGreyscale = true;
+	for (unsigned y = 0; y < height; y++) {
 		const uint16_t* row = (const uint16_t*) ((const uint8_t*) data + y * pitch);
 		for (unsigned x = 0; x < width; x++) videoVaries |= row[x] != first[0];
+		for (unsigned x = 0; x < width; x++) {
+			sawPaletteLight |= row[x] == 0xFFFF;
+			frameIsGreyscale &= row[x] == 0xFFFF || row[x] == 0xAD55 ||
+				row[x] == 0x52AA || row[x] == 0x0000;
+		}
 	}
 	videoFrames++;
 }
@@ -135,6 +165,7 @@ int main(int argc, char** argv) {
 	p_retro_set_input_poll(inputPoll);
 	p_retro_set_input_state(inputState);
 	p_retro_init();
+	assert(paletteOptionRegistered);
 	size_t stateSizeBeforeLoad = p_retro_serialize_size();
 	assert(stateSizeBeforeLoad > 0);
 
@@ -156,6 +187,10 @@ int main(int argc, char** argv) {
 		assert(ram[0] == (uint8_t) ~(1u << bit));
 	}
 	assert(polls == 8 && videoFrames == 8 && audioBatches == 8 && videoVaries && audioActive);
+	paletteOption = "greyscale";
+	optionUpdate = true;
+	p_retro_run();
+	assert(sawPaletteLight && frameIsGreyscale);
 
 	void* state = malloc(stateSizeBeforeLoad);
 	assert(state && p_retro_serialize(state, stateSizeBeforeLoad));
