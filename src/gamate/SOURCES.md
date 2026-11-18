@@ -137,6 +137,30 @@ hardware measurements take precedence where they conflict with an emulator.
   convergence to both endpoints, increasing one-frame retention, all five levels, and interpolation
   through every selectable palette.
 
+### Redraw flicker-reduction filter
+
+- Motivation: increasing estimated LCD persistence can reduce Brick Blaster's one-frame erase, but
+  eliminating it that way would require retaining nearly all lightening changes and would create long
+  trails during ordinary movement. This separate compatibility filter targets the redraw pattern
+  rather than claiming to model panel physics.
+- Trace replay: the retained 1,338-frame Brick Blaster trace contains 76,673 raw pixel transitions.
+  Replaying it through this filter produced 63,636 transitions and held 32,567 candidate lightening
+  transitions across 236 frames. It caught every inspected full-paddle erase, including the 120-pixel
+  events at frames 1123, 1132, 1141, and 1150. These counts describe this captured play session, not
+  the entire software library.
+- Model: a darker or equal two-bit shade is accepted immediately. A lighter shade becomes pending
+  and is accepted only if the same value appears on the following frame. If the prior darker value
+  returns, the pending lightening is discarded. Filtering occurs before optional LCD ghosting, adds
+  no full-frame/audio delay, and remains off by default.
+- Tradeoff: genuine lightening changes appear one frame late, and moving dark objects may leave a
+  one-frame trail. The option is therefore named `Redraw Flicker Reduction` and described as a
+  compatibility filter, not hardware emulation. Its presentation-only history is excluded from
+  machine save state and reinitialized after reset, content load, successful state load, or an
+  on/off option change.
+- Validation: purpose-written firmware verifies one-frame suppression, cancellation when the dark
+  shade returns, acceptance of sustained lightening on its second frame, immediate darkening, and
+  raw behavior after disabling the option.
+
 ### BIOS selection option lifecycle
 
 - The preferred UMC/Bit filename is consulted only when content is loaded. If it is absent, the other
@@ -412,8 +436,9 @@ into the repository, build output, tests, or releases.
   jumps to `$6020`. These test option-controlled BIOS selection, missing-preference fallback, and
   intro skipping on load/reset without commercial bytes. The controllable test program also covers
   modern and legacy option registration, defaults and invalid values, live updates, all palettes,
-  every ghosting level, palette/ghosting interaction, tap-latch behavior across state loads, and a
-  failed state load during an LCD transition. The harness additionally verifies all eight active-low
+  every ghosting level, palette/ghosting interaction, redraw-flicker filtering, tap-latch behavior
+  across state loads, and a failed state load during an LCD transition. The harness additionally
+  verifies all eight active-low
   input mappings, video/audio callbacks, fixed state size, serialization restoration, reset, unload,
   and a second content load. This scaffolding was authored for superwhizkid; no emulator source or
   commercial firmware, BIOS, or game-ROM bytes were used to create it.

@@ -18,6 +18,7 @@ static bool videoVaries, audioActive;
 static const char* paletteOption = "original";
 static const char* tapLatchOption = "off";
 static const char* ghostingOption = "off";
+static const char* flickerOption = "off";
 static const char* biosOption = "umc";
 static const char* skipIntroOption = "off";
 static bool optionUpdate, modernOptions, legacyOptions, supportModernOptions = true;
@@ -29,7 +30,7 @@ static char lastMessage[128];
 static unsigned optionMask(const char* key) {
 	static const char* keys[] = {
 		"superwhizkid_palette", "superwhizkid_tap_latch", "superwhizkid_lcd_ghosting",
-		"superwhizkid_bios", "superwhizkid_skip_intro"
+		"superwhizkid_flicker_reduction", "superwhizkid_bios", "superwhizkid_skip_intro"
 	};
 	for (unsigned i = 0; i < sizeof(keys) / sizeof(*keys); i++) {
 		if (!strcmp(key, keys[i])) return 1u << i;
@@ -59,14 +60,14 @@ static bool environment(unsigned command, void* data) {
 				!strcmp(options->key, "superwhizkid_bios") ? "umc" : "off";
 			defaults &= options->default_value && !strcmp(options->default_value, expected);
 		}
-		modernOptions = mask == 0x1F && defaults;
+		modernOptions = mask == 0x3F && defaults;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_VARIABLES: {
 		const struct retro_variable* variables = data;
 		unsigned mask = 0;
 		for (; variables && variables->key; variables++) mask |= optionMask(variables->key);
-		legacyOptions = mask == 0x1F;
+		legacyOptions = mask == 0x3F;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_GET_VARIABLE: {
@@ -81,6 +82,10 @@ static bool environment(unsigned command, void* data) {
 		}
 		if (!strcmp(variable->key, "superwhizkid_lcd_ghosting")) {
 			variable->value = ghostingOption;
+			return true;
+		}
+		if (!strcmp(variable->key, "superwhizkid_flicker_reduction")) {
+			variable->value = flickerOption;
 			return true;
 		}
 		if (!strcmp(variable->key, "superwhizkid_bios")) {
@@ -375,6 +380,33 @@ int main(int argc, char** argv) {
 	p_retro_reset();
 	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
 
+	// The compatibility filter suppresses a one-frame light flash, accepts a sustained lightening
+	// on its second frame, and still applies a darker change immediately.
+	flickerOption = "on";
+	optionUpdate = true;
+	p_retro_reset();
+	p_retro_run();
+	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+	ram[4] = 0;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
+	ram[4] = 0xFF;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
+	ram[4] = 0;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
+	p_retro_run();
+	assert(firstVideoPixel == 0xCE93);
+	ram[4] = 0xFF;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
+	flickerOption = "off";
+	optionUpdate = true;
+	ram[4] = 0;
+	p_retro_run();
+	assert(firstVideoPixel == 0xCE93);
+
 	// The convenience latch belongs to the libretro adapter: loading machine state neither restores
 	// a latch saved earlier nor clears a press accumulated after the save.
 	tapLatchOption = "on";
@@ -456,6 +488,7 @@ int main(int argc, char** argv) {
 	paletteOption = "invalid";
 	tapLatchOption = "invalid";
 	ghostingOption = "invalid";
+	flickerOption = "invalid";
 	skipIntroOption = "invalid";
 	assert(p_retro_load_game(&game));
 	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);

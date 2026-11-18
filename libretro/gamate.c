@@ -18,7 +18,7 @@ static struct Gamate gamate;
 static bool loaded;
 static uint16_t video[GAMATE_WIDTH * GAMATE_HEIGHT];
 static int16_t audio[2048 * 2];
-static bool tapLatch, skipIntro;
+static bool tapLatch, skipIntro, flickerReduction;
 static uint8_t pendingPresses;
 static const uint16_t* activePalette;
 static const uint16_t originalPalette[4] = { 0xCE93, 0x8CEB, 0x5327, 0x1102 };
@@ -27,7 +27,10 @@ static const uint16_t greyscalePalette[4] = { 0xFFFF, 0xAD55, 0x52AA, 0x0000 };
 static uint16_t shades[3 * 256 + 1];
 static uint16_t lcdLevel[GAMATE_WIDTH * GAMATE_HEIGHT];
 static unsigned lcdDarken = 256, lcdFade = 256;
-static bool lcdSnap = true;
+static uint8_t flickerPixel[GAMATE_WIDTH * GAMATE_HEIGHT];
+static uint8_t flickerPending[GAMATE_WIDTH * GAMATE_HEIGHT];
+static uint8_t flickerPendingValid[GAMATE_WIDTH * GAMATE_HEIGHT];
+static bool lcdSnap = true, flickerSnap = true;
 
 enum { INTRO_SKIP_CLOCK_LIMIT = 4433000 * 12 };
 
@@ -54,6 +57,8 @@ void retro_set_environment(retro_environment_t cb) {
 			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting", "Applies an estimated slow-panel response to reduce redraw flicker. Higher settings retain the previous shade longer; Off shows raw LCD-controller output.",
 			{ { "off", "Off" }, { "1", "Very light" }, { "2", "Light" }, { "3", "Medium" }, { "4", "Strong" }, { "5", "Very strong" }, { NULL, NULL } }, "off" },
+		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction", "Suppresses one-frame light flashes caused by games clearing and redrawing objects. This compatibility filter delays genuine lightening changes by one frame.",
+			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
 		{ "superwhizkid_bios", "BIOS Priority", "Selects the preferred BIOS at content load; the other is used if it is missing. Reload content to apply a change. Reset continues using the currently loaded BIOS.",
 			{ { "umc", "UMC (gamate_bios_umc.bin)" }, { "bit", "Bit (gamate_bios_bit.bin)" }, { NULL, NULL } }, "umc" },
 		{ "superwhizkid_skip_intro", "Skip BIOS intro", "Runs the BIOS logo sequence instantly at power-on and reset, starting at the cartridge.",
@@ -64,6 +69,7 @@ void retro_set_environment(retro_environment_t cb) {
 		{ "superwhizkid_palette", "Palette; original|accurate|greyscale" },
 		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting; off|1|2|3|4|5" },
+		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction; off|on" },
 		{ "superwhizkid_bios", "BIOS Priority; umc|bit" },
 		{ "superwhizkid_skip_intro", "Skip BIOS intro; off|on" },
 		{ NULL, NULL }
@@ -114,12 +120,37 @@ static void readOptions(void) {
 	int level = value[0] >= '1' && value[0] <= '5' && !value[1] ? value[0] - '0' : 0;
 	lcdDarken = darken[level];
 	lcdFade = fade[level];
+
+	var.key = "superwhizkid_flicker_reduction";
+	var.value = NULL;
+	bool reduceFlicker = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value &&
+		!strcmp(var.value, "on");
+	if (reduceFlicker != flickerReduction) flickerSnap = true;
+	flickerReduction = reduceFlicker;
 }
 
 // Estimated physical-panel response; raw LCD-controller output remains available with rates at 256.
 static void renderLcd(void) {
 	for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
-		int target = (gamate.frameBuffer[i] & 3) * 256, level = lcdLevel[i];
+		uint8_t raw = gamate.frameBuffer[i] & 3;
+		if (flickerReduction) {
+			if (flickerSnap) {
+				flickerPixel[i] = raw;
+				flickerPendingValid[i] = 0;
+			} else if (raw >= flickerPixel[i]) {
+				flickerPixel[i] = raw;
+				flickerPendingValid[i] = 0;
+			} else if (flickerPendingValid[i] && flickerPending[i] == raw) {
+				flickerPixel[i] = raw;
+				flickerPendingValid[i] = 0;
+			} else {
+				flickerPending[i] = raw;
+				flickerPendingValid[i] = 1;
+			}
+		} else {
+			flickerPixel[i] = raw;
+		}
+		int target = flickerPixel[i] * 256, level = lcdLevel[i];
 		int rate = target > level ? lcdDarken : lcdFade;
 		int step = (target - level) * rate / 256;
 		level = lcdSnap || !step ? target : level + step;
@@ -127,6 +158,7 @@ static void renderLcd(void) {
 		video[i] = shades[level];
 	}
 	lcdSnap = false;
+	flickerSnap = false;
 }
 void retro_set_video_refresh(retro_video_refresh_t cb) { videoCb = cb; }
 void retro_set_audio_sample(retro_audio_sample_t cb) { (void) cb; }
@@ -207,7 +239,7 @@ void retro_reset(void) {
 	pendingPresses = 0;
 	gamateReset(&gamate);
 	if (skipIntro) skipIntroOrReset();
-	lcdSnap = true;
+	lcdSnap = flickerSnap = true;
 }
 
 static void readInput(void) {
@@ -284,7 +316,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 	readOptions();
 	pendingPresses = 0;
 	if (skipIntro) skipIntroOrReset();
-	lcdSnap = true;
+	lcdSnap = flickerSnap = true;
 	loaded = true;
 	return true;
 }
@@ -305,7 +337,7 @@ size_t retro_serialize_size(void) { return gamateStateSize(&gamate); }
 bool retro_serialize(void* data, size_t size) { return loaded && gamateSaveState(&gamate, data, size); }
 bool retro_unserialize(const void* data, size_t size) {
 	if (!loaded || !gamateLoadState(&gamate, data, size)) return false;
-	lcdSnap = true;
+	lcdSnap = flickerSnap = true;
 	return true;
 }
 void retro_cheat_reset(void) { }
