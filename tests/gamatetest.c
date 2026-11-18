@@ -623,6 +623,50 @@ static void testAudio(void) {
 	gamateFree(&g);
 }
 
+static void configureClockTest(struct Gamate* g, int16_t* audio) {
+	gamateSetAudio(g, audio, 2000, 48000);
+	gamateWrite(g, 0x4000, 7);
+	gamateWrite(g, 0x4002, 13);
+	gamateWrite(g, 0x4004, 29);
+	gamateWrite(g, 0x4006, 5);
+	gamateWrite(g, 0x4007, 0);
+	gamateWrite(g, 0x4008, 0x10);
+	gamateWrite(g, 0x4009, 12);
+	gamateWrite(g, 0x400A, 9);
+	gamateWrite(g, 0x400B, 3);
+	gamateWrite(g, 0x400D, 0x0E);
+	for (size_t i = 0; i < sizeof(g->vram); i++) g->vram[i] = (uint8_t) (i * 37);
+}
+
+static void testClockBatching(void) {
+	struct Gamate batch, single;
+	gamateInit(&batch);
+	gamateInit(&single);
+	uint8_t bios[GAMATE_BIOS_SIZE] = { 0 }, rom[0x4000] = { 0 };
+	assert(gamateLoad(&batch, rom, sizeof(rom), bios, sizeof(bios)));
+	assert(gamateLoad(&single, rom, sizeof(rom), bios, sizeof(bios)));
+	int16_t batchAudio[2000 * 2] = { 0 }, singleAudio[2000 * 2] = { 0 };
+	configureClockTest(&batch, batchAudio);
+	configureClockTest(&single, singleAudio);
+
+	gamateRunClocks(&batch, 100000);
+	for (unsigned clock = 0; clock < 100000; clock++) gamateRunClocks(&single, 1);
+	assert(batch.audioCount == single.audioCount && batch.frameDone == single.frameDone);
+	assert(!memcmp(batchAudio, singleAudio, batch.audioCount * 2 * sizeof(*batchAudio)));
+	assert(!memcmp(&batch.diagnostics, &single.diagnostics, sizeof(batch.diagnostics)));
+	size_t stateSize = gamateStateSize(&batch);
+	void* batchState = malloc(stateSize);
+	void* singleState = malloc(stateSize);
+	assert(batchState && singleState);
+	assert(gamateSaveState(&batch, batchState, stateSize));
+	assert(gamateSaveState(&single, singleState, stateSize));
+	assert(!memcmp(batchState, singleState, stateSize));
+	free(batchState);
+	free(singleState);
+	gamateFree(&batch);
+	gamateFree(&single);
+}
+
 int main(void) {
 	testMemory();
 	testUart();
@@ -635,5 +679,6 @@ int main(void) {
 	testCpuDecimal();
 	testCpuBusAccesses();
 	testAudio();
+	testClockBatching();
 	return 0;
 }

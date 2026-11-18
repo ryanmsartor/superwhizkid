@@ -529,6 +529,14 @@ into the repository, build output, tests, or releases.
   non-background pixels were repeatedly absent for one or two frames between longer drawn runs.
   This evidence was used only to choose the optional presentation filter's one- and two-frame
   lightening-confirmation limits. It did not change Gamate machine timing or LCD-controller output.
+- The performance pass used local GNU `gprof` sampling of a 2,000-frame Brick Blaster run, not code
+  from another emulator. It identified `gamateRunClocks` as roughly 75% of sampled runtime before
+  optimization. A 5,000-frame run dropped from 6.32 to 4.72 seconds on the development system after
+  batching master-clock work to the next observable AY/audio/IRQ/LCD/frame event. Before/after
+  1,000-frame `gamateboot` reports for Brick Blaster, Tornado, Money Maze, and Mini Golf were compared
+  byte-for-byte; their video/audio hashes, machine diagnostics, and reported state remained exact.
+  These measurements justified only event batching, an avoidable-ROM-modulo guard, and a direct
+  raw-palette frontend path when both presentation filters are disabled; no timing was omitted.
 
 ## Still needed
 

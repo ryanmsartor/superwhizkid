@@ -135,6 +135,16 @@ static void readOptions(void) {
 
 // Estimated physical-panel response; raw LCD-controller output remains available with rates at 256.
 static void renderLcd(void) {
+	if (!flickerReduction && lcdDarken == 256 && lcdFade == 256) {
+		for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
+			uint8_t raw = gamate.frameBuffer[i] & 3;
+			flickerPixel[i] = raw;
+			lcdLevel[i] = raw * 256;
+			video[i] = activePalette[raw];
+		}
+		lcdSnap = flickerSnap = false;
+		return;
+	}
 	for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
 		uint8_t raw = gamate.frameBuffer[i] & 3;
 		if (flickerReduction) {

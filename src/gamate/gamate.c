@@ -131,7 +131,8 @@ static size_t romOffset(const struct Gamate* g, uint16_t address) {
 	} else if (g->mapper != GAMATE_MAPPER_PLAIN && offset >= 0x4000) {
 		offset = (size_t) g->bank * 0x4000 + (offset & 0x3FFF);
 	}
-	return g->romSize ? offset % g->romSize : 0;
+	if (!g->romSize) return 0;
+	return offset < g->romSize ? offset : offset % g->romSize;
 }
 
 static void incrementVram(struct Gamate* g) {
@@ -321,36 +322,6 @@ static uint32_t tonePeriod(const struct Gamate* g, int channel) {
 	return (period ? period : 1) * 32;
 }
 
-static void ayClock(struct Gamate* g) {
-	for (int channel = 0; channel < 3; channel++) {
-		if (++g->ay.toneCounter[channel] >= tonePeriod(g, channel)) {
-			g->ay.toneCounter[channel] = 0;
-			g->ay.toneLevel[channel] = !g->ay.toneLevel[channel];
-		}
-	}
-	uint32_t noisePeriod = (g->ayRegisters[6] ? g->ayRegisters[6] : 1) * 64;
-	if (++g->ay.noiseCounter >= noisePeriod) {
-		g->ay.noiseCounter = 0;
-		uint32_t feedback = (g->ay.noiseLfsr ^ (g->ay.noiseLfsr >> 3)) & 1;
-		g->ay.noiseLfsr = g->ay.noiseLfsr >> 1 | feedback << 16;
-		g->ay.noiseLevel = g->ay.noiseLfsr & 1;
-	}
-	uint32_t envelope = g->ayRegisters[11] | (uint32_t) g->ayRegisters[12] << 8;
-	if (++g->ay.envelopeCounter >= (envelope ? envelope : 1) * 1024) {
-		g->ay.envelopeCounter = 0;
-		if (!g->ay.envelopeHolding && --g->ay.envelopeStep < 0) {
-			if (g->ay.envelopeHold) {
-				if (g->ay.envelopeAlternate) g->ay.envelopeAttack ^= 15;
-				g->ay.envelopeHolding = true;
-				g->ay.envelopeStep = 0;
-			} else {
-				if (g->ay.envelopeAlternate) g->ay.envelopeAttack ^= 15;
-				g->ay.envelopeStep = 15;
-			}
-		}
-	}
-}
-
 static int channelLevel(const struct Gamate* g, int channel) {
 	static const uint8_t levels[16] = { 0, 1, 2, 3, 5, 7, 11, 15, 22, 31, 45, 63, 90, 127, 180, 255 };
 	bool toneDisabled = g->ayRegisters[7] & (1 << channel);
@@ -466,27 +437,90 @@ void gamateRenderSnapshot(struct Gamate* g) {
 	}
 }
 
+static unsigned earlierEvent(unsigned current, uint32_t counter, uint32_t period) {
+	unsigned until = counter < period ? period - counter : 1;
+	return until < current ? until : current;
+}
+
 void gamateRunClocks(struct Gamate* g, unsigned clocks) {
-	for (unsigned i = 0; i < clocks; i++) {
-		g->masterClocks++;
-		ayClock(g);
-		g->samplePhase += g->sampleRate;
+	while (clocks) {
+		unsigned step = clocks;
+		uint32_t tonePeriods[3];
+		for (int channel = 0; channel < 3; channel++) {
+			tonePeriods[channel] = tonePeriod(g, channel);
+			step = earlierEvent(step, g->ay.toneCounter[channel], tonePeriods[channel]);
+		}
+		uint32_t noisePeriod = (g->ayRegisters[6] ? g->ayRegisters[6] : 1) * 64;
+		uint32_t envelope = g->ayRegisters[11] | (uint32_t) g->ayRegisters[12] << 8;
+		uint32_t envelopePeriod = (envelope ? envelope : 1) * 1024;
+		step = earlierEvent(step, g->ay.noiseCounter, noisePeriod);
+		step = earlierEvent(step, g->ay.envelopeCounter, envelopePeriod);
+		if (g->sampleRate) {
+			uint64_t remaining = g->samplePhase < 4433000 ? 4433000 - g->samplePhase : 0;
+			uint64_t untilSample = remaining ?
+				(remaining + g->sampleRate - 1) / g->sampleRate : 1;
+			if (untilSample < step) step = (unsigned) untilSample;
+		}
+		if (g->irqClocks < IRQ_PERIOD) {
+			step = earlierEvent(step, g->irqClocks, IRQ_PERIOD);
+		}
+		if (!g->displayStopped && g->lcdClock < 162) {
+			step = earlierEvent(step, g->lcdClock, 162);
+		}
+		if (g->frameClocks < CLOCKS_PER_FRAME) {
+			step = earlierEvent(step, g->frameClocks, CLOCKS_PER_FRAME);
+		}
+
+		g->masterClocks += step;
+		for (int channel = 0; channel < 3; channel++) {
+			g->ay.toneCounter[channel] += step;
+			if (g->ay.toneCounter[channel] >= tonePeriods[channel]) {
+				g->ay.toneCounter[channel] = 0;
+				g->ay.toneLevel[channel] = !g->ay.toneLevel[channel];
+			}
+		}
+		g->ay.noiseCounter += step;
+		if (g->ay.noiseCounter >= noisePeriod) {
+			g->ay.noiseCounter = 0;
+			uint32_t feedback = (g->ay.noiseLfsr ^ (g->ay.noiseLfsr >> 3)) & 1;
+			g->ay.noiseLfsr = g->ay.noiseLfsr >> 1 | feedback << 16;
+			g->ay.noiseLevel = g->ay.noiseLfsr & 1;
+		}
+		g->ay.envelopeCounter += step;
+		if (g->ay.envelopeCounter >= envelopePeriod) {
+			g->ay.envelopeCounter = 0;
+			if (!g->ay.envelopeHolding && --g->ay.envelopeStep < 0) {
+				if (g->ay.envelopeHold) {
+					if (g->ay.envelopeAlternate) g->ay.envelopeAttack ^= 15;
+					g->ay.envelopeHolding = true;
+					g->ay.envelopeStep = 0;
+				} else {
+					if (g->ay.envelopeAlternate) g->ay.envelopeAttack ^= 15;
+					g->ay.envelopeStep = 15;
+				}
+			}
+		}
+		g->samplePhase += (uint64_t) step * g->sampleRate;
 		if (g->samplePhase >= 4433000) {
 			g->samplePhase -= 4433000;
 			audioSample(g);
 		}
-		if (++g->irqClocks == IRQ_PERIOD) {
-			g->irq = true;
+		g->irqClocks += step;
+		if (g->irqClocks == IRQ_PERIOD) g->irq = true;
+		if (!g->displayStopped) {
+			g->lcdClock += step;
+			if (g->lcdClock == 162) {
+				g->lcdClock = 0;
+				lcdRefreshRow(g);
+				if (++g->lcdRowEvent == GAMATE_HEIGHT * 3) g->lcdRowEvent = 0;
+			}
 		}
-		if (!g->displayStopped && ++g->lcdClock == 162) {
-			g->lcdClock = 0;
-			lcdRefreshRow(g);
-			if (++g->lcdRowEvent == GAMATE_HEIGHT * 3) g->lcdRowEvent = 0;
-		}
-		if (++g->frameClocks == CLOCKS_PER_FRAME) {
+		g->frameClocks += step;
+		if (g->frameClocks == CLOCKS_PER_FRAME) {
 			g->frameClocks = 0;
 			g->frameDone = true;
 		}
+		clocks -= step;
 	}
 }
 
