@@ -233,17 +233,22 @@ hardware measurements take precedence where they conflict with an emulator.
 ### spruceUI Cores-spruce
 
 - Repository: <https://github.com/spruceUI/Cores-spruce>
-- Reference workflow: <https://github.com/spruceUI/Cores-spruce/blob/main/.github/workflows/build-armnes.yml>
+- Primary reference workflow: <https://github.com/spruceUI/Cores-spruce/blob/main/.github/workflows/build-superwhizkid.yml>
+- Aggregate packaging reference: <https://github.com/spruceUI/Cores-spruce/blob/main/.github/workflows/build-all.yml>
 - Toolchain definitions: <https://github.com/spruceUI/Cores-spruce/blob/main/Dockerfile.arm64>,
   <https://github.com/spruceUI/Cores-spruce/blob/main/Dockerfile.armhf>,
   <https://github.com/spruceUI/Cores-spruce/blob/main/toolchain-arm64.cmake>, and
   <https://github.com/spruceUI/Cores-spruce/blob/main/toolchain-armhf.cmake>.
 - Used for: the supported ARM64/ARMHF hardware classes, public `toolchains` release assets,
   Cortex-A53 and Cortex-A7 compiler targets, A30/Miyoo ARMHF glibc 2.23 ceiling, Ubuntu Focal ARM64
-  glibc 2.31 ceiling, and spruce package layout (`cores/`, `cores64/`, and core-info metadata).
+  glibc 2.31 ceiling, the current spruce package layout (`cores/`, `cores64/`, and `info/`), and
+  GitHub Actions error annotations for architecture or missing-output failures. The aggregate workflow
+  was used to confirm that its merger accepts those three directories at archive root.
 - Implementation impact: the manual release workflow consumes the same public Docker images, checks
-  both output architectures and glibc symbol ceilings, and packages both cores together. Its tag and
-  draft-release lifecycle is independently written for this repository's explicit release-tag input.
+  both output architectures and glibc symbol ceilings, packages both cores and metadata in the same
+  directory structure, and reports validation failures with explicit `::error::` messages. The GPL
+  license remains an additional top-level archive file. Tag replacement and the draft-release lifecycle
+  are independently written for this repository's explicit release-tag input.
 
 ### GitHub Actions and GitHub CLI documentation
 

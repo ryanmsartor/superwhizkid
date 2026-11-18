@@ -65,7 +65,7 @@ jobs:
       - name: Build ARM64 core
         run: |
           set -euo pipefail
-          mkdir -p package/cores64
+          mkdir -p output/cores64
           docker run --rm \
             -v "${{ github.workspace }}:/src" \
             -w /src \
@@ -75,12 +75,12 @@ jobs:
               cmake -S . -B build-arm64 -DCMAKE_BUILD_TYPE=Release
               cmake --build build-arm64 --parallel "$(nproc)" --target superwhizkid_libretro
             '
-          cp build-arm64/superwhizkid_libretro.so package/cores64/
+          cp build-arm64/superwhizkid_libretro.so output/cores64/
 
       - name: Build ARMHF core
         run: |
           set -euo pipefail
-          mkdir -p package/cores
+          mkdir -p output/cores
           docker run --rm \
             -v "${{ github.workspace }}:/src" \
             -w /src \
@@ -91,7 +91,7 @@ jobs:
                 -DCMAKE_C_FLAGS="-mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard"
               cmake --build build-armhf --parallel "$(nproc)" --target superwhizkid_libretro
             '
-          cp build-armhf/superwhizkid_libretro.so package/cores/
+          cp build-armhf/superwhizkid_libretro.so output/cores/
 
       - name: Verify architectures and glibc floors
         run: |
@@ -119,21 +119,37 @@ jobs:
             fi
           }
 
-          file package/cores64/superwhizkid_libretro.so
-          file package/cores/superwhizkid_libretro.so
-          file package/cores64/superwhizkid_libretro.so | grep -Eqi 'aarch64|ARM aarch64'
-          file package/cores/superwhizkid_libretro.so | grep -q 'ARM, EABI5'
-          require_floor package/cores64/superwhizkid_libretro.so 2.31
-          require_floor package/cores/superwhizkid_libretro.so 2.23
+          file output/cores64/superwhizkid_libretro.so | grep -Eqi 'aarch64|ARM aarch64' || {
+            echo "::error::arm64 build is not aarch64"
+            exit 1
+          }
+          file output/cores/superwhizkid_libretro.so | grep -q 'ARM, EABI5' || {
+            echo "::error::armhf build is not 32-bit ARM"
+            exit 1
+          }
+          require_floor output/cores64/superwhizkid_libretro.so 2.31
+          require_floor output/cores/superwhizkid_libretro.so 2.23
 
       - name: Package spruce layout
         run: |
           set -euo pipefail
-          cp libretro/superwhizkid_libretro.info package/
-          cp LICENSE package/
-          cd package
-          zip -9 -r ../superwhizkid_libretro.zip \
-            cores/ cores64/ superwhizkid_libretro.info LICENSE
+          mkdir -p output/info
+          cp libretro/superwhizkid_libretro.info output/info/
+          cp LICENSE output/
+
+          contents=""
+          test -f output/cores64/superwhizkid_libretro.so && contents="$contents cores64/"
+          test -f output/cores/superwhizkid_libretro.so && contents="$contents cores/"
+          test -f output/info/superwhizkid_libretro.info && contents="$contents info/"
+          if test -f output/cores64/superwhizkid_libretro.so || \
+             test -f output/cores/superwhizkid_libretro.so; then
+            cd output
+            # shellcheck disable=SC2086 # Intentional expansion into archive members.
+            zip -9 -r ../superwhizkid_libretro.zip $contents LICENSE
+          else
+            echo "::error::No builds succeeded for superwhizkid"
+            exit 1
+          fi
 
       - name: Create or replace draft release
         env:
