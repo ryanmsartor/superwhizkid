@@ -79,6 +79,41 @@ hardware measurements take precedence where they conflict with an emulator.
   uses neutral 255/170/85/0 levels. Palette selection only
   maps completed two-bit pixels to output colors and does not change emulated LCD state or timing.
 
+### Estimated LCD persistence filter
+
+- Physical basis: the Nintendo Life hardware account above reports severe motion blur and at least
+  two panel types, while the Museum of Obsolete Media describes the original screen as a green,
+  non-backlit monochrome LCD. Neither source provides measured rise/fall response times.
+- Local observation: an interactive 1,338-frame Brick Blaster trace captured raw completed pixels,
+  VRAM, LCD phase, and cumulative VRAM writes. During gameplay the 120-pixel paddle region at
+  `x=64–87, y=132–141` was deliberately absent for one full frame on a repeating nine-frame cadence.
+  The same 36 VRAM bytes were explicitly zeroed and restored on the adjacent frames. This establishes
+  the redraw artifact being masked; it does not measure the physical panel response. The trace is a
+  local diagnostic at `/tmp/swk-brick-blaster.trace` and contains no ROM or BIOS bytes.
+- Model: once per 60.8093 Hz output frame, an internal level moves toward the completed two-bit pixel
+  target using `next = level + (target - level) * rate / 256`; a sub-unit final step snaps exactly to
+  the target. Darkening rates for levels 1–5 are `256, 248, 240, 224, 208`, leaving respectively
+  `0%, 3.125%, 6.25%, 12.5%, 18.75%` of the prior difference per frame. Fading rates are
+  `224, 192, 160, 128, 96`, leaving `12.5%, 25%, 37.5%, 50%, 62.5%`.
+- Limitations: these coefficients were selected by SundownerSport as useful visual strengths, not
+  obtained from a photodiode, high-speed camera, service specification, or calibrated recording.
+  The option is therefore presented as `LCD Ghosting`, with its description explicitly identifying
+  the response as estimated; its levels describe strength, not milliseconds. It affects only
+  frontend RGB output, is excluded from machine save state, snaps
+  after a successful state load, and can be disabled for exact raw LCD-controller output.
+- Validation: synthetic integration tests check raw-output identity, both response directions,
+  convergence to both endpoints, increasing one-frame retention, all five levels, and interpolation
+  through every selectable palette.
+
+### BIOS selection option lifecycle
+
+- The preferred UMC/Bit filename is consulted only when content is loaded. If it is absent, the other
+  recognized BIOS is tried. Core reset resets the already loaded machine and deliberately retains its
+  current BIOS; changing the option takes effect after content reload.
+- The option description states this lifecycle explicitly. Purpose-written identifiable BIOS files
+  test both preferences, missing-file fallback, preference changes across reset/reload, and invalid
+  values without including commercial firmware bytes.
+
 ### Official libretro core-info example and RetroArch core installation guide
 
 - Core-info template: <https://github.com/libretro/libretro-core-info/blob/master/00_example_libretro.info>

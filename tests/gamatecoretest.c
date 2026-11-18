@@ -318,7 +318,7 @@ int main(int argc, char** argv) {
 
 	// Every persistence level must retain progressively more of the previous driven shade.
 	paletteOption = "original";
-	unsigned previousDistance = 0;
+	unsigned previousDistance = 0, previousDarkDistance = 0, firstFilteredDarkDistance = 0;
 	static const char* ghostLevels[] = { "off", "1", "2", "3", "4", "5" };
 	for (unsigned i = 0; i < sizeof(ghostLevels) / sizeof(*ghostLevels); i++) {
 		ghostingOption = ghostLevels[i];
@@ -333,7 +333,20 @@ int main(int argc, char** argv) {
 		if (i == 0) assert(distance == 0);
 		else assert(distance > previousDistance);
 		previousDistance = distance;
+		for (unsigned frame = 0; frame < 32; frame++) p_retro_run();
+		assert(firstVideoPixel == 0xCE93); // fading reaches the new endpoint
+
+		ram[4] = 0xFF;
+		p_retro_run();
+		unsigned darkDistance = colorDistance(firstVideoPixel, 0x8CEB);
+		if (i <= 1) assert(darkDistance == 0);
+		else assert(darkDistance >= previousDarkDistance);
+		if (i == 2) firstFilteredDarkDistance = darkDistance;
+		previousDarkDistance = darkDistance;
+		for (unsigned frame = 0; frame < 32; frame++) p_retro_run();
+		assert(firstVideoPixel == 0x8CEB); // darkening also reaches its endpoint
 	}
+	assert(previousDarkDistance > firstFilteredDarkDistance); // quantized output remains level-ordered
 
 	// Palette interpolation remains valid while persistence is active.
 	paletteOption = "greyscale";
@@ -412,7 +425,19 @@ int main(int argc, char** argv) {
 	p_retro_run();
 	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
 	assert(ram && ram[3] == 0xAA);
+	biosOption = "umc";
+	optionUpdate = true;
+	ram[3] = 0;
+	p_retro_reset();
+	p_retro_run();
+	assert(ram[3] == 0xAA); // reset retains the BIOS selected when content was loaded
 	p_retro_unload_game();
+	assert(p_retro_load_game(&game));
+	p_retro_run();
+	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+	assert(ram && ram[3] == 0x55); // content reload applies the changed preference
+	p_retro_unload_game();
+	biosOption = "bit";
 	char bitFirmwarePath[sizeof(systemDirectory) + 24];
 	snprintf(bitFirmwarePath, sizeof(bitFirmwarePath), "%s/gamate_bios_bit.bin", systemDirectory);
 	assert(unlink(bitFirmwarePath) == 0);

@@ -49,9 +49,9 @@ void retro_set_environment(retro_environment_t cb) {
 		},
 		{ "superwhizkid_tap_latch", "Catch quick taps", "Not hardware accurate. Holds a press until the game next reads the controller, so taps between its reads aren't lost.",
 			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
-		{ "superwhizkid_lcd_ghosting", "LCD ghosting", "Fades pixels like the slow Gamate LCD, so sprites the game redraws don't flash.",
-			{ { "off", NULL }, { "1", NULL }, { "2", NULL }, { "3", NULL }, { "4", NULL }, { "5", NULL }, { NULL, NULL } }, "off" },
-		{ "superwhizkid_bios", "BIOS", "Which BIOS to boot; the other is used if it's missing. Applies when the game restarts.",
+		{ "superwhizkid_lcd_ghosting", "LCD Ghosting", "Applies an estimated slow-panel response to reduce redraw flicker. Higher settings retain the previous shade longer; Off shows raw LCD-controller output.",
+			{ { "off", "Off" }, { "1", "Very light" }, { "2", "Light" }, { "3", "Medium" }, { "4", "Strong" }, { "5", "Very strong" }, { NULL, NULL } }, "off" },
+		{ "superwhizkid_bios", "BIOS Priority", "Selects the preferred BIOS at content load; the other is used if it is missing. Reload content to apply a change. Reset continues using the currently loaded BIOS.",
 			{ { "umc", "UMC (gamate_bios_umc.bin)" }, { "bit", "Bit (gamate_bios_bit.bin)" }, { NULL, NULL } }, "umc" },
 		{ "superwhizkid_skip_intro", "Skip BIOS intro", "Runs the BIOS logo sequence instantly at power-on and reset, starting at the cartridge.",
 			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
@@ -60,8 +60,8 @@ void retro_set_environment(retro_environment_t cb) {
 	static const struct retro_variable variables[] = {
 		{ "superwhizkid_palette", "Palette; original|accurate|greyscale" },
 		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
-		{ "superwhizkid_lcd_ghosting", "LCD ghosting; off|1|2|3|4|5" },
-		{ "superwhizkid_bios", "BIOS; umc|bit" },
+		{ "superwhizkid_lcd_ghosting", "LCD Ghosting; off|1|2|3|4|5" },
+		{ "superwhizkid_bios", "BIOS Priority; umc|bit" },
 		{ "superwhizkid_skip_intro", "Skip BIOS intro; off|on" },
 		{ NULL, NULL }
 	};
@@ -113,7 +113,7 @@ static void readOptions(void) {
 	lcdFade = fade[level];
 }
 
-// The Gamate LCD responds slowly, so games can leave sprites erased for a frame without it showing.
+// Estimated physical-panel response; raw LCD-controller output remains available with rates at 256.
 static void renderLcd(void) {
 	for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
 		int target = (gamate.frameBuffer[i] & 3) * 256, level = lcdLevel[i];
