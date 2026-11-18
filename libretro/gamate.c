@@ -18,7 +18,7 @@ static struct Gamate gamate;
 static bool loaded;
 static uint16_t video[GAMATE_WIDTH * GAMATE_HEIGHT];
 static int16_t audio[2048 * 2];
-static bool tapLatch, skipIntro;
+static bool tapLatch, skipIntro, monoAudio;
 static unsigned flickerReduction;
 static uint8_t pendingPresses;
 static const uint16_t* activePalette;
@@ -220,6 +220,8 @@ void retro_set_environment(retro_environment_t cb) {
 			},
 			"original"
 		},
+		{ "superwhizkid_audio_output", "Audio Output", "Selects the output mix. Stereo sends PSG channel A left, B right, and C equally to both; Mono combines the stereo channels equally and sends the result to both speakers.",
+			{ { "stereo", "Stereo" }, { "mono", "Mono" }, { NULL, NULL } }, "stereo" },
 		{ "superwhizkid_tap_latch", "Catch quick taps", "Not hardware accurate. Holds a press until the game next reads the controller, so taps between its reads aren't lost.",
 			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting", "Applies an estimated slow-panel response to reduce redraw flicker. Higher settings retain the previous shade longer; Off shows raw LCD-controller output.",
@@ -234,6 +236,7 @@ void retro_set_environment(retro_environment_t cb) {
 	};
 	static const struct retro_variable variables[] = {
 		{ "superwhizkid_palette", "Palette; original|accurate|greyscale" },
+		{ "superwhizkid_audio_output", "Audio Output; stereo|mono" },
 		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting; off|1|2|3|4|5" },
 		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction; off|1|2" },
@@ -270,6 +273,11 @@ static void readOptions(void) {
 	activePalette = !strcmp(palette, "accurate") ? accuratePalette :
 		!strcmp(palette, "greyscale") ? greyscalePalette : originalPalette;
 	buildShades();
+
+	var.key = "superwhizkid_audio_output";
+	var.value = NULL;
+	monoAudio = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value &&
+		!strcmp(var.value, "mono");
 
 	var.key = "superwhizkid_tap_latch";
 	var.value = NULL;
@@ -470,6 +478,12 @@ void retro_run(void) {
 	renderLcd();
 	videoCb(video, GAMATE_WIDTH, GAMATE_HEIGHT, GAMATE_WIDTH * sizeof(*video));
 	size_t frames = gamate.audioCount < gamate.audioCapacity ? gamate.audioCount : gamate.audioCapacity;
+	if (monoAudio) {
+		for (size_t i = 0; i < frames; i++) {
+			int16_t mixed = (int16_t) (((int) audio[i * 2] + audio[i * 2 + 1]) / 2);
+			audio[i * 2] = audio[i * 2 + 1] = mixed;
+		}
+	}
 	audioCb(audio, frames);
 }
 

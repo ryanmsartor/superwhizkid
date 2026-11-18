@@ -290,6 +290,20 @@ hardware measurements take precedence where they conflict with an emulator.
 Gamate-specific clocking and channel routing continue to come from Kevtris's physical measurements:
 the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides.
 
+### Audio Output core option
+
+- Source basis: Kevtris's measured Gamate channel routing recorded above. No additional emulator
+  implementation was used for this option.
+- Implementation impact: `Stereo` remains the default and preserves the emulated PSG output exactly:
+  channel A is routed left, B right, and C to both. `Mono` is a libretro presentation-layer option
+  that averages the completed left and right samples with equal weights and sends that value to both
+  output channels. Averaging rather than summing preserves headroom and prevents the downmix itself
+  from clipping. It does not alter PSG state, filtering state, timing, or save states, and is intended
+  as the basis for a later built-in-speaker reproduction mode.
+- Validation: the purpose-written libretro firmware enables channel A alone. Integration tests verify
+  that the default and explicit `Stereo` output have unequal left/right samples, while changing the
+  option live to `Mono` produces identical samples on both output channels.
+
 ## Compatibility reference
 
 ### MAME Gamate implementation

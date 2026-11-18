@@ -14,8 +14,9 @@
 
 static char systemDirectory[] = "/tmp/superwhizkid-coretest-XXXXXX";
 static unsigned activeButton = ~0u, polls, videoFrames, audioBatches;
-static bool videoVaries, audioActive;
+static bool videoVaries, audioActive, audioChannelsDiffer, lastAudioChannelsEqual;
 static const char* paletteOption = "original";
+static const char* audioOutputOption = "stereo";
 static const char* tapLatchOption = "off";
 static const char* ghostingOption = "off";
 static const char* flickerOption = "off";
@@ -43,7 +44,8 @@ static void netpacketSend(int flags, const void* data, size_t size, uint16_t cli
 
 static unsigned optionMask(const char* key) {
 	static const char* keys[] = {
-		"superwhizkid_palette", "superwhizkid_tap_latch", "superwhizkid_lcd_ghosting",
+		"superwhizkid_palette", "superwhizkid_audio_output", "superwhizkid_tap_latch",
+		"superwhizkid_lcd_ghosting",
 		"superwhizkid_flicker_reduction", "superwhizkid_bios", "superwhizkid_skip_intro"
 	};
 	for (unsigned i = 0; i < sizeof(keys) / sizeof(*keys); i++) {
@@ -71,17 +73,18 @@ static bool environment(unsigned command, void* data) {
 		for (; options && options->key; options++) {
 			mask |= optionMask(options->key);
 			const char* expected = !strcmp(options->key, "superwhizkid_palette") ? "original" :
+				!strcmp(options->key, "superwhizkid_audio_output") ? "stereo" :
 				!strcmp(options->key, "superwhizkid_bios") ? "umc" : "off";
 			defaults &= options->default_value && !strcmp(options->default_value, expected);
 		}
-		modernOptions = mask == 0x3F && defaults;
+		modernOptions = mask == 0x7F && defaults;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_VARIABLES: {
 		const struct retro_variable* variables = data;
 		unsigned mask = 0;
 		for (; variables && variables->key; variables++) mask |= optionMask(variables->key);
-		legacyOptions = mask == 0x3F;
+		legacyOptions = mask == 0x7F;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE:
@@ -95,6 +98,10 @@ static bool environment(unsigned command, void* data) {
 		struct retro_variable* variable = data;
 		if (!strcmp(variable->key, "superwhizkid_palette")) {
 			variable->value = paletteOption;
+			return true;
+		}
+		if (!strcmp(variable->key, "superwhizkid_audio_output")) {
+			variable->value = audioOutputOption;
 			return true;
 		}
 		if (!strcmp(variable->key, "superwhizkid_tap_latch")) {
@@ -160,7 +167,12 @@ static void video(const void* data, unsigned width, unsigned height, size_t pitc
 static void audioSample(int16_t left, int16_t right) { (void) left; (void) right; }
 
 static size_t audioBatch(const int16_t* data, size_t frames) {
-	for (size_t i = 0; i < frames * 2; i++) audioActive |= data[i] != 0;
+	lastAudioChannelsEqual = true;
+	for (size_t i = 0; i < frames; i++) {
+		audioActive |= data[i * 2] != 0 || data[i * 2 + 1] != 0;
+		audioChannelsDiffer |= data[i * 2] != data[i * 2 + 1];
+		lastAudioChannelsEqual &= data[i * 2] == data[i * 2 + 1];
+	}
 	audioBatches++;
 	return frames;
 }
@@ -376,7 +388,16 @@ int main(int argc, char** argv) {
 		assert(ram[0] == (uint8_t) ~(1u << bit));
 	}
 	assert(polls == pollsBeforeButtons + 8 && videoFrames == videoBeforeButtons + 8 &&
-		audioBatches == audioBeforeButtons + 8 && videoVaries && audioActive);
+		audioBatches == audioBeforeButtons + 8 && videoVaries && audioActive && audioChannelsDiffer);
+	// Mono is a presentation-layer 1:1 downmix and takes effect without reloading content.
+	audioOutputOption = "mono";
+	optionUpdate = true;
+	p_retro_run();
+	assert(lastAudioChannelsEqual);
+	audioOutputOption = "stereo";
+	optionUpdate = true;
+	p_retro_run();
+	assert(!lastAudioChannelsEqual);
 	paletteOption = "accurate";
 	optionUpdate = true;
 	p_retro_run();
@@ -592,6 +613,7 @@ int main(int argc, char** argv) {
 	// Invalid option values use documented defaults rather than enabling features accidentally.
 	biosOption = "invalid";
 	paletteOption = "invalid";
+	audioOutputOption = "invalid";
 	tapLatchOption = "invalid";
 	ghostingOption = "invalid";
 	flickerOption = "invalid";
@@ -600,7 +622,7 @@ int main(int argc, char** argv) {
 	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
 	assert(ram && ram[3] == 0xFF); // invalid skip value falls back to off
 	p_retro_run();
-	assert(ram && ram[3] == 0x55 && firstVideoPixel == 0x8CEB);
+	assert(ram && ram[3] == 0x55 && firstVideoPixel == 0x8CEB && !lastAudioChannelsEqual);
 	ram[2] = 0;
 	activeButton = ~0u;
 	p_retro_run();
