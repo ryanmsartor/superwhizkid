@@ -321,8 +321,8 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   transfer curve, absolute gain, or unit-to-unit variation. The option description therefore identifies
   the response as estimated, while the concise user-facing value is `Built-in Speaker`.
 - Implementation impact: the speaker option begins with the documented equal Mono downmix, applies
-  an approximately 250 Hz first-order high-pass, then two approximately 6.5 kHz first-order low-pass
-  stages. It then applies 1.5× drive into a continuous soft knee beginning at half of full scale,
+  an approximately 300 Hz first-order high-pass, then two approximately 6 kHz first-order low-pass
+  stages. It then applies 1.625× drive into a continuous soft knee beginning slightly below half scale,
   progressively compressing loud peaks without hard-clipping discontinuities. This conservative curve
   represents the audible overload without claiming measurement-level precision. Filter history is
   presentation state outside save states and is cleared on mode changes, reset, content load/unload,

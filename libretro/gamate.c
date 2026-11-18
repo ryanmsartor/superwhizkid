@@ -56,12 +56,12 @@ static void resetAudioPresentation(void) {
 static int32_t distortSpeaker(int32_t sample) {
 	// A moderate drive into a continuous soft knee approximates the audible overload in hardware
 	// recordings without the discontinuity and excessive high harmonics of hard clipping.
-	int32_t driven = sample * 3 / 2;
+	int32_t driven = sample * 13 / 8;
 	int32_t sign = driven < 0 ? -1 : 1;
 	int32_t magnitude = driven < 0 ? -driven : driven;
-	if (magnitude > 16384) {
-		int32_t excess = magnitude - 16384;
-		magnitude = 16384 + excess * 16384 / (excess + 16384);
+	if (magnitude > 15360) {
+		int32_t excess = magnitude - 15360;
+		magnitude = 15360 + excess * 15360 / (excess + 15360);
 	}
 	return magnitude * sign;
 }
@@ -508,12 +508,12 @@ void retro_run(void) {
 		for (size_t i = 0; i < frames; i++) {
 			int32_t mixed = ((int32_t) audio[i * 2] + audio[i * 2 + 1]) / 2;
 			if (audioOutput == AUDIO_SPEAKER) {
-				// Estimated small-speaker response at 48 kHz: approximately 250 Hz high-pass,
-				// followed by two approximately 6.5 kHz low-pass stages.
-				speakerBass += (mixed - speakerBass) * 1055 / 32768;
+				// Estimated small-speaker response at 48 kHz: approximately 300 Hz high-pass,
+				// followed by two approximately 6 kHz low-pass stages.
+				speakerBass += (mixed - speakerBass) * 1262 / 32768;
 				mixed -= speakerBass;
 				for (unsigned stage = 0; stage < 2; stage++) {
-					speakerTreble[stage] += (mixed - speakerTreble[stage]) * 18777 / 32768;
+					speakerTreble[stage] += (mixed - speakerTreble[stage]) * 17828 / 32768;
 					mixed = speakerTreble[stage];
 				}
 				mixed = distortSpeaker(mixed);
