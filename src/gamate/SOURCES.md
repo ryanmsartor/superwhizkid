@@ -58,7 +58,7 @@ hardware measurements take precedence where they conflict with an emulator.
 ### SundownerSport, pull request #1
 
 - PR: <https://github.com/ryanmsartor/superwhizkid/pull/1>
-- Contributor: SundownerSport (`kilchisblue@aol.com` in the contributed commits).
+- Contributor: SundownerSport.
 - Original contributed commits and scope:
   - `fb2fef2`, optional tap latch.
   - `d3ce03d`, optional LCD ghosting filter.
@@ -332,6 +332,21 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   dual-mono, differs from the unfiltered Mono samples, switches live, and retains Stereo as default.
 
 ## Compatibility reference
+
+### Cartridge corpus inventory
+
+- MAME software list: <https://github.com/mamedev/mame/blob/954def46685cd0276671138fbd032036b1a771fb/hash/gamate.xml>
+- Neo Fuji historical catalogue: <https://fuji.12bit.club/gamate/?p=games>
+- Accessed: 2026-11-19.
+- Used for: establishing the known dumped-image baseline, preserving reported and rumored undumped
+  cartridge identities separately, reconciling historical naming/serial disagreements, and matching
+  the local collection by full-file SHA-1.
+- Result: all 58 local cartridge images match current MAME entries exactly, covering 58 of its 62
+  catalogued dumps. The four catalogued images absent locally are Mighty Boxer, Kiki Inland,
+  Fortress of Fierceness, and Incantational Couple. Neo Fuji is treated as historical catalogue
+  evidence rather than dump verification because its page explicitly combines owned material,
+  auctions, other websites, and rumors.
+- Full inventory and methodology: [`../../docs/ROM_CORPUS.md`](../../docs/ROM_CORPUS.md).
 
 ### MAME Gamate implementation
 
