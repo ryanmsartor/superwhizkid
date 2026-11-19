@@ -13,6 +13,7 @@ import sys
 
 COPYRIGHT = b"COPYRIGHT BIT CORPORATION"
 BANK_SIZE = 0x4000
+FOUR_IN_ONE_SHA1 = "4dd20632eb31023e18241290eca7d5a5acb1fa84"
 
 
 def cartridge_files(inputs):
@@ -62,12 +63,17 @@ def duplicate_groups(data, size):
 
 
 def report(path, data):
+	digest = hashlib.sha1(data).hexdigest()
 	fill_byte, fill_length = trailing_fill(data)
 	half_mirror = len(data) % 2 == 0 and data[:len(data) // 2] == data[len(data) // 2:]
+	mapper = "4-in-1" if digest == FOUR_IN_ONE_SHA1 else "banked" if len(data) > 0x8000 else "plain"
+	padding = f"{fill_byte}:{fill_length}" if fill_length >= 16 else "none"
 	return (
 		path.name,
 		str(len(data)),
-		hashlib.sha1(data).hexdigest(),
+		digest,
+		mapper,
+		padding,
 		fill_byte,
 		str(fill_length),
 		uniform_banks(data),
@@ -85,9 +91,10 @@ def main():
 	args = parser.parse_args()
 
 	print("\t".join((
-		"file", "size", "sha1", "trailing_fill_byte", "trailing_fill_length",
-		"uniform_16k_banks", "duplicate_64k_blocks", "duplicate_32k_blocks",
-		"duplicate_16k_banks", "identical_halves")))
+		"file", "size", "sha1", "mapper_policy", "padding_convention",
+		"trailing_fill_byte", "trailing_fill_length", "uniform_16k_banks",
+		"duplicate_64k_blocks", "duplicate_32k_blocks", "duplicate_16k_banks",
+		"identical_halves")))
 	found = 0
 	try:
 		files = cartridge_files(args.inputs)

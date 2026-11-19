@@ -36,6 +36,26 @@ The larger dumps preserve the apparent ROM-device capacity even when the final b
 They are not trimmed to the last non-fill byte or last populated 16 KiB bank. This makes file size a
 useful capacity observation, but not a measurement of how much content the game uses.
 
+## Mapper and padding categories
+
+The mapper column below records Superwhizkid's current loading policy, not an identifier stored in
+the ROM: images of 32 KiB or less use the plain mapping, larger images use the common banked mapping,
+and the known 4-in-1 is selected by its full-image fingerprint.
+
+For pattern analysis, a terminal padding convention means a run of at least 16 `$FF` or `$00`
+bytes. Shorter repetitions are classified as no clear terminal padding.
+
+| Mapper policy | `$FF` padding | `$00` padding | No clear padding | Total |
+| --- | ---: | ---: | ---: | ---: |
+| Plain | 18 | 1 | 14 | 33 |
+| Common banked | 5 | 3 | 16 | 24 |
+| 4-in-1 | 1 | 0 | 0 | 1 |
+| **Total** | **24** | **4** | **30** | **58** |
+
+This exposes a corpus-level pattern: long `$FF` tail padding is common among plain cartridges, while
+two thirds of common-banked images carry data to the end without a clear terminal fill convention.
+The four `$00`-padded images are Famous 7, Insect War, Time Warrior, and Volcano Panic.
+
 ## End padding conventions
 
 Two erased-state values occur: `$FF` is dominant, while some later images use `$00`.
@@ -108,6 +128,73 @@ window during startup. The dump cannot distinguish among a physically mirrored 1
 chip-defined reads in the upper half, or a board on which the upper half was simply irrelevant.
 PCB tracing or a test that executes or reads `$A000-$DFFF` on the original cartridge is still
 needed.
+
+## Per-image layout matrix
+
+This table is derived from `gamate-rom-layout-report.py`. `Terminal fill` is shown only for runs of
+at least 16 bytes. Bank and block numbers are zero-based. A dash means that the analyzer found no
+feature in that category.
+
+| Image | Size | Mapper policy | Terminal fill | Uniform 16 KiB banks | Repeated aligned regions |
+| --- | ---: | --- | --- | --- | --- |
+| 4-in-1 (Mini Golf, Cube-Up, Brick Blaster, and Vindicators) | 128 KiB | 4-in-1 | `$FF` × 334 | 1:FF | — |
+| Bao Qing Tian | 512 KiB | Common banked | — | — | — |
+| Baseball | 64 KiB | Common banked | — | — | — |
+| Basketball | 256 KiB | Common banked | — | — | — |
+| Bomb Blaster (Alt) | 32 KiB | Plain | `$FF` × 10,682 | — | — |
+| Bomb Blaster | 32 KiB | Plain | `$FF` × 10,682 | — | — |
+| Boom | 32 KiB | Plain | `$FF` × 399 | — | — |
+| Box Forum | 32 KiB | Plain | `$FF` × 2,973 | — | — |
+| Brick Blaster | 32 KiB | Plain | `$FF` × 4,684 | — | — |
+| Cosmic Fighter | 32 KiB | Plain | — | — | — |
+| Cube Up | 16 KiB | Plain | `$FF` × 4,230 | — | — |
+| Devil Castle | 32 KiB | Plain | — | — | — |
+| Dino Ball | 32 KiB | Plain | — | — | — |
+| Dino Bibo | 32 KiB | Plain | — | — | — |
+| Dinosaur Park | 512 KiB | Common banked | `$FF` × 180,224 | 21:FF, 22:FF, 23:FF, 24:FF, 25:FF, 26:FF, 27:FF, 28:FF, 29:FF, 30:FF, 31:FF | — |
+| Enchanted Bricks | 32 KiB | Plain | `$FF` × 581 | — | — |
+| Famous 7 | 64 KiB | Common banked | `$00` × 3,225 | — | — |
+| Fantasy Travel | 128 KiB | Common banked | — | — | — |
+| Fist of Thunder | 64 KiB | Common banked | — | — | — |
+| Flipuzzle | 32 KiB | Plain | — | — | — |
+| Flying Goblin | 64 KiB | Common banked | — | — | — |
+| Fortune 'n Luck | 128 KiB | Common banked | — | — | — |
+| Further Adventures of Hannibal The Cat | 512 KiB | Common banked | `$FF` × 49,152 | 29:FF, 30:FF, 31:FF | — |
+| Galaxy Invaders | 32 KiB | Plain | — | — | — |
+| GP Race | 128 KiB | Common banked | — | — | — |
+| Hot Hero | 512 KiB | Common banked | `$FF` × 131,072 | 24:FF, 25:FF, 26:FF, 27:FF, 28:FF, 29:FF, 30:FF, 31:FF | 32 KiB: 9=11; 16 KiB: 17=21, 18=22, 19=23 |
+| Insect War | 512 KiB | Common banked | `$00` × 32,768 | 30:00, 31:00 | — |
+| Jewelriss | 32 KiB | Plain | `$FF` × 5,348 | — | — |
+| Kill Shot | 32 KiB | Plain | — | — | — |
+| Kung-Fu Fighter | 32 KiB | Plain | — | — | — |
+| Legend of Dragon Knight | 64 KiB | Common banked | `$FF` × 2,393 | — | — |
+| Magic Jigsaw | 32 KiB | Plain | `$FF` × 151 | — | — |
+| Marauder | 32 KiB | Plain | `$FF` × 171 | — | — |
+| Mars Voyage | 64 KiB | Common banked | — | — | — |
+| Mighty Tank | 32 KiB | Plain | `$FF` × 18 | — | — |
+| Mini Golf | 32 KiB | Plain | — | — | — |
+| Money Maze | 32 KiB | Plain | `$FF` × 1,659 | — | — |
+| Monster Pitfall | 32 KiB | Plain | `$FF` × 519 | — | — |
+| Myth of Asamia | 32 KiB | Plain | — | — | — |
+| Nightmare of Santa Claus | 32 KiB | Plain | `$FF` × 1,065 | — | — |
+| One Million Whys | 512 KiB | Common banked | — | — | — |
+| Pharaoh Revenger | 32 KiB | Plain | — | — | — |
+| Pipemania | 32 KiB | Plain | — | — | — |
+| Punk Boy | 64 KiB | Common banked | `$FF` × 3,775 | — | — |
+| QuizFighter | 256 KiB | Common banked | — | — | — |
+| Riddle of the Ancient Tomb | 512 KiB | Common banked | — | — | — |
+| Robin Hood | 512 KiB | Common banked | — | — | — |
+| Snowman Legend | 32 KiB | Plain | — | — | — |
+| Tennis | 32 KiB | Plain | — | — | — |
+| The Golden Pyramid | 512 KiB | Common banked | — | — | — |
+| Time Warrior | 32 KiB | Plain | `$00` × 44 | — | — |
+| Tornado | 32 KiB | Plain | `$FF` × 336 | — | — |
+| Tough Guy | 128 KiB | Common banked | — | — | — |
+| Treasure Hunter | 32 KiB | Plain | `$FF` × 988 | — | — |
+| Vindicators | 32 KiB | Plain | `$FF` × 334 | — | — |
+| Volcano Panic | 128 KiB | Common banked | `$00` × 113 | — | — |
+| Witty Apee | 32 KiB | Plain | `$FF` × 2,204 | — | — |
+| World Cup Soccer | 64 KiB | Common banked | — | — | — |
 
 ## What can be called unused
 
