@@ -11,6 +11,11 @@ that unused hardware features do not exist.
 
 ## 1. Cartridge format and boot ABI
 
+Initial corpus analysis is recorded in
+[`ROM_HEADER_ANALYSIS.md`](ROM_HEADER_ANALYSIS.md). It establishes the checksum, constant format
+marker, copyright field, and `$6020/$6023/$6026` callback table while retaining the unexplained
+header bytes as unknowns.
+
 Currently documented fields include:
 
 - `$6000-$6001`: checksum

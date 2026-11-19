@@ -459,6 +459,21 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 ## Local compatibility validation (files not distributed)
 
+### Commercial cartridge header and boot-ABI analysis
+
+- Local origin: all 58 user-supplied cartridge images and both recognized BIOS revisions, read in
+  place without retaining ROM or firmware bytes.
+- Method: `tools/gamate-rom-header-report.py` reports structural metadata; focused scripts compared
+  header-field distributions, callback stubs, 16 KiB bank hashes/fill, embedded multicart headers,
+  and the two Bomb Blaster variants. BIOS code was inspected to identify the cartridge callback
+  dispatchers and the alternate UMC `$6002` format-marker check.
+- Used for: establishing the commercial header layout, checksum range, `$6020` start stub, `$6023`
+  NMI callback, `$6026` IRQ callback, multicart component layout, and corpus padding conventions.
+- Result: all 58 checksums validate; all start and IRQ slots are absolute jumps; four games use an
+  explicit no-op NMI callback; and the 4-in-1 contains four independently valid component headers.
+  Bytes `$6003-$6004` and `$601E-$601F` remain unexplained and are not assigned semantics.
+- Full findings and limitations: [`../../docs/ROM_HEADER_ANALYSIS.md`](../../docs/ROM_HEADER_ANALYSIS.md).
+
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.
 
