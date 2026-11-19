@@ -212,6 +212,10 @@ UART. Analysis could determine:
 
 ## 12. BIOS dependencies after cartridge entry
 
+The two authentic firmware revisions are compared structurally and behaviorally in
+[`BIOS_DIFFERENCE_ANALYSIS.md`](BIOS_DIFFERENCE_ANALYSIS.md). That report records derived offsets,
+relocations, vectors, and boot effects without distributing BIOS bytes or disassembly.
+
 The corpus could reveal whether cartridges only inherit BIOS-created state or continue using BIOS
 code after `$6020`:
 

@@ -508,6 +508,23 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   plane 0 with weight one and plane 1 with weight two. The measurements describe framebuffer access,
   not ROM graphics storage; the tool and `docs/ROM_GRAPHICS_ANALYSIS.md` preserve that limitation.
 
+### Authentic BIOS revision comparison
+
+- Local origin: the recognized UMC/NCR and Bit Corporation 4 KiB BIOS images, identified by the
+  hashes in `docs/ROM_CORPUS.md`, were read in place. No firmware bytes, listings, or patches were
+  retained in the repository.
+- Method: byte equality, contiguous changed ranges, page density, exact matching-block relocation,
+  vector/control-flow inspection, and controlled execution of the same cartridge under both images.
+- Used for: `docs/BIOS_DIFFERENCE_ANALYSIS.md`, including the 79.05% byte identity, localization of
+  nearly all differences to `$FC2F-$FFFF`, reset/vector comparison, relocated validation and
+  interrupt routines, the BIT revision's revised failure paths, and the opaque UMC-only regions.
+- Validation: both images reach `$6020` with identical initialized RAM, VRAM, scrolling, LCD control,
+  mapper, and IRQ phase in the controlled comparison. The BIT path takes two additional instructions
+  and 29 CPU cycles, preserving the previously documented 58-master-clock entry-phase difference.
+- Legal boundary: only derived addresses, sizes, hashes, behavioral descriptions, and aggregate
+  statistics were committed. Raw comparison output, firmware bytes, full disassembly, embedded
+  graphics, and opaque data were deliberately excluded.
+
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.
 
