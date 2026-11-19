@@ -147,3 +147,6 @@ Addresses and behavioral descriptions are interoperability and research facts. T
 to reproduce the comparison when a user supplies lawful local dumps, while the copyrighted firmware
 remains undistributed.
 
+A deliberately abstract, non-decompilation representation of the resulting behavior is maintained
+in [`BIOS_BOOT_BEHAVIOR.md`](BIOS_BOOT_BEHAVIOR.md).
+

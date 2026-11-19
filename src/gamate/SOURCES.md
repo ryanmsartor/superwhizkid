@@ -524,6 +524,26 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Legal boundary: only derived addresses, sizes, hashes, behavioral descriptions, and aggregate
   statistics were committed. Raw comparison output, firmware bytes, full disassembly, embedded
   graphics, and opaque data were deliberately excluded.
+- The behavioral results were restated in `docs/BIOS_BOOT_BEHAVIOR.md` as normalized pseudocode.
+  The document retains externally relevant stages, conditions, state effects, entry/callback
+  addresses, and known revision branches, but deliberately omits instruction order, register
+  allocation, private temporary layouts, delay/drawing implementations, and reconstructable data.
+
+### BIOS behavioral-documentation boundary
+
+- [17 U.S.C. § 102](https://www.law.cornell.edu/uscode/text/17/102), particularly § 102(b), was used
+  for the distinction between functional processes/methods of operation and program expression.
+- U.S. Copyright Office,
+  [Circular 61: Copyright Registration of Computer Programs](https://www.copyright.gov/circs/circ61.pdf),
+  was used to corroborate that algorithms, functions, logic, formatting, and system design are
+  functional aspects, while copyright can protect program expression.
+- [17 U.S.C. § 1201(f)](https://www.law.cornell.edu/uscode/text/17/1201) was consulted for its
+  conditional treatment of reverse engineering and sharing information necessary for
+  interoperability of an independently created program.
+- These legal sources affected documentation scope only. They were not used to claim categorical
+  legality or to broaden the project's access, copying, or distribution permissions. The resulting
+  policy is to publish normalized behavioral facts and exclude firmware bytes, patches, full
+  disassembly, and source-like reconstruction.
 
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.
