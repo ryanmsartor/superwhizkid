@@ -151,6 +151,40 @@ The cartridge callback returns to the BIOS wrapper as a subroutine; the wrapper 
 interrupt return. Commercial cartridges may make `$6023` an immediate no-op return when they do not
 use link reception.
 
+### Cartridge control of the callback flag
+
+The wrapper condition is the BIOS-owned RAM byte at `$000C`:
+
+```text
+cartridge_callbacks_are_enabled := RAM[$000C] != 0
+```
+
+Both BIOS revisions clear `$000C` near reset and set it to `$01` near the end of successful startup,
+three executed instructions before reaching `$6020` in the controlled boot trace. Cartridge software
+can access the same physical RAM cell, including through RAM mirrors.
+
+A 300-frame, no-input execution scan of all 58 locally available cartridges found six titles that
+actually accessed `$000C` from cartridge code. Each result was repeated with both BIOS revisions:
+
+| Cartridge | Executing locations | Observed behavior |
+| --- | --- | --- |
+| Bao Qing Tian | `$6335`, `$6345` | A RAM-clearing loop overwrites the flag with zero; startup explicitly restores `$01` |
+| Basketball | `$63D1`, `$63E1`; bank 9 `$A00B`, `$A0CE` | Startup clears/restores `$01`; later code changes `$01` to `$00`, then `$00` to `$07` |
+| Dinosaur Park | `$68C4`, `$68D4` | A RAM-clearing loop overwrites the flag with zero; startup explicitly restores `$01` |
+| Riddle of the Ancient Tomb | `$6377`, `$6387` | A RAM-clearing loop overwrites the flag with zero; startup explicitly restores `$01` |
+| Robin Hood | `$68A5`, `$68AC`, `$68BB` | Startup reads and saves the prior flag, clears the RAM range, then restores the flag |
+| The Golden Pyramid | `$64A8`, `$64B8` | A RAM-clearing loop overwrites the flag with zero; startup explicitly restores `$01` |
+
+These accesses show that `$000C` is not merely a private BIOS implementation detail. Multiple
+software families preserve or restore it while clearing shared RAM, and Basketball deliberately
+uses zero and a nonzero value later. The evidence supports a boolean ABI interpretation—zero blocks
+callbacks and any nonzero value permits them—but does not establish whether Basketball's `$07` has
+additional game-specific meaning.
+
+The other 52 titles made no cartridge-side access during the observed window. That is not proof they
+never access the flag: unattended title screens, unvisited gameplay paths, and the 300-frame limit
+leave later or input-dependent code untested.
+
 | Vector | UMC/NCR wrapper | Bit Corporation wrapper |
 | --- | --- | --- |
 | NMI | `$FFC1` | `$FFD9` |
@@ -177,6 +211,7 @@ The current evidence does not establish:
 - Complete semantics for every startup hardware-status branch.
 - A public or supported BIOS API beyond the observed entry and interrupt callbacks.
 - Whether cartridges call other BIOS helpers after `$6020`.
+- Whether nonzero callback-flag values encode anything beyond the wrapper's boolean test.
 - The purpose of opaque UMC-only regions replaced by fill in the BIT revision.
 - Exact physical bus timing within each firmware instruction.
 

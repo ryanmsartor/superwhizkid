@@ -545,6 +545,27 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   policy is to publish normalized behavioral facts and exclude firmware bytes, patches, full
   disassembly, and source-like reconstruction.
 
+### Cartridge use of the BIOS callback flag
+
+- Local origin: all 58 user-supplied cartridge images were executed for 300 post-entry frames under
+  the UMC/NCR BIOS with no input. The six titles producing cartridge-side `$000C` accesses were then
+  repeated under the Bit Corporation BIOS. Inputs remained read-only and no ROM, BIOS, or trace
+  bytes were retained in the repository.
+- Method: a temporary instrumented Superwhizkid build outside the repository recorded executed CPU
+  reads and writes whose effective RAM address maps to physical cell `$000C`. A preliminary raw ROM
+  pattern scan found 2,946 apparent instruction patterns in 53 titles and was rejected as evidence
+  because graphics/data and false instruction boundaries dominated it.
+- Result: Bao Qing Tian, Basketball, Dinosaur Park, Riddle of the Ancient Tomb, Robin Hood, and The
+  Golden Pyramid accessed the flag during the observed window. All six clear or preserve/restore it
+  during cartridge startup RAM initialization. Basketball later changes `$01` to `$00`, then to
+  `$07` from bank-9 code. Both BIOS revisions produced the same transition counts.
+- Used for: the callback-flag section in `docs/BIOS_BOOT_BEHAVIOR.md` and the conclusion that the
+  interrupt wrappers interpret zero as disabled and any nonzero value as enabled. No additional
+  semantics are assigned to Basketball's `$07` without further code analysis.
+- Limitation: no access in 300 unattended frames does not establish non-use in later, gameplay, or
+  input-dependent paths. The execution scan establishes observed accesses, not complete static
+  reachability.
+
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.
 
