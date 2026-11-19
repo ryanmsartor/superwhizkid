@@ -14,10 +14,12 @@
 
 static char systemDirectory[] = "/tmp/superwhizkid-coretest-XXXXXX";
 static unsigned activeButton = ~0u, polls, videoFrames, audioBatches;
+static int16_t activeAnalogX, activeAnalogY;
 static bool videoVaries, audioActive, audioChannelsDiffer, lastAudioChannelsEqual;
 static int16_t lastAudio[2048 * 2];
 static size_t lastAudioFrames;
 static const char* paletteOption = "original";
+static const char* contrastOption = "8";
 static const char* audioOutputOption = "stereo";
 static const char* tapLatchOption = "off";
 static const char* ghostingOption = "off";
@@ -46,7 +48,8 @@ static void netpacketSend(int flags, const void* data, size_t size, uint16_t cli
 
 static unsigned optionMask(const char* key) {
 	static const char* keys[] = {
-		"superwhizkid_palette", "superwhizkid_audio_output", "superwhizkid_tap_latch",
+		"superwhizkid_palette", "superwhizkid_contrast", "superwhizkid_audio_output",
+		"superwhizkid_tap_latch",
 		"superwhizkid_lcd_ghosting",
 		"superwhizkid_flicker_reduction", "superwhizkid_bios", "superwhizkid_skip_intro"
 	};
@@ -71,7 +74,8 @@ static bool environment(unsigned command, void* data) {
 	case RETRO_ENVIRONMENT_SET_CORE_OPTIONS: {
 		const struct retro_core_option_definition* options = data;
 		unsigned mask = 0;
-		bool defaults = true, audioValues = false;
+		bool defaults = true, audioValues = false, paletteLabels = false;
+		bool contrastValues = false, flickerValues = false;
 		for (; options && options->key; options++) {
 			mask |= optionMask(options->key);
 			if (!strcmp(options->key, "superwhizkid_audio_output")) {
@@ -81,19 +85,40 @@ static bool environment(unsigned command, void* data) {
 					options->values[2].value && !strcmp(options->values[2].value, "speaker") &&
 					!options->values[3].value;
 			}
+			if (!strcmp(options->key, "superwhizkid_palette")) {
+				paletteLabels = options->values[1].label &&
+					!strcmp(options->values[1].label, "Gamate LCD");
+			}
+			if (!strcmp(options->key, "superwhizkid_contrast")) {
+				contrastValues = true;
+				for (unsigned i = 0; i < 16; i++) {
+					char expectedValue[3];
+					snprintf(expectedValue, sizeof(expectedValue), "%u", i);
+					contrastValues &= options->values[i].value &&
+						!strcmp(options->values[i].value, expectedValue);
+				}
+				contrastValues &= !options->values[16].value && options->values[8].label &&
+					!strcmp(options->values[8].label, "8 (default)");
+			}
+			if (!strcmp(options->key, "superwhizkid_flicker_reduction")) {
+				flickerValues = options->values[3].value &&
+					!strcmp(options->values[3].value, "3") && !options->values[4].value;
+			}
 			const char* expected = !strcmp(options->key, "superwhizkid_palette") ? "original" :
+				!strcmp(options->key, "superwhizkid_contrast") ? "8" :
 				!strcmp(options->key, "superwhizkid_audio_output") ? "stereo" :
 				!strcmp(options->key, "superwhizkid_bios") ? "umc" : "off";
 			defaults &= options->default_value && !strcmp(options->default_value, expected);
 		}
-		modernOptions = mask == 0x7F && defaults && audioValues;
+		modernOptions = mask == 0xFF && defaults && audioValues && paletteLabels &&
+			contrastValues && flickerValues;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_VARIABLES: {
 		const struct retro_variable* variables = data;
 		unsigned mask = 0;
 		for (; variables && variables->key; variables++) mask |= optionMask(variables->key);
-		legacyOptions = mask == 0x7F;
+		legacyOptions = mask == 0xFF;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE:
@@ -107,6 +132,10 @@ static bool environment(unsigned command, void* data) {
 		struct retro_variable* variable = data;
 		if (!strcmp(variable->key, "superwhizkid_palette")) {
 			variable->value = paletteOption;
+			return true;
+		}
+		if (!strcmp(variable->key, "superwhizkid_contrast")) {
+			variable->value = contrastOption;
 			return true;
 		}
 		if (!strcmp(variable->key, "superwhizkid_audio_output")) {
@@ -139,6 +168,14 @@ static bool environment(unsigned command, void* data) {
 		*(bool*) data = optionUpdate;
 		optionUpdate = false;
 		return true;
+	case RETRO_ENVIRONMENT_SET_VARIABLE: {
+		const struct retro_variable* variable = data;
+		if (variable && !strcmp(variable->key, "superwhizkid_contrast")) {
+			contrastOption = variable->value;
+			return true;
+		}
+		return false;
+	}
 	case RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY:
 		*(const char**) data = systemDirectory;
 		return true;
@@ -192,7 +229,13 @@ static size_t audioBatch(const int16_t* data, size_t frames) {
 static void inputPoll(void) { polls++; }
 
 static int16_t inputState(unsigned port, unsigned device, unsigned index, unsigned id) {
-	return port == 0 && device == RETRO_DEVICE_JOYPAD && index == 0 && id == activeButton;
+	if (port) return 0;
+	if (device == RETRO_DEVICE_JOYPAD) return index == 0 && id == activeButton;
+	if (device == RETRO_DEVICE_ANALOG && index == RETRO_DEVICE_INDEX_ANALOG_LEFT) {
+		if (id == RETRO_DEVICE_ID_ANALOG_X) return activeAnalogX;
+		if (id == RETRO_DEVICE_ID_ANALOG_Y) return activeAnalogY;
+	}
+	return 0;
 }
 
 static void writeFirmwareFile(const char* name, const uint8_t* firmware) {
@@ -401,6 +444,21 @@ int main(int argc, char** argv) {
 	}
 	assert(polls == pollsBeforeButtons + 8 && videoFrames == videoBeforeButtons + 8 &&
 		audioBatches == audioBeforeButtons + 8 && videoVaries && audioActive && audioChannelsDiffer);
+	activeButton = ~0u;
+	static const int16_t analogDirections[][2] = {
+		{ 0, -32767 }, { 0, 32767 }, { -32767, 0 }, { 32767, 0 }
+	};
+	for (unsigned bit = 0; bit < 4; bit++) {
+		activeAnalogX = analogDirections[bit][0];
+		activeAnalogY = analogDirections[bit][1];
+		p_retro_run();
+		assert(ram[0] == (uint8_t) ~(1u << bit));
+	}
+	activeAnalogX = activeAnalogY = 0;
+	activeAnalogX = 0x3000;
+	p_retro_run();
+	assert(ram[0] == 0xFF); // ordinary stick drift remains inside the dead zone
+	activeAnalogX = 0;
 	// Mono is a presentation-layer 1:1 downmix and takes effect without reloading content.
 	audioOutputOption = "mono";
 	optionUpdate = true;
@@ -437,6 +495,40 @@ int main(int argc, char** argv) {
 	optionUpdate = true;
 	p_retro_run();
 	assert(firstVideoPixel == 0x8CEB); // invalid palette falls back to Original
+
+	// Contrast level 8 preserves the selected palette exactly. Level 0 collapses only the three ink
+	// shades into the unchanged background, while higher levels move them farther from it.
+	contrastOption = "0";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0xCE93);
+	contrastOption = "8";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
+	unsigned defaultContrastDistance = colorDistance(firstVideoPixel, 0xCE93);
+	contrastOption = "15";
+	optionUpdate = true;
+	p_retro_run();
+	assert(colorDistance(firstVideoPixel, 0xCE93) > defaultContrastDistance);
+	ram[4] = 0;
+	p_retro_run();
+	assert(firstVideoPixel == 0xCE93); // the background color never changes
+	ram[4] = 0xFF;
+	contrastOption = "8";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
+	activeButton = RETRO_DEVICE_ID_JOYPAD_L3;
+	p_retro_run();
+	assert(!strcmp(contrastOption, "7") &&
+		colorDistance(firstVideoPixel, 0xCE93) < defaultContrastDistance);
+	activeButton = ~0u;
+	p_retro_run();
+	activeButton = RETRO_DEVICE_ID_JOYPAD_R3;
+	p_retro_run();
+	assert(!strcmp(contrastOption, "8") && firstVideoPixel == 0x8CEB);
+	activeButton = ~0u;
 
 	// With the latch disabled, a press entirely between controller reads is intentionally missed.
 	ram[2] = 0;
@@ -554,6 +646,23 @@ int main(int argc, char** argv) {
 	ram[4] = 0xFF;
 	p_retro_run();
 	assert(firstVideoPixel == 0x8CEB);
+
+	// The three-frame setting accepts a sustained lightening only on its fourth frame.
+	flickerOption = "3";
+	optionUpdate = true;
+	p_retro_reset();
+	p_retro_run();
+	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+	ram[4] = 0;
+	for (unsigned frame = 0; frame < 3; frame++) {
+		p_retro_run();
+		assert(firstVideoPixel == 0x8CEB);
+	}
+	p_retro_run();
+	assert(firstVideoPixel == 0xCE93);
+	ram[4] = 0xFF;
+	p_retro_run();
+	assert(firstVideoPixel == 0x8CEB);
 	flickerOption = "off";
 	optionUpdate = true;
 	ram[4] = 0;
@@ -639,6 +748,7 @@ int main(int argc, char** argv) {
 	// Invalid option values use documented defaults rather than enabling features accidentally.
 	biosOption = "invalid";
 	paletteOption = "invalid";
+	contrastOption = "invalid";
 	audioOutputOption = "invalid";
 	tapLatchOption = "invalid";
 	ghostingOption = "invalid";

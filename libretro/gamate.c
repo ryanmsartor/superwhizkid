@@ -22,10 +22,14 @@ static bool tapLatch, skipIntro;
 static unsigned audioOutput;
 static int32_t speakerBass, speakerTreble[2];
 static unsigned flickerReduction;
+static unsigned contrastLevel = 8;
+static uint8_t contrastShortcutButtons;
 static uint8_t pendingPresses;
-static const uint16_t* activePalette;
+static const uint16_t* selectedPalette;
+static uint16_t contrastPalette[4];
+static const uint16_t* activePalette = contrastPalette;
 static const uint16_t originalPalette[4] = { 0xCE93, 0x8CEB, 0x5327, 0x1102 };
-static const uint16_t accuratePalette[4] = { 0x8C69, 0x6348, 0x3208, 0x1906 };
+static const uint16_t gamateLcdPalette[4] = { 0x8C69, 0x6348, 0x3208, 0x1906 };
 static const uint16_t greyscalePalette[4] = { 0xFFFF, 0xAD55, 0x52AA, 0x0000 };
 static uint16_t shades[3 * 256 + 1];
 static uint16_t lcdLevel[GAMATE_WIDTH * GAMATE_HEIGHT];
@@ -231,15 +235,21 @@ void retro_set_environment(retro_environment_t cb) {
 	static const struct retro_core_option_definition options[] = {
 		{
 			"superwhizkid_palette", "Palette",
-			"Selects the colors used for the Gamate's four LCD shades. Accurate is a representative estimate from photographs of real hardware; Original preserves the core's initial palette.",
+			"Selects the colors used for the Gamate's four LCD shades. Gamate LCD is a perceptual simulation based on real-hardware references; Original preserves the core's initial palette.",
 			{
 				{ "original", "Original" },
-				{ "accurate", "Accurate" },
+				{ "accurate", "Gamate LCD" },
 				{ "greyscale", "Greyscale" },
 				{ NULL, NULL }
 			},
 			"original"
 		},
+		{ "superwhizkid_contrast", "Contrast", "Adjusts the distance between the three ink shades and the unchanged background color. L3 decreases and R3 increases the level during play.",
+			{ { "0", NULL }, { "1", NULL }, { "2", NULL }, { "3", NULL },
+				{ "4", NULL }, { "5", NULL }, { "6", NULL }, { "7", NULL },
+				{ "8", "8 (default)" }, { "9", NULL }, { "10", NULL }, { "11", NULL },
+				{ "12", NULL }, { "13", NULL }, { "14", NULL }, { "15", NULL },
+				{ NULL, NULL } }, "8" },
 		{ "superwhizkid_audio_output", "Audio Output", "Selects the output mix. Stereo preserves the Gamate's channel panning; Mono combines both sides equally; Built-in Speaker applies an estimated band-limited, softly distorting response based on recordings of real hardware.",
 			{ { "stereo", "Stereo" }, { "mono", "Mono" },
 				{ "speaker", "Built-in Speaker" }, { NULL, NULL } }, "stereo" },
@@ -248,7 +258,8 @@ void retro_set_environment(retro_environment_t cb) {
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting", "Applies an estimated slow-panel response to reduce redraw flicker. Higher settings retain the previous shade longer; Off shows raw LCD-controller output.",
 			{ { "off", "Off" }, { "1", "Very light" }, { "2", "Light" }, { "3", "Medium" }, { "4", "Strong" }, { "5", "Very strong" }, { NULL, NULL } }, "off" },
 		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction", "Suppresses brief light flashes caused by games clearing and redrawing objects. The selected number is the maximum transient duration suppressed; genuine lightening changes are delayed by the same number of frames.",
-			{ { "off", "Off" }, { "1", "1 Frame" }, { "2", "2 Frames" }, { NULL, NULL } }, "off" },
+			{ { "off", "Off" }, { "1", "1 Frame" }, { "2", "2 Frames" },
+				{ "3", "3 Frames" }, { NULL, NULL } }, "off" },
 		{ "superwhizkid_bios", "BIOS Priority", "Selects the preferred BIOS at content load; the other is used if it is missing. Reload content to apply a change. Reset continues using the currently loaded BIOS.",
 			{ { "umc", "UMC (gamate_bios_umc.bin)" }, { "bit", "Bit (gamate_bios_bit.bin)" }, { NULL, NULL } }, "umc" },
 		{ "superwhizkid_skip_intro", "Skip BIOS intro", "Runs the BIOS logo sequence instantly at power-on and reset, starting at the cartridge.",
@@ -257,10 +268,11 @@ void retro_set_environment(retro_environment_t cb) {
 	};
 	static const struct retro_variable variables[] = {
 		{ "superwhizkid_palette", "Palette; original|accurate|greyscale" },
+		{ "superwhizkid_contrast", "Contrast; 8|0|1|2|3|4|5|6|7|9|10|11|12|13|14|15" },
 		{ "superwhizkid_audio_output", "Audio Output; stereo|mono|speaker" },
 		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting; off|1|2|3|4|5" },
-		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction; off|1|2" },
+		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction; off|1|2|3" },
 		{ "superwhizkid_bios", "BIOS Priority; umc|bit" },
 		{ "superwhizkid_skip_intro", "Skip BIOS intro; off|on" },
 		{ NULL, NULL }
@@ -280,6 +292,25 @@ static uint16_t blend565(uint16_t a, uint16_t b, unsigned t) {
 	return (uint16_t) (r << 11 | g << 5 | bl);
 }
 
+static unsigned contrastChannel(unsigned background, unsigned ink, unsigned maximum) {
+	int value = (int) background + ((int) ink - (int) background) * (int) contrastLevel / 8;
+	if (value < 0) return 0;
+	return (unsigned) value > maximum ? maximum : (unsigned) value;
+}
+
+static void buildContrastPalette(void) {
+	contrastPalette[0] = selectedPalette[0];
+	unsigned br = selectedPalette[0] >> 11;
+	unsigned bg = selectedPalette[0] >> 5 & 63;
+	unsigned bb = selectedPalette[0] & 31;
+	for (unsigned i = 1; i < 4; i++) {
+		unsigned r = contrastChannel(br, selectedPalette[i] >> 11, 31);
+		unsigned g = contrastChannel(bg, selectedPalette[i] >> 5 & 63, 63);
+		unsigned b = contrastChannel(bb, selectedPalette[i] & 31, 31);
+		contrastPalette[i] = (uint16_t) (r << 11 | g << 5 | b);
+	}
+}
+
 static void buildShades(void) {
 	for (unsigned i = 0; i < sizeof(shades) / sizeof(*shades); i++) {
 		shades[i] = i == 3 * 256 ? activePalette[3] :
@@ -291,8 +322,17 @@ static void readOptions(void) {
 	struct retro_variable var = { "superwhizkid_palette", NULL };
 	const char* palette = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ?
 		var.value : "original";
-	activePalette = !strcmp(palette, "accurate") ? accuratePalette :
+	selectedPalette = !strcmp(palette, "accurate") ? gamateLcdPalette :
 		!strcmp(palette, "greyscale") ? greyscalePalette : originalPalette;
+
+	var.key = "superwhizkid_contrast";
+	var.value = NULL;
+	const char* contrastValue = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ?
+		var.value : "8";
+	char* contrastEnd;
+	unsigned newContrast = (unsigned) strtoul(contrastValue, &contrastEnd, 10);
+	contrastLevel = *contrastValue && !*contrastEnd && newContrast <= 15 ? newContrast : 8;
+	buildContrastPalette();
 	buildShades();
 
 	var.key = "superwhizkid_audio_output";
@@ -326,7 +366,7 @@ static void readOptions(void) {
 	const char* flickerValue = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ?
 		var.value : "off";
 	unsigned reduceFlicker = !strcmp(flickerValue, "on") ? 1 :
-		flickerValue[0] >= '1' && flickerValue[0] <= '2' && !flickerValue[1] ?
+		flickerValue[0] >= '1' && flickerValue[0] <= '3' && !flickerValue[1] ?
 		(unsigned) (flickerValue[0] - '0') : 0;
 	if (reduceFlicker != flickerReduction) flickerSnap = true;
 	flickerReduction = reduceFlicker;
@@ -385,7 +425,9 @@ void retro_set_input_state(retro_input_state_t cb) { inputStateCb = cb; }
 void retro_init(void) {
 	gamateInit(&gamate);
 	gamateSetLink(&gamate, queueLinkBit, NULL);
-	activePalette = originalPalette;
+	selectedPalette = originalPalette;
+	contrastLevel = 8;
+	buildContrastPalette();
 	buildShades();
 	enum retro_pixel_format format = RETRO_PIXEL_FORMAT_RGB565;
 	environCb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &format);
@@ -401,6 +443,12 @@ void retro_init(void) {
 		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B, "B" },
 		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START, "Start" },
 		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT, "Select" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3, "Contrast Down" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3, "Contrast Up" },
+		{ 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT,
+			RETRO_DEVICE_ID_ANALOG_X, "Left Stick X" },
+		{ 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT,
+			RETRO_DEVICE_ID_ANALOG_Y, "Left Stick Y" },
 		{ 0 }
 	};
 	environCb(RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS, (void*) inputs);
@@ -459,6 +507,7 @@ static void skipIntroOrReset(void) {
 void retro_reset(void) {
 	if (!loaded) return;
 	pendingPresses = 0;
+	contrastShortcutButtons = 0;
 	clearReceivedLink();
 	gamateReset(&gamate);
 	resetAudioPresentation();
@@ -468,6 +517,21 @@ void retro_reset(void) {
 
 static void readInput(void) {
 	inputPollCb();
+	uint8_t shortcuts = 0;
+	shortcuts |= inputStateCb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3) ? 1 : 0;
+	shortcuts |= inputStateCb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3) ? 2 : 0;
+	unsigned oldContrast = contrastLevel;
+	if ((shortcuts & 1) && !(contrastShortcutButtons & 1) && contrastLevel) contrastLevel--;
+	if ((shortcuts & 2) && !(contrastShortcutButtons & 2) && contrastLevel < 15) contrastLevel++;
+	if (contrastLevel != oldContrast) {
+		static const char* values[] = { "0", "1", "2", "3", "4", "5", "6", "7",
+			"8", "9", "10", "11", "12", "13", "14", "15" };
+		struct retro_variable contrast = { "superwhizkid_contrast", values[contrastLevel] };
+		buildContrastPalette();
+		buildShades();
+		environCb(RETRO_ENVIRONMENT_SET_VARIABLE, &contrast);
+	}
+	contrastShortcutButtons = shortcuts;
 	uint8_t buttons = 0xFF;
 #define BUTTON(id, bit) do { if (inputStateCb(0, RETRO_DEVICE_JOYPAD, 0, id)) buttons &= ~(1 << bit); } while (0)
 	BUTTON(RETRO_DEVICE_ID_JOYPAD_UP, 0);
@@ -479,6 +543,14 @@ static void readInput(void) {
 	BUTTON(RETRO_DEVICE_ID_JOYPAD_START, 6);
 	BUTTON(RETRO_DEVICE_ID_JOYPAD_SELECT, 7);
 #undef BUTTON
+	int16_t analogX = inputStateCb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT,
+		RETRO_DEVICE_ID_ANALOG_X);
+	int16_t analogY = inputStateCb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT,
+		RETRO_DEVICE_ID_ANALOG_Y);
+	if (analogY < -0x4000) buttons &= ~(1 << 0);
+	if (analogY > 0x4000) buttons &= ~(1 << 1);
+	if (analogX < -0x4000) buttons &= ~(1 << 2);
+	if (analogX > 0x4000) buttons &= ~(1 << 3);
 	if (tapLatch) {
 		pendingPresses |= (uint8_t) ~buttons;
 		gamate.buttons = buttons & (uint8_t) ~pendingPresses;
@@ -562,6 +634,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 	}
 	readOptions();
 	pendingPresses = 0;
+	contrastShortcutButtons = 0;
 	clearReceivedLink();
 	if (skipIntro) skipIntroOrReset();
 	lcdSnap = flickerSnap = true;
@@ -577,6 +650,7 @@ bool retro_load_game_special(unsigned type, const struct retro_game_info* info, 
 
 void retro_unload_game(void) {
 	pendingPresses = 0;
+	contrastShortcutButtons = 0;
 	linkBitCount = 0;
 	clearReceivedLink();
 	resetAudioPresentation();
@@ -590,6 +664,7 @@ bool retro_serialize(void* data, size_t size) { return loaded && gamateSaveState
 bool retro_unserialize(const void* data, size_t size) {
 	if (!loaded || !gamateLoadState(&gamate, data, size)) return false;
 	clearReceivedLink();
+	contrastShortcutButtons = 0;
 	lcdSnap = flickerSnap = true;
 	resetAudioPresentation();
 	return true;

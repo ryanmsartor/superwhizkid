@@ -95,7 +95,7 @@ hardware measurements take precedence where they conflict with an emulator.
 - Ashens, “Gamate Review”: <https://www.youtube.com/watch?v=aIsKG-pewM0>
 - Museum of Obsolete Media, “Bit Corporation Gamate (1990–1995)”:
   <https://obsoletemedia.org/gamate/>
-- Used for: choosing a representative olive-green profile for the optional `Accurate` palette and
+- Used for: choosing a representative olive-green profile for the optional `Gamate LCD` palette and
   confirming that neutral greyscale is not representative of the original non-backlit panel.
 - Method and limitations: the Nintendo Life/Neo Fuji game images show software on physical Gamate
   screens, but several were made by scanning a paused LCD and have severe green-channel clipping.
@@ -104,13 +104,30 @@ hardware measurements take precedence where they conflict with an emulator.
   gameplay images only to check shade ordering and contrast. It is a visual estimate, not calibrated
   colorimetry: camera white balance, exposure, ambient light, contrast-wheel position, aging, and the
   two reported Gamate panel types all prevent a single photograph-derived palette from being exact.
-- Implementation impact: the libretro frontend offers `Original`, `Accurate`, and `Greyscale`.
-  `Original` preserves the core's initial uncited visual approximation exactly. `Accurate` uses
+- Implementation impact: the libretro frontend offers `Original`, `Gamate LCD`, and `Greyscale`.
+  `Original` preserves the core's initial uncited visual approximation exactly. `Gamate LCD` uses
   RGB565 `8C69/6348/3208/1906`; its background is a darker, more yellow-olive panel tone, while
   progressively driven shades shift toward a slightly lighter navy ink. The adjustment remains a
-  visual interpretation of the same uncalibrated hardware references rather than a new measurement. `Greyscale`
-  uses neutral 255/170/85/0 levels. Palette selection only
+  visual interpretation of the same uncalibrated hardware references rather than a new measurement;
+  the legacy internal option value remains `accurate` so existing frontend configurations continue
+  to work. `Greyscale` uses neutral 255/170/85/0 levels. Palette selection only
   maps completed two-bit pixels to output colors and does not change emulated LCD state or timing.
+
+### Contrast presentation control
+
+- Physical context: the real-hardware appearance references above show that screen contrast varies
+  with the handheld's contrast wheel, viewing conditions, panel type, and age, but they do not provide
+  calibrated shade measurements across wheel positions.
+- Implementation impact: the frontend exposes 16 contrast levels from 0 through 15, defaulting to 8.
+  Level 8 reproduces each selected palette exactly. Level 0 collapses all three driven shades into
+  the palette's unchanged background; levels above 8 extend each RGB565 channel's distance from that
+  background with channel clipping at the format limits. The background entry itself is copied
+  byte-for-byte at every level. L3 and R3 adjust one level per press and request that the frontend
+  update the visible core-option value.
+- Limitations: these steps are a useful presentation model, not measurements of the physical wheel's
+  electrical or optical response. Contrast affects only frontend color mapping and is excluded from
+  machine save states. The D-pad remains available, while the left analog stick maps through a dead
+  zone to the same four controller direction bits as an accessibility/default-control convenience.
 
 ### Estimated LCD persistence filter
 
@@ -150,17 +167,18 @@ hardware measurements take precedence where they conflict with an emulator.
   events at frames 1123, 1132, 1141, and 1150. These counts describe this captured play session, not
   the entire software library.
 - Model: a darker or equal two-bit shade is accepted immediately. A lighter shade becomes pending
-  and is accepted only if the same value appears on the following frame. If the prior darker value
-  returns, the pending lightening is discarded. Filtering occurs before optional LCD ghosting, adds
-  no full-frame/audio delay, and remains off by default.
-- Tradeoff: genuine lightening changes appear one frame late, and moving dark objects may leave a
-  one-frame trail. The option is therefore named `Redraw Flicker Reduction` and described as a
+  and is accepted only after the same value persists longer than the selected one-, two-, or
+  three-frame suppression window. If the prior darker value returns first, the pending lightening is
+  discarded. Filtering occurs before optional LCD ghosting, adds no full-frame/audio delay, and
+  remains off by default.
+- Tradeoff: genuine lightening changes are delayed by the selected number of frames, and moving dark
+  objects may leave a corresponding trail. The option is therefore named `Redraw Flicker Reduction` and described as a
   compatibility filter, not hardware emulation. Its presentation-only history is excluded from
   machine save state and reinitialized after reset, content load, successful state load, or an
   on/off option change.
-- Validation: purpose-written firmware verifies one-frame suppression, cancellation when the dark
-  shade returns, acceptance of sustained lightening on its second frame, immediate darkening, and
-  raw behavior after disabling the option.
+- Validation: purpose-written firmware verifies all three suppression windows, cancellation when the
+  dark shade returns, acceptance of sustained lightening immediately after the selected window,
+  immediate darkening, and raw behavior after disabling the option.
 
 ### BIOS selection option lifecycle
 
