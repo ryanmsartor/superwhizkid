@@ -203,6 +203,10 @@ remaining difference is oscillator/display/audio phase rather than initialized m
 This result describes the observed accepted-cartridge path. It does not claim identical intermediate
 logo frames, failure behavior, or precise physical bus timing.
 
+The complete 58-cartridge/two-BIOS boundary sweep and its implications for replacement firmware and
+BIOS-free startup are documented in
+[`BIOS_REPLACEMENT_ANALYSIS.md`](BIOS_REPLACEMENT_ANALYSIS.md).
+
 ## Unknowns and non-claims
 
 The current evidence does not establish:

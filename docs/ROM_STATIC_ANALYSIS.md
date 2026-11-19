@@ -217,6 +217,8 @@ The two authentic firmware revisions are compared structurally and behaviorally 
 relocations, vectors, and boot effects without distributing BIOS bytes or disassembly.
 The resulting high-level boot and interrupt specification is separated into
 [`BIOS_BOOT_BEHAVIOR.md`](BIOS_BOOT_BEHAVIOR.md).
+The full cartridge-entry state sweep and replacement/skip implications are documented in
+[`BIOS_REPLACEMENT_ANALYSIS.md`](BIOS_REPLACEMENT_ANALYSIS.md).
 
 The corpus could reveal whether cartridges only inherit BIOS-created state or continue using BIOS
 code after `$6020`:

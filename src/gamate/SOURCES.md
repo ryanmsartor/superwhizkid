@@ -566,6 +566,28 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   input-dependent paths. The execution scan establishes observed accesses, not complete static
   reachability.
 
+### Authentic BIOS cartridge-entry state sweep
+
+- Local origin: all 58 user-supplied cartridges were paired with both recognized authentic BIOS
+  revisions. Captures were taken immediately after the BIOS set PC to `$6020` and before the first
+  cartridge instruction executed. The resulting 116 state/RAM artifacts remain gitignored and are
+  not distributed.
+- Method: a temporary capture harness used Superwhizkid's independently authored serialization plus
+  readable field diagnostics. RAM and the serialized VRAM regions were compared byte-for-byte;
+  scalar state, timing, buffer hashes, and SHA-256 artifact identities were indexed locally.
+- Result: 116/116 combinations reached entry. Every UMC/BIT pair has identical RAM and VRAM. Across
+  cartridges, only RAM `$00E0-$00E1` and `$00E5-$00E6` vary; both pairs exactly match that
+  cartridge's stored 16-bit header checksum in all 58 cases. All other RAM bytes and all VRAM bytes
+  are invariant. CPU registers and hardware configuration are common, while the BIOS revisions
+  retain their documented 29-CPU-cycle/58-master-clock display and audio phase difference.
+- Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md`, including the conclusion that one behavioral boot
+  contract can cover the corpus, the warning that authentic RAM/VRAM templates must not be shipped,
+  and the identification of resident interrupt/helper behavior as the principal blocker to a true
+  BIOS-free jump to `$6020`.
+- Limitations: captures reflect the current emulator at one instruction boundary, not a physical bus
+  trace. Invariance does not prove necessity, and hashes were not used as a substitute for the direct
+  RAM/VRAM comparisons. The sweep does not establish post-entry helper usage.
+
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.
 
