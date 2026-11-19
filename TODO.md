@@ -5,8 +5,8 @@
   the full 58-cartridge/two-BIOS set before changing behavior. See
   [`docs/MAPPER_DETECTION.md`](docs/MAPPER_DETECTION.md).
 - Complete the post-entry BIOS dependency audit before attempting replacement firmware or true
-  BIOS-free boot: determine the calling conventions and effects of the 18 observed `$F000-$F033`
-  service slots, extend traces through gameplay/link paths, perturb invariant entry RAM/VRAM state,
-  and test a canonical replacement timing phase. See
+  BIOS-free boot: cluster the now-paired input/output register and side-effect signatures for the 18
+  observed `$F000-$F033` service slots, extend traces through gameplay/link paths, perturb invariant
+  entry RAM/VRAM state, and test a canonical replacement timing phase. See
   [`docs/BIOS_REPLACEMENT_ANALYSIS.md`](docs/BIOS_REPLACEMENT_ANALYSIS.md).
 

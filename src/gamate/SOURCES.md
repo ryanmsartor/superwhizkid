@@ -610,6 +610,22 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   nested-call pairing, register conventions, memory/hardware effects, gameplay-only behavior, and
   link-driven NMI paths remain to be established. Single executed opcode values are used only for
   transition classification; no instruction listing or translated firmware code is retained.
+- Follow-up method: the independently authored tracer can optionally pair service-table entries with
+  their observed returns and write a separate local report containing input/output registers, flags,
+  stack state, elapsed clocks, changed-memory counts/address extents, changed AY-register masks, and
+  peripheral diagnostic deltas. It does not retain RAM, VRAM, ROM, or BIOS byte contents. Pairing
+  uses the ordinary JSR return address or the cartridge's pre-existing stack return for the two
+  observed tail-jump forms, while interrupt callbacks may occur inside the measured interval.
+- Used for: the staged probing plan in `docs/BIOS_RUNTIME_API_ANALYSIS.md` and future clustering of
+  behavioral call signatures. Derived clusters remain hypotheses until controlled probes establish
+  helper semantics.
+- Result: the 1,000-frame paired sweep completed 323,838 calls across the 116-case matrix, split
+  evenly at 161,919 per BIOS. Another 39 calls per BIOS were open at the final frame boundary. All
+  cases passed with no unmatched return or pairing-stack overflow. Per-slot counts and the complete
+  cartridge/source/mapper/input-output-register signature multisets matched across BIOS revisions;
+  timing and summarized effects could differ when the 58-master-clock entry-phase offset changed
+  whether an interrupt fell inside a call. `tools/gamate-bios-call-summary.py` reproduces aggregate
+  counts and effect categories from the local derived report.
 
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.

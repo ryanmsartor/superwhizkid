@@ -4,8 +4,8 @@
 
 set -u
 
-if (( $# < 1 || $# > 4 )); then
-	echo "usage: $0 ROM_DIRECTORY [FRAMES=1000] [TRACER=build/gamatebioscalls] [REPORT]" >&2
+if (( $# < 1 || $# > 5 )); then
+	echo "usage: $0 ROM_DIRECTORY [FRAMES=1000] [TRACER=build/gamatebioscalls] [REPORT] [COMPLETED_CALL_REPORT]" >&2
 	exit 2
 fi
 
@@ -13,6 +13,7 @@ rom_directory=$1
 frames=${2:-1000}
 tracer=${3:-build/gamatebioscalls}
 report=${4:-/tmp/superwhizkid-bios-calls.tsv}
+completed_report=${5:-}
 
 if [[ ! -d $rom_directory || ! -x $tracer || ! $frames =~ ^[0-9]+$ || $frames == 0 ]]; then
 	echo "invalid ROM directory, frame count, or tracer executable" >&2
@@ -35,8 +36,12 @@ if (( ${#cartridges[@]} == 0 )); then
 fi
 
 temporary=$(mktemp /tmp/superwhizkid-bios-call-run-XXXXXX)
-trap 'rm -f "$temporary"' EXIT
+temporary_completed=$(mktemp /tmp/superwhizkid-bios-call-completed-XXXXXX)
+trap 'rm -f "$temporary" "$temporary_completed"' EXIT
 printf 'bios\tcartridge\tdirection\tkind\tsource\ttarget\topcode\tbank\tfirst_bank\tcount\tfirst_frame\n' > "$report" || exit 2
+if [[ -n $completed_report ]]; then
+	printf 'bios\tcartridge\tsource\ttarget\texpected_return\topcode\tbank\tfirst_bank\tentry_frame\treturn_frame\tin_a\tin_x\tin_y\tin_s\tin_p\tout_a\tout_x\tout_y\tout_s\tout_p\tclocks\tram_changed\tram_first\tram_last\tvram_changed\tvram_first\tvram_last\tay_changed_mask\tay_writes\tlcd_writes\tvram_writes\tbank_writes\tuart_clocks\tirqs\tnmis\n' > "$completed_report" || exit 2
+fi
 
 passes=0
 failures=0
@@ -44,11 +49,19 @@ for bios in "${bioses[@]}"; do
 	bios_name=${bios##*/}
 	for cartridge in "${cartridges[@]}"; do
 		cartridge_name=${cartridge##*/}
-		if "$tracer" "$bios" "$cartridge" "$frames" > "$temporary"; then
+		tracer_arguments=("$bios" "$cartridge" "$frames")
+		[[ -n $completed_report ]] && tracer_arguments+=("$temporary_completed")
+		if "$tracer" "${tracer_arguments[@]}" > "$temporary"; then
 			while IFS= read -r line; do
 				[[ $line == direction$'\t'* || $line == \#* || -z $line ]] && continue
 				printf '%s\t%s\t%s\n' "$bios_name" "$cartridge_name" "$line" >> "$report"
 			done < "$temporary"
+			if [[ -n $completed_report ]]; then
+				while IFS= read -r line; do
+					[[ $line == source$'\t'* || -z $line ]] && continue
+					printf '%s\t%s\t%s\n' "$bios_name" "$cartridge_name" "$line" >> "$completed_report"
+				done < "$temporary_completed"
+			fi
 			((passes++))
 		else
 			((failures++))

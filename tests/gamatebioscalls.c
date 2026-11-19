@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { MAX_EVENTS = 1024 };
+enum { MAX_EVENTS = 1024, MAX_CALL_DEPTH = 32 };
 
 struct Event {
 	const char* direction;
@@ -18,6 +18,22 @@ struct Event {
 	uint8_t opcode, bank, firstBank;
 	uint64_t count;
 	unsigned firstFrame;
+};
+
+struct CallContext {
+	uint16_t source, target, expectedReturn;
+	uint8_t opcode, bank, firstBank;
+	uint8_t a, x, y, s, p;
+	uint8_t ram[0x400], vram[0x4000], ayRegisters[16];
+	uint64_t startClocks, startIrqs, startNmis;
+	uint64_t startAyWrites, startLcdWrites, startVramWrites;
+	uint64_t startBankWrites, startUartClocks;
+	unsigned frame;
+};
+
+struct ChangeSummary {
+	unsigned count;
+	uint16_t first, last;
 };
 
 static uint8_t* readFile(const char* path, size_t* size) {
@@ -85,6 +101,80 @@ static const char* biosToCartridgeKind(uint8_t opcode) {
 	}
 }
 
+static bool isServiceSlot(uint16_t address) {
+	return address >= 0xF000 && address <= 0xF033 && !((address - 0xF000) % 3);
+}
+
+static uint16_t stackedReturn(const struct Gamate* g, uint8_t s) {
+	uint8_t low = g->ram[(uint8_t) (s + 1) | 0x100];
+	uint8_t high = g->ram[(uint8_t) (s + 2) | 0x100];
+	return (uint16_t) (((uint16_t) high << 8 | low) + 1);
+}
+
+static struct ChangeSummary summarizeChanges(const uint8_t* before, const uint8_t* after,
+		size_t size) {
+	struct ChangeSummary summary = { 0, 0, 0 };
+	for (size_t i = 0; i < size; i++) {
+		if (before[i] == after[i]) continue;
+		if (!summary.count) summary.first = (uint16_t) i;
+		summary.last = (uint16_t) i;
+		summary.count++;
+	}
+	return summary;
+}
+
+static uint16_t changedMask(const uint8_t* before, const uint8_t* after, size_t size) {
+	uint16_t mask = 0;
+	for (size_t i = 0; i < size; i++) if (before[i] != after[i]) mask |= (uint16_t) 1 << i;
+	return mask;
+}
+
+static void beginCall(struct CallContext* call, const struct Gamate* g, uint16_t source,
+		uint16_t target, uint16_t expectedReturn, uint8_t opcode, uint8_t bank,
+		uint8_t firstBank, uint8_t a, uint8_t x, uint8_t y, uint8_t s, uint8_t p,
+		uint64_t startClocks, unsigned frame) {
+	*call = (struct CallContext) {
+		.source = source, .target = target, .expectedReturn = expectedReturn,
+		.opcode = opcode, .bank = bank, .firstBank = firstBank,
+		.a = a, .x = x, .y = y, .s = s, .p = p,
+		.startClocks = startClocks,
+		.startIrqs = g->diagnostics.irqsTaken, .startNmis = g->diagnostics.nmisTaken,
+		.startAyWrites = g->diagnostics.ayWrites, .startLcdWrites = g->diagnostics.lcdWrites,
+		.startVramWrites = g->diagnostics.vramWrites,
+		.startBankWrites = g->diagnostics.bankWrites,
+		.startUartClocks = g->diagnostics.uartClocks, .frame = frame,
+	};
+	memcpy(call->ram, g->ram, sizeof(call->ram));
+	memcpy(call->vram, g->vram, sizeof(call->vram));
+	memcpy(call->ayRegisters, g->ayRegisters, sizeof(call->ayRegisters));
+}
+
+static void finishCall(FILE* file, const struct CallContext* call, const struct Gamate* g,
+		unsigned returnFrame) {
+	struct ChangeSummary ram = summarizeChanges(call->ram, g->ram, sizeof(call->ram));
+	struct ChangeSummary vram = summarizeChanges(call->vram, g->vram, sizeof(call->vram));
+	uint16_t ayMask = changedMask(call->ayRegisters, g->ayRegisters,
+		sizeof(call->ayRegisters));
+	fprintf(file,
+		"%04X\t%04X\t%04X\t%02X\t%02X\t%02X\t%u\t%u\t"
+		"%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t"
+		"%llu\t%u\t%04X\t%04X\t%u\t%04X\t%04X\t%04X\t"
+		"%llu\t%llu\t%llu\t%llu\t%llu\t%llu\t%llu\n",
+		call->source, call->target, call->expectedReturn, call->opcode,
+		call->bank, call->firstBank, call->frame, returnFrame,
+		call->a, call->x, call->y, call->s, call->p,
+		g->cpu.a, g->cpu.x, g->cpu.y, g->cpu.s, g->cpu.p,
+		(unsigned long long) (g->masterClocks - call->startClocks),
+		ram.count, ram.first, ram.last, vram.count, vram.first, vram.last, ayMask,
+		(unsigned long long) (g->diagnostics.ayWrites - call->startAyWrites),
+		(unsigned long long) (g->diagnostics.lcdWrites - call->startLcdWrites),
+		(unsigned long long) (g->diagnostics.vramWrites - call->startVramWrites),
+		(unsigned long long) (g->diagnostics.bankWrites - call->startBankWrites),
+		(unsigned long long) (g->diagnostics.uartClocks - call->startUartClocks),
+		(unsigned long long) (g->diagnostics.irqsTaken - call->startIrqs),
+		(unsigned long long) (g->diagnostics.nmisTaken - call->startNmis));
+}
+
 static bool addEvent(struct Event* events, size_t* eventCount, const char* direction,
 		const char* kind, uint16_t source, uint16_t target, uint8_t opcode,
 		uint8_t bank, uint8_t firstBank, unsigned frame) {
@@ -126,14 +216,29 @@ static uint8_t buttonsForFrame(unsigned frame) {
 }
 
 int main(int argc, char** argv) {
-	if (argc < 3 || argc > 4) {
-		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin [frames-after-entry]\n", argv[0]);
+	if (argc < 3 || argc > 5) {
+		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin [frames-after-entry] "
+			"[completed-call-report]\n", argv[0]);
 		return 2;
 	}
-	unsigned frames = argc == 4 ? (unsigned) strtoul(argv[3], NULL, 0) : 1000;
+	unsigned frames = argc >= 4 ? (unsigned) strtoul(argv[3], NULL, 0) : 1000;
 	if (!frames) {
 		fprintf(stderr, "frame count must be positive\n");
 		return 2;
+	}
+	FILE* callFile = NULL;
+	if (argc == 5) {
+		callFile = fopen(argv[4], "w");
+		if (!callFile) {
+			fprintf(stderr, "could not create completed-call report\n");
+			return 2;
+		}
+		fprintf(callFile, "source\ttarget\texpected_return\topcode\tbank\tfirst_bank\t"
+			"entry_frame\treturn_frame\tin_a\tin_x\tin_y\tin_s\tin_p\t"
+			"out_a\tout_x\tout_y\tout_s\tout_p\tclocks\t"
+			"ram_changed\tram_first\tram_last\tvram_changed\tvram_first\tvram_last\t"
+			"ay_changed_mask\tay_writes\tlcd_writes\tvram_writes\tbank_writes\t"
+			"uart_clocks\tirqs\tnmis\n");
 	}
 	size_t biosSize, romSize;
 	uint8_t* bios = readFile(argv[1], &biosSize);
@@ -141,6 +246,7 @@ int main(int argc, char** argv) {
 	if (!bios || !rom) {
 		fprintf(stderr, "could not read BIOS or cartridge\n");
 		free(bios); free(rom);
+		if (callFile) fclose(callFile);
 		return 2;
 	}
 	struct Gamate g;
@@ -148,6 +254,7 @@ int main(int argc, char** argv) {
 	if (!gamateLoad(&g, rom, romSize, bios, biosSize)) {
 		fprintf(stderr, "invalid BIOS or cartridge size\n");
 		free(bios); free(rom);
+		if (callFile) fclose(callFile);
 		return 2;
 	}
 	free(bios); free(rom);
@@ -164,6 +271,7 @@ int main(int argc, char** argv) {
 	if (!entered) {
 		fprintf(stderr, "BIOS did not reach cartridge entry: PC=$%04X\n", g.cpu.pc);
 		gamateFree(&g);
+		if (callFile) fclose(callFile);
 		return 1;
 	}
 
@@ -171,6 +279,9 @@ int main(int argc, char** argv) {
 	size_t eventCount = 0;
 	bool overflow = false;
 	uint64_t cartridgeInstructions = 0, biosInstructions = 0;
+	struct CallContext calls[MAX_CALL_DEPTH];
+	size_t callDepth = 0;
+	uint64_t completedCalls = 0, unpairedReturns = 0, callStackOverflow = 0;
 	for (unsigned frame = 1; frame <= frames; frame++) {
 		g.buttons = buttonsForFrame(frame);
 		g.frameDone = false;
@@ -178,22 +289,45 @@ int main(int argc, char** argv) {
 			uint16_t source = g.cpu.pc;
 			uint8_t opcode = opcodeAt(&g, source);
 			uint8_t bank = g.bank, firstBank = g.firstBank;
+			uint8_t inA = g.cpu.a, inX = g.cpu.x, inY = g.cpu.y, inS = g.cpu.s, inP = g.cpu.p;
+			uint64_t startClocks = g.masterClocks;
 			uint64_t oldIrqs = g.diagnostics.irqsTaken;
 			uint64_t oldNmis = g.diagnostics.nmisTaken;
 			unsigned cycles = gamateCpuStep(&g);
 			uint16_t target = g.cpu.pc;
 			if (isCartridge(source)) cartridgeInstructions++;
 			else if (isBios(source)) biosInstructions++;
+			bool directServiceCall = false;
+			uint16_t expectedReturn = 0;
+			bool completedCall = false;
 			if (isCartridge(source) && isBios(target)) {
 				const char* kind = cartridgeToBiosKind(opcode,
 					g.diagnostics.irqsTaken != oldIrqs, g.diagnostics.nmisTaken != oldNmis);
 				overflow |= !addEvent(events, &eventCount, "cartridge_to_bios", kind,
 					source, target, opcode, bank, firstBank, frame);
+				directServiceCall = isServiceSlot(target) && (opcode == 0x20 || opcode == 0x4C);
+				if (directServiceCall) {
+					expectedReturn = opcode == 0x20 ? source + 3 : stackedReturn(&g, inS);
+				}
 			} else if (isBios(source) && isCartridge(target)) {
 				overflow |= !addEvent(events, &eventCount, "bios_to_cartridge",
 					biosToCartridgeKind(opcode), source, target, opcode, bank, firstBank, frame);
+				if (callFile && opcode == 0x60) {
+					if (callDepth && calls[callDepth - 1].expectedReturn == target) completedCall = true;
+					else unpairedReturns++;
+				}
 			}
 			gamateRunClocks(&g, cycles * 2);
+			if (completedCall) {
+				finishCall(callFile, &calls[callDepth - 1], &g, frame);
+				callDepth--;
+				completedCalls++;
+			}
+			if (callFile && directServiceCall) {
+				if (callDepth == MAX_CALL_DEPTH) callStackOverflow++;
+				else beginCall(&calls[callDepth++], &g, source, target, expectedReturn, opcode,
+					bank, firstBank, inA, inX, inY, inS, inP, startClocks + cycles * 2, frame);
+			}
 		}
 	}
 	if (g.diagnostics.unsupportedOpcodes) {
@@ -201,6 +335,7 @@ int main(int argc, char** argv) {
 			g.diagnostics.lastUnsupportedOpcode, g.diagnostics.lastUnsupportedPc,
 			(unsigned long long) g.diagnostics.unsupportedOpcodes);
 		gamateFree(&g);
+		if (callFile) fclose(callFile);
 		return 1;
 	}
 
@@ -212,10 +347,13 @@ int main(int argc, char** argv) {
 			event->bank, event->firstBank, (unsigned long long) event->count, event->firstFrame);
 	}
 	printf("# frames=%u cartridge_instructions=%llu bios_instructions=%llu events=%zu "
-		"irqs=%llu nmis=%llu overflow=%u\n", frames,
+		"irqs=%llu nmis=%llu overflow=%u completed_calls=%llu open_calls=%zu "
+		"unpaired_returns=%llu call_stack_overflow=%llu\n", frames,
 		(unsigned long long) cartridgeInstructions, (unsigned long long) biosInstructions, eventCount,
 		(unsigned long long) g.diagnostics.irqsTaken, (unsigned long long) g.diagnostics.nmisTaken,
-		overflow);
+		overflow, (unsigned long long) completedCalls, callDepth,
+		(unsigned long long) unpairedReturns, (unsigned long long) callStackOverflow);
 	gamateFree(&g);
-	return overflow ? 1 : 0;
+	if (callFile && fclose(callFile)) return 1;
+	return overflow || callStackOverflow || unpairedReturns ? 1 : 0;
 }

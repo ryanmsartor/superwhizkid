@@ -103,14 +103,93 @@ to `$6020`. A direct jump without the table would fail immediately in all 58 tit
 
 ## Next analysis stages
 
-The tracer establishes the service surface. Determining behavior requires additional layers:
+The tracer establishes the service surface. Work should proceed in the following order so that each
+stage produces evidence needed by the next rather than merely accumulating longer traces.
+
+### Stage 1: pair calls with returns
+
+Pair each direct cartridge-to-service-table entry with its matching BIOS-to-cartridge return while
+allowing IRQ/NMI callbacks to cross the boundary in between. For every completed call, retain only
+derived behavioral metadata:
+
+- entry and exit CPU registers, flags, and stack pointer;
+- expected return boundary and whether execution returned there;
+- elapsed master clocks and entry/return frames;
+- changed-byte counts and address extents for RAM and VRAM, without retaining byte contents;
+- changed AY-register mask and AY, LCD, VRAM, mapper, UART, IRQ, and NMI counter deltas.
+
+The detailed completed-call report remains local and separate from the compact boundary-event report.
+This is now implemented as the optional final output argument to `gamatebioscalls` and
+`tools/gamate-bios-call-sweep.sh`. Calls still executing when the observation window ends are reported
+as open rather than incorrectly paired. Direct tail jumps obtain their expected return from the
+existing cartridge stack frame.
+
+The first full paired sweep completed all 116 cartridge/BIOS cases under a stricter validator that
+fails a run on any unmatched BIOS return or pairing-stack overflow:
+
+- 323,838 service calls completed within the observation windows: 161,919 per BIOS revision.
+- Another 39 calls per BIOS began before the final frame boundary and remained legitimately open.
+- Every slot's completed-call count matched exactly between BIOS revisions.
+- For a given cartridge, source, slot, mapper state, and input/output register tuple, the complete
+  signature multiset was identical between BIOS revisions.
+- Phase-sensitive frames, elapsed clocks, interrupt inclusion, and resulting memory/peripheral
+  summaries sometimes differed, as expected from the known 58-master-clock cartridge-entry offset.
+
+The balanced register signatures strengthen the conclusion that both BIOS revisions expose the same
+calling convention. They do not yet identify the meaning of any slot.
+
+| Slot | Completed calls | Clock range | Calls changing VRAM | Calls changing AY registers | Calls spanning IRQ/NMI |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `$F02D` | 208,940 | 196–114,978 | 42,556 | 60 | 1,580 |
+| `$F015` | 41,220 | 974–23,158 | 33,998 | 58 | 2,848 |
+| `$F012` | 38,546 | 494–10,692 | 6,890 | 34 | 2,486 |
+| `$F02A` | 9,414 | 202–114,436 | 8,822 | 8 | 394 |
+| `$F003` | 7,008 | 42–268,662 | 0 | 1,748 | 6,948 |
+| `$F027` | 7,026 | 6,326–309,980 | 2,898 | 414 | 4,660 |
+| `$F006` | 6,326 | 42–168,820 | 0 | 1,338 | 6,134 |
+
+These are observational categories, not semantic labels. In particular, a call that spans an IRQ can
+include callback memory or peripheral effects in its summary. The interrupt counters make those cases
+separable during clustering. `tools/gamate-bios-call-summary.py` reproduces the per-slot aggregate
+table from a local completed-call report.
+
+### Stage 2: cluster signatures
+
+Group completed calls by service slot, input/output register tuple, memory-change shape, hardware
+effects, and timing range. Begin with `$F02D`, `$F015`, and `$F012`, which together dominate the
+observed call volume, then cover `$F02A`, `$F003`, `$F006`, and `$F027`. Treat clusters as candidate
+calling conventions, not semantic names, until targeted perturbations confirm them.
+
+### Stage 3: extend reachable paths
+
+Apply repeatable Start, A, B, and directional schedules, including Tornado's known long Start press,
+and compare coverage with the unattended baseline. Retain a targeted trace only when it reaches a new
+slot, signature, return form, or hardware effect. Separately inject controlled UART input into World
+Cup Soccer to exercise the NMI wrapper and `$6023` callback.
+
+### Stage 4: probe narrow hypotheses
+
+Use purpose-written cartridges and controlled entry-state perturbations only after call clusters
+suggest a narrow contract. Vary one register or state field at a time and test named outcomes rather
+than copying authentic working memory. This stage should establish which boot fields and helper
+effects are functionally required by a clean-room resident replacement.
+
+### Parallel mapper audit
+
+After the completed-call tracer is stable, instrument executed `$8000-$9FFF` accesses over the full
+catalog before considering lazy 4-in-1 mapper activation. This is independent of BIOS-helper
+semantics but can remove a cartridge fingerprint if ordinary software never triggers a false
+activation.
+
+The original implementation checklist remains:
 
 1. Pair each direct entry with its matching BIOS-to-cartridge return while allowing nested IRQ/NMI
-   callback crossings.
-2. Record input/output CPU registers and flags for each completed helper call.
+   callback crossings. (Implemented and validated across the unattended matrix.)
+2. Record input/output CPU registers and flags for each completed helper call. (Implemented.)
 3. Record summarized RAM, VRAM, LCD, AY, UART, mapper, and timing changes without retaining
-   copyrighted buffers.
-4. Cluster call signatures across titles to identify shared calling conventions.
+   copyrighted buffers. (Implemented.)
+4. Cluster call signatures across titles to identify shared calling conventions. (Aggregate and
+   selected-slot reporting implemented; semantic classification remains.)
 5. Exercise gameplay states, Start/button paths, and link traffic; compare newly reached slots and
    call signatures against the unattended baseline.
 6. Use purpose-written cartridges to probe individual slots only after their observed inputs and
