@@ -479,6 +479,22 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Capacity, padding, and repetition findings:
   [`../../docs/ROM_LAYOUT_ANALYSIS.md`](../../docs/ROM_LAYOUT_ANALYSIS.md).
 
+### Commercial software-library comparison
+
+- Local origin: the fixed first 16 KiB bank from all 58 user-supplied cartridge images, read in
+  place without retaining ROM bytes.
+- Method: `tools/gamate-rom-shared-report.py` indexes overlapping high-information 32-byte windows,
+  excludes ubiquitous matches, and merges windows unique to both images into exact spans. Header
+  callback tuples from `tools/gamate-rom-header-report.py` provide an independent ABI comparison.
+- Used for: identifying candidate shared engines, libraries, assets, and build lineages to prioritize
+  for later disassembly.
+- Result: strong distinct-title reuse candidates include Brick Blaster/Enchanted Bricks, Mighty
+  Tank/Vindicators, Treasure Hunter/Witty Apee, and a dense network among later large-ROM games.
+  Matches remain classified as code-or-data until disassembly and reachability analysis establish
+  their role.
+- Full findings and limitations:
+  [`../../docs/SOFTWARE_LIBRARY_ANALYSIS.md`](../../docs/SOFTWARE_LIBRARY_ANALYSIS.md).
+
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.
 

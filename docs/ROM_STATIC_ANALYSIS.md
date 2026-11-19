@@ -60,6 +60,11 @@ behavioral conclusion used to change emulation.
 
 ## 3. Gamate software ABI and shared libraries
 
+The first exact-reuse and callback-family pass is recorded in
+[`SOFTWARE_LIBRARY_ANALYSIS.md`](SOFTWARE_LIBRARY_ANALYSIS.md). It identifies strong cross-title
+reuse candidates in the fixed ROM bank while keeping unclassified code/data matches distinct from
+confirmed routines.
+
 Code comparison may reveal a common SDK, internal library, or development template. Useful routines
 to cluster across the corpus include:
 
