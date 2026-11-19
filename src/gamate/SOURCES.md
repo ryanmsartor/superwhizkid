@@ -122,7 +122,7 @@ hardware measurements take precedence where they conflict with an emulator.
   `x=64–87, y=132–141` was deliberately absent for one full frame on a repeating nine-frame cadence.
   The same 36 VRAM bytes were explicitly zeroed and restored on the adjacent frames. This establishes
   the redraw artifact being masked; it does not measure the physical panel response. The trace is a
-  local diagnostic at `/tmp/swk-brick-blaster.trace` and contains no ROM or BIOS bytes.
+  gitignored local diagnostic trace and contains no ROM or BIOS bytes.
 - Model: once per 60.8093 Hz output frame, an internal level moves toward the completed two-bit pixel
   target using `next = level + (target - level) * rate / 256`; a sub-unit final step snaps exactly to
   the target. Darkening rates for levels 1–5 are `256, 248, 240, 224, 208`, leaving respectively
@@ -219,8 +219,9 @@ hardware measurements take precedence where they conflict with an emulator.
   mock Netpacket frontend, rejects a third player, transmits `$A5` through eight real emulated UART
   accesses, receives `$3C`, and replays a timed two-byte `$A5/$5A` packet while verifying that both
   byte NMIs execute independently.
-- Cartridge/library validation: a 300-frame, two-BIOS sweep remained 116/116. World Cup Soccer was
-  the only unattended title to exercise the UART, producing 464 transmit clocks under either BIOS;
+- Cartridge/library validation: the current 1,000-frame, two-BIOS sweep passes 116/116. World Cup
+  Soccer is the only unattended title to exercise the UART, producing 1,136 transmit clocks under
+  either BIOS;
   this made it the real-content transport test. Two headless RetroArch 1.20.0 instances connected on
   localhost with the current protocol and ran World Cup Soccer for several accelerated emulated
   minutes without connection, protocol-size, or core errors.
@@ -547,9 +548,8 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 ### Cartridge use of the BIOS callback flag
 
-- Local origin: all 58 user-supplied cartridge images were executed for 300 post-entry frames under
-  the UMC/NCR BIOS with no input. The six titles producing cartridge-side `$000C` accesses were then
-  repeated under the Bit Corporation BIOS. Inputs remained read-only and no ROM, BIOS, or trace
+- Local origin: all 58 user-supplied cartridge images were executed for 1,000 post-entry frames under
+  each recognized BIOS revision with no input. Inputs remained read-only and no ROM, BIOS, or trace
   bytes were retained in the repository.
 - Method: a temporary instrumented Superwhizkid build outside the repository recorded executed CPU
   reads and writes whose effective RAM address maps to physical cell `$000C`. A preliminary raw ROM
@@ -562,7 +562,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Used for: the callback-flag section in `docs/BIOS_BOOT_BEHAVIOR.md` and the conclusion that the
   interrupt wrappers interpret zero as disabled and any nonzero value as enabled. No additional
   semantics are assigned to Basketball's `$07` without further code analysis.
-- Limitation: no access in 300 unattended frames does not establish non-use in later, gameplay, or
+- Limitation: no access in 1,000 unattended frames does not establish non-use in later, gameplay, or
   input-dependent paths. The execution scan establishes observed accesses, not complete static
   reachability.
 
@@ -625,11 +625,11 @@ into the repository, build output, tests, or releases.
   `10e81571`. The runtime uses the whole-image CRC32 plus the exact 128 KiB size to select its unique
   mapper; ordinary cartridges continue to use size only to distinguish plain from commonly banked
   hardware. This fingerprint came from the locally validated image, not an emulator source.
-- Post-entry validation ran 300 frames for Bomb Blaster under both BIOS revisions and representative
-  64, 128, 256, and 512 KiB cartridges plus the 4-in-1. The diagnostic observed changing framebuffer
-  hashes, nonblank output, IRQ service, LCD/VRAM traffic, and expected bank changes, with no unknown
-  opcodes or persistent self-loop traps. Frame hashes are computed from four-shade pixel indices and
-  contain no ROM or BIOS data.
+- Current post-entry validation runs every locally available cartridge for 1,000 frames under both
+  BIOS revisions. The diagnostic observes changing framebuffer hashes, nonblank output, IRQ service,
+  LCD/VRAM traffic, controller reads, and expected bank changes, with no unknown opcodes or persistent
+  self-loop traps. Frame hashes are computed from four-shade pixel indices and contain no ROM or BIOS
+  data. See `docs/COMPATIBILITY_SWEEP_ANALYSIS.md`.
 - Audio validation over the same representative set observed PSG register writes and nonzero output
   without clipping. `gamatetest` separately verifies tone timing/sample count, noise-LFSR advance,
   envelope restart/advance, register masks, A-left isolation, B-right isolation, and equal C routing
@@ -686,36 +686,34 @@ into the repository, build output, tests, or releases.
   and a second content load. This scaffolding was authored for superwhizkid; no emulator source or
   commercial firmware, BIOS, or game-ROM bytes were used to create it.
 - `tools/gamate-sweep.sh` ran all 58 locally supplied cartridges under both validated BIOS revisions
-  for 300 frames after `$6020`: 116/116 combinations booted and produced nonblank video with no
+  for 1,000 frames after `$6020`: 116/116 combinations booted and produced nonblank video with no
   unsupported opcode or persistent self-loop diagnosis. Cartridge sizes covered 16, 32, 64, 128,
   256, and 512 KiB, including the fingerprinted 4-in-1 mapper. The report remains outside the
-  repository at `/tmp/superwhizkid-sweep.txt` and contains filenames, hashes, and counters but no input
-  bytes. This is broad automated smoke coverage, not a claim that every title is playable or
-  hardware-accurate.
-- Two titles were silent during this unattended 300-frame window under both BIOSes: Further
-  Adventures of Hannibal The Cat (four AY writes) and Tornado (9,310 AY writes). Tornado was
-  investigated with new per-register AY/channel and controller-read diagnostics. At its title state
+  repository and contains local filenames, hashes, and counters but no input bytes. All titles
+  performed controller reads in this window. World Cup Soccer alone exercised the UART, with 1,136
+  clocks under either BIOS. See `docs/COMPATIBILITY_SWEEP_ANALYSIS.md`. This is broad automated smoke
+  coverage, not a claim that every title is playable or hardware-accurate.
+- Tornado was the sole title without audible output during the unattended 1,000-frame sweep. It was
+  investigated with per-register AY/channel and controller-read diagnostics. At its title state
   it deliberately rewrites registers 0–13 in sequence, leaving periods and volumes zero and mixer
-  register 7 at `$3F`; all three synthesized channels are consequently inactive. The game polls
-  controls sparsely (25 reads in 400 frames), so a six-frame Start pulse could be missed. A 20-frame
-  Start pulse at frame 120 was observed once, entered gameplay under both BIOS revisions, and yielded
+  register 7 at `$3F`; all three synthesized channels are consequently inactive. A targeted trace
+  found that the game polls controls sparsely (25 reads in 400 frames), so a six-frame Start pulse
+  could be missed. A 20-frame Start pulse at frame 120 was observed once, entered gameplay under both
+  BIOS revisions, and yielded
   audio in 270/400 frames with all three channels active and a peak of 30,558. Tornado's initial
   silence is therefore title-state behavior, not evidence of an AY synthesis fault.
-- Further Adventures of Hannibal The Cat was also a 300-frame-window false positive rather than a
-  synthesis failure. Without input its first audible output occurs after that window: 44/400 frames
-  and 344/700 frames were audible, initially at low amplitude through channel C before the longer
-  attract/demo sequence used all channels. A 30-frame Start pulse at frame 120 was seen by 61 of the
-  game's frequent controller reads, entered gameplay under both BIOS revisions, and produced audio
-  in 281/400 frames with all three channels active. An A-only pulse did not leave the title flow.
-- Famous 7, One Million Whys, and QuizFighter's identical 24/300 audio result was traced to the same
-  exact first-audio frame, 277, under both BIOS revisions. This strongly suggests a shared title
-  sequence or engine timing (an inference from matching behavior, not a source-derived claim). At
-  700 unattended frames they were audible for 424, 276, and 351 frames respectively, with multiple
-  AY channels active; at 1,000 frames the counts rose to 724, 576, and 651. Famous 7 and QuizFighter
-  do not begin controller polling until frame 564; a 30-frame Start pulse at frame 600 was observed
-  and changed their subsequent execution. One Million Whys polls from frame 2 and observed the same
-  pulse, but remained in its current flow. These limited 300-frame results are therefore title
-  sequencing, not evidence of an audio fault.
+- Further Adventures of Hannibal The Cat first produced unattended audio at frame 357 and was audible
+  for 432 or 430 of 1,000 frames, depending on BIOS entry phase. A targeted 30-frame Start pulse at
+  frame 120 entered gameplay under both BIOS revisions and produced audio on all three channels; an
+  A-only pulse did not leave the title flow.
+- Famous 7, One Million Whys, and QuizFighter first produced audio at frame 277 under both BIOS
+  revisions and were respectively audible for 724, 513, and 521 frames in the current 1,000-frame
+  UMC/NCR run. This strongly suggests a shared title sequence or engine timing (an inference from
+  matching behavior, not a source-derived claim). Famous 7 and QuizFighter do not begin controller
+  polling until frame 564; a 30-frame Start pulse at frame 600 was observed and changed their
+  subsequent execution. One Million Whys polls from frame 2 and observed the same pulse, but remained
+  in its current flow. The delayed observations are title sequencing, not evidence of an audio or
+  input fault.
 - The two BIOS-dependent final-video cases, Mini Golf and Money Maze, were isolated to inherited
   entry phase rather than memory, mapper, or rendering nondeterminism. At `$6020`, both BIOSes leave
   identical RAM and VRAM hashes, scroll/LCD control, and IRQ phase. The BIT BIOS arrives 29 CPU
@@ -723,8 +721,10 @@ into the repository, build output, tests, or releases.
   `363/24` and shifting frame and AY oscillator/sample phase. A diagnostic-only experiment reset
   clock, LCD, IRQ, and AY phase at entry while preserving CPU, memory, registers, and cartridge
   state. Under that normalization, each game produced identical video/audio hashes, PCs, and
-  activity counters across BIOSes through frame 300. The ordinary differing hashes therefore sample
-  slightly different execution instants because the diagnostic numbers frames from cartridge entry;
+  activity counters across BIOSes through the targeted 300-frame experiment. That shorter result is
+  retained because it describes the phase-normalization experiment rather than general catalog
+  coverage. The ordinary differing hashes therefore sample slightly different execution instants
+  because the diagnostic numbers frames from cartridge entry;
   normal emulation continues to preserve each real BIOS path's timing. Audio hashes for other games
   commonly differ for the same phase reason.
 - Focused IRQ tests now verify assertion at exactly 32,768 master clocks, persistence while masked,
@@ -737,8 +737,8 @@ into the repository, build output, tests, or releases.
   whether a BRK vector pull has identical timer side effects still require a Gamate trace or focused
   hardware test; the tests explicitly preserve this distinction rather than claiming cycle accuracy.
 - The NMOS interrupt-mask audit found and corrected delayed polling across CLI, SEI, and PLP; RTI
-  applies its restored mask immediately. The full 58-cartridge/two-BIOS/300-frame matrix remained
-  116/116 after this change. This validates compatibility and the tested CPU boundary cases, but not
+  applies its restored mask immediately. The current 58-cartridge/two-BIOS/1,000-frame matrix is
+  116/116. This validates compatibility and the tested CPU boundary cases, but not
   the NCR 65CX02's unmeasured interrupt-vector bus cycle.
 - LCD stop/blank boundary tests now distinguish LCDcon E from N using Kevtris's measured register
   behavior. E freezes the internal 162-clock pass and row-event position because the physical pixel,
@@ -766,9 +766,9 @@ into the repository, build output, tests, or releases.
   serialization. State format version 4 includes in-flight transmit/receive state and a pending NMI.
   Standalone emulation still receives zero unless a caller injects link bits: peer transport,
   electrical timing, and exact NMI/IRQ collision timing are not yet modeled or claimed.
-- Redraw-flicker reduction was tuned from the core's own `/tmp/swk-brick-blaster.trace`, captured
-  during a user-played Brick Blaster session; no external emulator implementation was consulted for
-  this filter. In the title-selection cursor region (raw LCD coordinates x=44-51, y=104-111), its 41
+- Redraw-flicker reduction was tuned from the core's own gitignored diagnostic trace, captured during
+  a user-played Brick Blaster session; no external emulator implementation was consulted for this
+  filter. In the title-selection cursor region (raw LCD coordinates x=44-51, y=104-111), its 41
   non-background pixels were repeatedly absent for one or two frames between longer drawn runs.
   This evidence was used only to choose the optional presentation filter's one- and two-frame
   lightening-confirmation limits. It did not change Gamate machine timing or LCD-controller output.
@@ -795,7 +795,7 @@ into the repository, build output, tests, or releases.
   the same counters once and falls back to the ordered event loop at every boundary. Together with
   cached AY periods, the current release build reduced the 5,000-frame Brick Blaster benchmark from
   about 4.80 to 4.29 seconds (approximately 10.6%). The batched-versus-single-clock equivalence test,
-  four byte-identical 1,000-frame game reports, and the complete 116-case/two-BIOS 300-frame sweep
+  four byte-identical 1,000-frame game reports, and the complete 116-case/two-BIOS 1,000-frame sweep
   all passed after this second pass. An undefined-behavior sanitizer run also identified a pre-existing
   signed left shift in the decimal-SBC wrap calculation; it was replaced with an explicit eight-bit
   conversion and the exhaustive decimal test's independent reference calculation was updated to

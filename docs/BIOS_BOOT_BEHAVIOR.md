@@ -163,7 +163,7 @@ Both BIOS revisions clear `$000C` near reset and set it to `$01` near the end of
 three executed instructions before reaching `$6020` in the controlled boot trace. Cartridge software
 can access the same physical RAM cell, including through RAM mirrors.
 
-A 300-frame, no-input execution scan of all 58 locally available cartridges found six titles that
+A 1,000-frame, no-input execution scan of all 58 locally available cartridges found six titles that
 actually accessed `$000C` from cartridge code. Each result was repeated with both BIOS revisions:
 
 | Cartridge | Executing locations | Observed behavior |
@@ -182,7 +182,7 @@ callbacks and any nonzero value permits them—but does not establish whether Ba
 additional game-specific meaning.
 
 The other 52 titles made no cartridge-side access during the observed window. That is not proof they
-never access the flag: unattended title screens, unvisited gameplay paths, and the 300-frame limit
+never access the flag: unattended title screens, unvisited gameplay paths, and the 1,000-frame limit
 leave later or input-dependent code untested.
 
 | Vector | UMC/NCR wrapper | Bit Corporation wrapper |
