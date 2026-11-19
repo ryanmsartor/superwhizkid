@@ -495,6 +495,19 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Full findings and limitations:
   [`../../docs/SOFTWARE_LIBRARY_ANALYSIS.md`](../../docs/SOFTWARE_LIBRARY_ANALYSIS.md).
 
+### ROM graphics exploration tool
+
+- The local `rc2tools` project's `rc2t render-graphics` command was consulted as a presentation and
+  command-line workflow reference for `tools/gamate_rom_render_graphics.py`. It informed the use of
+  full-ROM images with bank sections, address labels, visually separated groups, range selection,
+  and nearest-neighbor scaling. Its implementation and Game Boy graphics decoder were not copied or
+  translated. Superwhizkid's decoder was independently authored around the Gamate plane behavior
+  documented by Kevtris, and exposes both planar and row-interleaved ROM-storage hypotheses because
+  no source currently establishes either one as the commercial cartridge convention.
+- Kevtris's “Gamate Inside” measurements were used to assign bit 7 to the leftmost pixel and combine
+  plane 0 with weight one and plane 1 with weight two. The measurements describe framebuffer access,
+  not ROM graphics storage; the tool and `docs/ROM_GRAPHICS_ANALYSIS.md` preserve that limitation.
+
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.
 

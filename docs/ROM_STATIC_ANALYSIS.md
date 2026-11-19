@@ -84,6 +84,10 @@ among games, and distinct generations of Bit Corporation or UMC development prac
 
 ## 4. Software graphics formats
 
+An exploratory whole-ROM renderer and its interpretation limits are documented in
+[`ROM_GRAPHICS_ANALYSIS.md`](ROM_GRAPHICS_ANALYSIS.md). It provides address-labeled planar and
+row-interleaved views for locating candidate art, without treating either layout as established.
+
 The hardware has no tile or sprite engine, but games implement those concepts in software. ROM
 analysis could document:
 
