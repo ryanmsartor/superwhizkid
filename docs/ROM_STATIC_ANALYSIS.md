@@ -16,6 +16,9 @@ Initial corpus analysis is recorded in
 marker, copyright field, and `$6020/$6023/$6026` callback table while retaining the unexplained
 header bytes as unknowns.
 
+Capacity, padding, repeated-bank, and mirroring findings are recorded separately in
+[`ROM_LAYOUT_ANALYSIS.md`](ROM_LAYOUT_ANALYSIS.md).
+
 Currently documented fields include:
 
 - `$6000-$6001`: checksum

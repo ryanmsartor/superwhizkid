@@ -463,16 +463,21 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 - Local origin: all 58 user-supplied cartridge images and both recognized BIOS revisions, read in
   place without retaining ROM or firmware bytes.
-- Method: `tools/gamate-rom-header-report.py` reports structural metadata; focused scripts compared
-  header-field distributions, callback stubs, 16 KiB bank hashes/fill, embedded multicart headers,
+- Method: `tools/gamate-rom-header-report.py` reports structural metadata and
+  `tools/gamate-rom-layout-report.py` reports trailing fill, uniform banks, aligned duplication, and
+  whole-image half mirroring. Focused comparisons additionally examined embedded multicart headers
   and the two Bomb Blaster variants. BIOS code was inspected to identify the cartridge callback
   dispatchers and the alternate UMC `$6002` format-marker check.
 - Used for: establishing the commercial header layout, checksum range, `$6020` start stub, `$6023`
   NMI callback, `$6026` IRQ callback, multicart component layout, and corpus padding conventions.
 - Result: all 58 checksums validate; all start and IRQ slots are absolute jumps; four games use an
   explicit no-op NMI callback; and the 4-in-1 contains four independently valid component headers.
-  Bytes `$6003-$6004` and `$601E-$601F` remain unexplained and are not assigned semantics.
-- Full findings and limitations: [`../../docs/ROM_HEADER_ANALYSIS.md`](../../docs/ROM_HEADER_ANALYSIS.md).
+  No dump is a systematic half mirror. Four 512 KiB games have terminal uniform banks, while Hot
+  Hero has the corpus's only repeated nonuniform regions at 16/32 KiB granularity. Bytes
+  `$6003-$6004` and `$601E-$601F` remain unexplained and are not assigned semantics.
+- Header and boot-ABI findings: [`../../docs/ROM_HEADER_ANALYSIS.md`](../../docs/ROM_HEADER_ANALYSIS.md).
+- Capacity, padding, and repetition findings:
+  [`../../docs/ROM_LAYOUT_ANALYSIS.md`](../../docs/ROM_LAYOUT_ANALYSIS.md).
 
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.

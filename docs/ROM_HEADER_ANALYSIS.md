@@ -95,20 +95,6 @@ stored checksum validates against its own `$1000-$1FFF` region.
 This is primary software evidence that the multicart image is organized as four 32 KiB component
 slots and that its startup modification is not represented by the BIOS checksum.
 
-## Padding and repeated banks
-
-A 16 KiB bank-level comparison found these full-bank padding or repetition cases:
-
-- 4-in-1: bank 1 is entirely `$FF`.
-- Dinosaur Park: banks 21-31 are entirely `$FF`.
-- Further Adventures of Hannibal The Cat: banks 29-31 are entirely `$FF`.
-- Hot Hero: banks 24-31 are entirely `$FF`; banks 17-19 duplicate banks 21-23 respectively.
-- Insect War: banks 30-31 are entirely `$00`.
-
-No other complete 16 KiB bank in the 58-image corpus is uniform or duplicated within its image.
-These observations establish dump contents, not physical ROM address decoding or intended mapper
-limits.
-
 ## Bomb Blaster variants
 
 The two catalogued Bomb Blaster images share the same copyright header and all three callback
