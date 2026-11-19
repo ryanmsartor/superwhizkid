@@ -21,3 +21,5 @@
 .vscode/
 compile_commands.json
 Testing/
+
+AGENTS.md
