@@ -626,6 +626,17 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   timing and summarized effects could differ when the 58-master-clock entry-phase offset changed
   whether an interrupt fell inside a call. `tools/gamate-bios-call-summary.py` reproduces aggregate
   counts and effect categories from the local derived report.
+- Input-coverage method: `tools/gamate-bios-input-campaign.sh` applies independently authored,
+  deterministic schedules for long Start, Select/Start plus A/B actions, and every individual control
+  plus legal direction/button combinations. `tools/gamate-bios-call-coverage.py` compares derived
+  boundary, call-site, register, and broad effect signatures while excluding frame/time/counter drift;
+  local reports contain filenames and derived metadata but no cartridge or BIOS contents.
+- Input-coverage result: the controller cycle passed all 116 cases and added 979 service call sites,
+  5,817 detailed call-site signatures, and 4,027 normalized ABI signatures over the unattended
+  baseline. Long Start added another 250/5,748/3,042 respectively over that union, and the subsequent
+  menu/action schedule added 37/4,303/2,350. All schedules retained the same 18 service slots and only
+  the `$6026` IRQ callback; ordinary controls cannot test link-driven `$6023` NMI behavior. These
+  results are used to prevent unattended-only traces from being mistaken for a complete BIOS ABI.
 
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.

@@ -9,7 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { MAX_EVENTS = 1024, MAX_CALL_DEPTH = 32 };
+enum { MAX_EVENTS = 16384, MAX_CALL_DEPTH = 32 };
 
 struct Event {
 	const char* direction;

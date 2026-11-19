@@ -167,6 +167,37 @@ and compare coverage with the unattended baseline. Retain a targeted trace only 
 slot, signature, return form, or hardware effect. Separately inject controlled UART input into World
 Cup Soccer to exercise the NMI wrapper and `$6023` callback.
 
+The deterministic controller campaign is now implemented by
+`tools/gamate-bios-input-campaign.sh`. It runs four 1,000-frame schedules:
+
+1. no input;
+2. three long Start presses, including durations suitable for sparse polling;
+3. Select/Start menu transitions followed by separate A and B actions;
+4. every individual control plus legal direction-and-button combinations.
+
+`tools/gamate-bios-call-coverage.py` compares each candidate with the accumulated coverage union. It
+separates boundary events, direct service slots, cartridge/bank call sites, detailed call-site
+signatures, and normalized ABI signatures. Frame numbers, elapsed time, and exact counter totals are
+excluded from signature identity so that timing drift alone does not count as new coverage. Reports
+for schedules that add neither a call site nor an ABI signature are discarded by the campaign tool.
+
+The initial controller-cycle run passed all 116 cartridge/BIOS cases and added 979 service call sites,
+5,817 detailed call-site signatures, and 4,027 normalized ABI signatures relative to unattended
+execution. All 58 titles added boundary coverage and 57 added completed-call signatures. Repeated
+long Start added another 250 call sites, 5,748 detailed signatures, and 3,042 normalized signatures
+relative to the unattended/controller-cycle union. The menu/action schedule then added 37 call sites,
+4,303 detailed signatures, and 2,350 normalized signatures relative to that expanded union.
+
+No controller schedule exposed a nineteenth service slot, an NMI callback, or a callback target other
+than periodic IRQ `$6026`. This supports—but cannot prove—that controller-driven software uses the
+same 18-slot BIOS ABI. The large incremental signature counts show that unattended execution was not
+sufficient for calling-convention analysis and that schedule timing materially changes reached code.
+
+Basketball initially exceeded the tracer's 1,024-entry boundary-event aggregate after input reached
+gameplay. The run had no pairing error; it produced 1,070 distinct boundary rows, largely because IRQ
+returns reached many new cartridge locations. The diagnostic capacity is now 16,384 entries, and the
+affected case and complete controller-cycle matrix pass without overflow.
+
 ### Stage 4: probe narrow hypotheses
 
 Use purpose-written cartridges and controlled entry-state perturbations only after call clusters
@@ -191,7 +222,8 @@ The original implementation checklist remains:
 4. Cluster call signatures across titles to identify shared calling conventions. (Aggregate and
    selected-slot reporting implemented; semantic classification remains.)
 5. Exercise gameplay states, Start/button paths, and link traffic; compare newly reached slots and
-   call signatures against the unattended baseline.
+   call signatures against the unattended baseline. (Deterministic controller campaign implemented;
+   adaptive gameplay and link/NMI coverage remain.)
 6. Use purpose-written cartridges to probe individual slots only after their observed inputs and
    effects suggest safe, narrow hypotheses.
 
