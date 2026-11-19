@@ -141,10 +141,10 @@ line between compatibility behavior and firmware expression.
 
 The following work remains necessary:
 
-1. Trace all executed cartridge accesses to `$F000-$FFFF`, separating interrupt vectoring from direct
-   calls and identifying every post-entry BIOS helper used by the corpus.
-2. Extend runtime coverage beyond unattended 300-frame windows with representative gameplay and link
-   activity.
+1. Determine register, flag, RAM, and hardware semantics for the 18 executed service-table slots
+   identified in [`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md).
+2. Extend runtime coverage beyond the unattended 1,000-frame baseline with representative gameplay
+   and link activity.
 3. Perturb invariant RAM fields individually or by functional group to determine which games read
    them before overwriting them.
 4. Test a clean RAM policy while preserving only documented callback/checksum state.

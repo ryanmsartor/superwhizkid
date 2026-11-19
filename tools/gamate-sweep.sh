@@ -5,12 +5,12 @@
 set -u
 
 if (( $# < 1 || $# > 4 )); then
-	echo "usage: $0 ROM_DIRECTORY [FRAMES=300] [GAMATEBOOT=build/gamateboot] [REPORT]" >&2
+	echo "usage: $0 ROM_DIRECTORY [FRAMES=1000] [GAMATEBOOT=build/gamateboot] [REPORT]" >&2
 	exit 2
 fi
 
 rom_directory=$1
-frames=${2:-300}
+frames=${2:-1000}
 runner=${3:-build/gamateboot}
 report=${4:-/tmp/superwhizkid-sweep.txt}
 

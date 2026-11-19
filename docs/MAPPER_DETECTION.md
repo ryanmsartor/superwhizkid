@@ -92,7 +92,7 @@ library:
    identical under the common and 4-in-1 mappings.
 5. Implement lazy activation initially for exact `$8000` writes only, matching observed software
    rather than the wider suspected decode.
-6. Run the complete 116-case, two-BIOS, 300-frame compatibility sweep.
+6. Run the complete 116-case, two-BIOS, 1,000-frame compatibility sweep.
 7. Compare video hashes, audio hashes, PCs, diagnostics, mapper state, and bank activity with the
    current implementation.
 8. Run longer targeted sessions for the 4-in-1 and any ordinary cartridge that writes the candidate

@@ -588,6 +588,29 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   trace. Invariance does not prove necessity, and hashes were not used as a substitute for the direct
   RAM/VRAM comparisons. The sweep does not establish post-entry helper usage.
 
+### Post-entry BIOS runtime API trace
+
+- Local origin: all 58 user-supplied cartridges were executed under both authentic BIOS revisions
+  for 1,000 post-entry frames without input. The combined TSV report remains outside the repository
+  and contains derived transition metadata but no ROM or BIOS payload.
+- Method: the independently authored `gamatebioscalls` diagnostic classifies executed control-flow
+  transitions across the cartridge/BIOS boundary. It separates hardware IRQ/NMI entry, direct calls
+  and jumps, callback returns, BIOS callback dispatch, and interrupt/subroutine returns. Mapper bank,
+  count, and first frame are retained. `tools/gamate-bios-call-sweep.sh` runs the full matrix.
+- Result: 116/116 runs completed. Every cartridge directly called the stable 18-slot service table at
+  `$F000-$F033`; no direct target outside it was observed. Per BIOS, 161,958 direct calls arose from
+  1,031 distinct source/bank/target rows. The entire direct-event multiset matched between BIOS
+  revisions. `$F030` and `$F033` first appeared at frame 408, demonstrating that the former 300-frame
+  default was insufficient for this audit. All games received `$6026` IRQ callbacks; no `$6023` NMI
+  callback occurred without link input.
+- Used for: `docs/BIOS_RUNTIME_API_ANALYSIS.md`, the increase of standard sweep defaults to 1,000
+  frames, and the conclusion that replacement firmware must implement the service table in addition
+  to boot and interrupt dispatch.
+- Limitations: this is unattended execution coverage, not complete reachability. Slot semantics,
+  nested-call pairing, register conventions, memory/hardware effects, gameplay-only behavior, and
+  link-driven NMI paths remain to be established. Single executed opcode values are used only for
+  transition classification; no instruction listing or translated firmware code is retained.
+
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.
 

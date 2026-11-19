@@ -219,6 +219,8 @@ The resulting high-level boot and interrupt specification is separated into
 [`BIOS_BOOT_BEHAVIOR.md`](BIOS_BOOT_BEHAVIOR.md).
 The full cartridge-entry state sweep and replacement/skip implications are documented in
 [`BIOS_REPLACEMENT_ANALYSIS.md`](BIOS_REPLACEMENT_ANALYSIS.md).
+Executed post-entry calls and the stable `$F000-$F033` service table are tracked in
+[`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md).
 
 The corpus could reveal whether cartridges only inherit BIOS-created state or continue using BIOS
 code after `$6020`:
