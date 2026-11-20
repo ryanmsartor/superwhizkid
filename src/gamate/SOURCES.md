@@ -659,9 +659,16 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   video changed in 24 zero-page cases and 8 page-2 cases. Every case performed cartridge
   read-before-write activity, their union covered all 1,024 physical bytes, and BIOS reads occurred
   in 110 cases. Automated input added no address to either union.
-- Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md`, rejection of blanket RAM initialization for BIOS
-  skipping, and prioritization of semantic zero-page and upper-work-buffer analysis. Authentic BIOS
-  execution continues to preserve its produced RAM unchanged.
+- Quarter-page extension: each of the sixteen 64-byte physical blocks was independently cleared in
+  another 1,856 unattended runs. `$000-$03F` accounted for all 106 zero-page cases. `$100-$13F`
+  affected only Time Warrior, while `$140-$1FF` affected none. The four page-2 blocks affected 26,
+  18, 6, and 2 cases; the four page-3 blocks affected 2, 2, 7, and 4. All but one title-level result
+  was paired across BIOSes. Dino Bibo differed only under UMC for `$380-$3BF`, limited to one active
+  AY-A sample and its audio hash at the observation boundary.
+- Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md`, the detailed block/title matrix in
+  `docs/BIOS_ENTRY_RAM_ANALYSIS.md`, rejection of blanket RAM initialization for BIOS skipping, and
+  prioritization of semantic zero-page and upper-work-buffer analysis. Authentic BIOS execution
+  continues to preserve its produced RAM unchanged.
 - Limitations: an instruction-start PC attributes interrupt-entry stack writes to the interrupted
   instruction, although subsequent handler accesses are attributed to BIOS code; this does not
   weaken the read-before-write evidence central to the experiment. A read-modify-write counts its

@@ -187,6 +187,12 @@ Clearing one physical 256-byte page at a time localized the dependency:
 | `$200-$2FF` | 36 | 8 | 12 | 18 under both BIOSes |
 | `$300-$3FF` | 10 | 0 | 0 | 5 under both BIOSes |
 
+The follow-up 64-byte sweep localized these dependencies further. `$000-$03F` accounts for all 106
+zero-page execution differences, while the other zero-page quarters affect smaller title subsets.
+Only `$100-$13F` affected a stack-page case (Time Warrior); `$140-$1FF` had no observed effect.
+Pages 2 and 3 contain multiple title-specific regions. The complete block/title matrix is in
+[`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md).
+
 Post-entry access tracking found at least one cartridge read-before-write in every case, and the
 union across the corpus covered all 1,024 physical RAM bytes. BIOS code read inherited bytes before
 their first post-entry write in 110 of 116 cases. Repeating authentic-state tracking with the broad

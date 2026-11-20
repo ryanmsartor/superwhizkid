@@ -105,6 +105,15 @@ static bool perturbEntryRam(struct Gamate* g) {
 		printf("entry RAM replaced with diagnostic pattern: %s\n", pattern);
 		return true;
 	}
+	if (!strncmp(pattern, "zero-block-", 11) && strlen(pattern) == 13) {
+		char* end;
+		unsigned block = (unsigned) strtoul(pattern + 11, &end, 16);
+		if (!*end && block < 16) {
+			memset(g->ram + block * 0x40, 0x00, 0x40);
+			printf("entry RAM replaced with diagnostic pattern: %s\n", pattern);
+			return true;
+		}
+	}
 	uint8_t callback = g->ram[0x00C];
 	uint8_t checksum[4] = { g->ram[0x0E0], g->ram[0x0E1], g->ram[0x0E5], g->ram[0x0E6] };
 	uint8_t stack[0x100];
