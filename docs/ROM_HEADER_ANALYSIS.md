@@ -3,9 +3,8 @@
 This is the first static-analysis report for the local Gamate cartridge corpus. It covers point 1
 of [`ROM_STATIC_ANALYSIS.md`](ROM_STATIC_ANALYSIS.md): the cartridge format and boot ABI.
 
-The analysis covers all 58 locally available cartridge images identified in
-[`ROM_CORPUS.md`](ROM_CORPUS.md), including both Bomb Blaster variants and the 4-in-1. The four
-MAME-catalogued dumps that are not locally available are outside the sample.
+The analysis covers all 62 MAME-catalogued cartridge images identified in
+[`ROM_CORPUS.md`](ROM_CORPUS.md), including both Bomb Blaster variants and the 4-in-1.
 
 ## Reproduction
 
@@ -26,7 +25,7 @@ CPU addresses below assume the first cartridge byte is mapped at `$6000`.
 | ROM offset | CPU address | Length | Finding |
 | ---: | ---: | ---: | --- |
 | `$0000-$0001` | `$6000-$6001` | 2 | Little-endian 16-bit checksum of bytes `$1000-$1FFF`. |
-| `$0002` | `$6002` | 1 | Format value `$01` in all 58 images. |
+| `$0002` | `$6002` | 1 | Format value `$01` in all 62 images. |
 | `$0003-$0004` | `$6003-$6004` | 2 | Variable fields with no established meaning. |
 | `$0005-$001D` | `$6005-$601D` | 25 | ASCII `COPYRIGHT BIT CORPORATION` in every image. |
 | `$001E-$001F` | `$601E-$601F` | 2 | Variable/reserved or padding bytes with no established meaning. |
@@ -34,7 +33,7 @@ CPU addresses below assume the first cartridge byte is mapped at `$6000`.
 | `$0023-$0025` | `$6023-$6025` | 3 | NMI callback stub; absolute `JMP` or `RTS` followed by padding. |
 | `$0026-$0028` | `$6026-$6028` | 3 | IRQ callback stub; always an absolute `JMP`. |
 
-All 58 stored checksums exactly equal the low 16 bits of the byte sum over ROM offsets
+All 62 stored checksums exactly equal the low 16 bits of the byte sum over ROM offsets
 `$1000-$1FFF`. The checksum is therefore not over the complete image and does not cover the header
 or entry stubs.
 
@@ -42,15 +41,15 @@ or entry stubs.
 
 The corpus gives useful constraints without establishing semantics:
 
-- Offset `$0002` is `$01` in all 58 images. The UMC BIOS contains an alternate startup path that
+- Offset `$0002` is `$01` in all 62 images. The UMC BIOS contains an alternate startup path that
   reads `$6002` and compares it with `$01`; the ordinary path selected by the documented `$5A00`
   response bypasses this check. This makes `$01` a firmware-recognized format marker in at least one
   path, but does not establish a versioning scheme.
-- Offset `$0003` is `$00` in 56 images, `$09` in Insect War, and `$99` in Tornado.
-- Offset `$0004` takes 16 observed values. The most common are `$00` in 14 images, `$99` in 13,
-  `$01` in 11, and `$11` in four; the remaining values occur one to three times each.
-- Offset `$001E` is `$00` in 57 images and `$FF` in Enchanted Bricks.
-- Offset `$001F` is `$FF` in 45 images. Eight other values occur in the remaining 13 images.
+- Offset `$0003` is `$00` in 60 images, `$09` in Insect War, and `$99` in Tornado.
+- Offset `$0004` takes 17 observed values. The most common are `$99` in 15 images, `$00` in 14,
+  `$01` in 12, and `$11` in four; the remaining values occur one to three times each.
+- Offset `$001E` is `$00` in 61 images and `$FF` in Enchanted Bricks.
+- Offset `$001F` is `$FF` in 47 images. Nine other values occur in the remaining 15 images.
 
 Neither BIOS's copyright loop extends beyond `$601D`, and the checksum routine reads only the
 stored checksum at `$6000-$6001` plus the fixed data range `$7000-$7FFF`. No meaning should be
@@ -84,19 +83,23 @@ families without assigning meaning to the unknown bytes.
 | Fist of Thunder | `01 00 99` | `00 FF` | `JMP $6F61` | `JMP $713E` | `JMP $713F` |
 | Flipuzzle | `01 00 99` | `00 FF` | `JMP $9441` | `JMP $BFB4` | `JMP $BFB5` |
 | Flying Goblin | `01 00 01` | `00 FF` | `JMP $8FAB` | `JMP $708C` | `JMP $705B` |
+| Fortress of Fierceness | `01 00 99` | `00 FF` | `JMP $61CC` | `JMP $61B9` | `JMP $61BA` |
 | Fortune 'n Luck | `01 00 01` | `00 00` | `JMP $62F3` | `JMP $87FB` | `JMP $87E6` |
 | Further Adventures of Hannibal The Cat | `01 00 00` | `00 FF` | `JMP $63F2` | `JMP $63B5` | `JMP $63B6` |
 | Galaxy Invaders | `01 00 07` | `00 99` | `JMP $6171` | `JMP $C857` | `JMP $C858` |
 | GP Race | `01 00 01` | `00 D7` | `JMP $6251` | `RTS` | `JMP $6E72` |
 | Hot Hero | `01 00 01` | `00 FF` | `JMP $6366` | `JMP $67B9` | `JMP $67BA` |
+| Incantational Couple | `01 00 99` | `00 00` | `JMP $6171` | `JMP $8766` | `JMP $8762` |
 | Insect War | `01 09 76` | `00 FF` | `JMP $63EF` | `JMP $63B2` | `JMP $63B3` |
 | Jewelriss | `01 00 99` | `00 FF` | `JMP $89C9` | `JMP $B7E1` | `JMP $B7E2` |
+| Kiki Inland | `01 00 01` | `00 FF` | `JMP $627C` | `JMP $6221` | `JMP $6222` |
 | Kill Shot | `01 00 33` | `00 FF` | `JMP $7400` | `JMP $8DBF` | `JMP $8DC0` |
 | Kung-Fu Fighter | `01 00 11` | `00 AC` | `JMP $616E` | `JMP $616D` | `JMP $6169` |
 | Legend of Dragon Knight | `01 00 99` | `00 FF` | `JMP $61C7` | `JMP $6151` | `JMP $6152` |
 | Magic Jigsaw | `01 00 99` | `00 20` | `JMP $6229` | `JMP $6169` | `JMP $616A` |
 | Marauder | `01 00 99` | `00 FF` | `JMP $6604` | `JMP $6161` | `JMP $617D` |
 | Mars Voyage | `01 00 67` | `00 FF` | `JMP $8D78` | `JMP $930C` | `JMP $930D` |
+| Mighty Boxer | `01 00 77` | `00 FA` | `JMP $9284` | `JMP $9610` | `JMP $9665` |
 | Mighty Tank | `01 00 04` | `00 FF` | `JMP $6152` | `JMP $FC44` | `JMP $AC32` |
 | Mini Golf | `01 00 01` | `00 00` | `JMP $6161` | `JMP $970A` | `JMP $9706` |
 | Money Maze | `01 00 11` | `00 FF` | `JMP $7E0F` | `JMP $6151` | `JMP $616D` |
@@ -134,10 +137,10 @@ Both authentic BIOS revisions implement the same cartridge-facing dispatch struc
 
 Corpus results:
 
-- All 58 `$6020` stubs are absolute jumps. Every target lies in `$6000-$9FFF`, the fixed lower ROM
+- All 62 `$6020` stubs are absolute jumps. Every target lies in `$6000-$9FFF`, the fixed lower ROM
   window on the common mapper, so startup does not depend on the initial upper-bank mapping.
-- All 58 `$6026` IRQ stubs are absolute jumps.
-- 54 `$6023` NMI stubs are absolute jumps.
+- All 62 `$6026` IRQ stubs are absolute jumps.
+- 58 `$6023` NMI stubs are absolute jumps.
 - GP Race, One Million Whys, QuizFighter, and Snowman Legend use `RTS; NOP; NOP` at `$6023`, making
   their cartridge NMI callback an explicit no-op.
 

@@ -4,9 +4,8 @@ This report documents cartridge capacities, padding, repeated regions, possible 
 limits of identifying unused ROM from static file structure. Header fields and the boot callback
 ABI are documented separately in [`ROM_HEADER_ANALYSIS.md`](ROM_HEADER_ANALYSIS.md).
 
-The analysis covers all 58 locally available cartridge images identified in
-[`ROM_CORPUS.md`](ROM_CORPUS.md). The four MAME-catalogued dumps that are not locally available are
-outside the sample.
+The analysis covers all 62 MAME-catalogued cartridge images identified in
+[`ROM_CORPUS.md`](ROM_CORPUS.md).
 
 ## Reproduction
 
@@ -26,9 +25,9 @@ Every dump has a power-of-two size supported by the known cartridge arrangements
 | Dump size | Images |
 | ---: | ---: |
 | 16 KiB | 1 |
-| 32 KiB | 32 |
-| 64 KiB | 8 |
-| 128 KiB | 6 |
+| 32 KiB | 34 |
+| 64 KiB | 9 |
+| 128 KiB | 7 |
 | 256 KiB | 2 |
 | 512 KiB | 9 |
 
@@ -47,10 +46,10 @@ bytes. Shorter repetitions are classified as no clear terminal padding.
 
 | Mapper policy | `$FF` padding | `$00` padding | No clear padding | Total |
 | --- | ---: | ---: | ---: | ---: |
-| Plain | 18 | 1 | 14 | 33 |
-| Common banked | 5 | 3 | 16 | 24 |
+| Plain | 18 | 1 | 16 | 35 |
+| Common banked | 6 | 3 | 17 | 26 |
 | 4-in-1 | 1 | 0 | 0 | 1 |
-| **Total** | **24** | **4** | **30** | **58** |
+| **Total** | **25** | **4** | **33** | **62** |
 
 This exposes a corpus-level pattern: long `$FF` tail padding is common among plain cartridges, while
 two thirds of common-banked images carry data to the end without a clear terminal fill convention.
@@ -60,10 +59,10 @@ The four `$00`-padded images are Famous 7, Insect War, Time Warrior, and Volcano
 
 Two erased-state values occur: `$FF` is dominant, while some later images use `$00`.
 
-- 25 images end in `$FF`; 24 of those have an `$FF` run of at least 16 bytes.
+- 28 images end in `$FF`; 25 of those have an `$FF` run of at least 16 bytes.
 - Ten images end in `$00`; four of those have a `$00` run of at least 16 bytes.
-- 23 images have at least 256 bytes of trailing `$FF` or `$00` fill.
-- The other 35 images either carry data to the last few bytes or have only a short terminal run, so
+- 24 images have at least 256 bytes of trailing `$FF` or `$00` fill.
+- The other 38 images either carry data to the last few bytes or have only a short terminal run, so
   there is no universal end-padding requirement.
 
 Many early 16/32 KiB games use `$FF` from the end of meaningful content through the physical dump
@@ -158,19 +157,23 @@ feature in that category.
 | Fist of Thunder | 64 KiB | Common banked | — | — | — |
 | Flipuzzle | 32 KiB | Plain | — | — | — |
 | Flying Goblin | 64 KiB | Common banked | — | — | — |
+| Fortress of Fierceness | 32 KiB | Plain | — | — | — |
 | Fortune 'n Luck | 128 KiB | Common banked | — | — | — |
 | Further Adventures of Hannibal The Cat | 512 KiB | Common banked | `$FF` × 49,152 | 29:FF, 30:FF, 31:FF | — |
 | Galaxy Invaders | 32 KiB | Plain | — | — | — |
 | GP Race | 128 KiB | Common banked | — | — | — |
 | Hot Hero | 512 KiB | Common banked | `$FF` × 131,072 | 24:FF, 25:FF, 26:FF, 27:FF, 28:FF, 29:FF, 30:FF, 31:FF | 32 KiB: 9=11; 16 KiB: 17=21, 18=22, 19=23 |
+| Incantational Couple | 32 KiB | Plain | — | — | — |
 | Insect War | 512 KiB | Common banked | `$00` × 32,768 | 30:00, 31:00 | — |
 | Jewelriss | 32 KiB | Plain | `$FF` × 5,348 | — | — |
+| Kiki Inland | 64 KiB | Common banked | `$FF` × 8,167 | — | — |
 | Kill Shot | 32 KiB | Plain | — | — | — |
 | Kung-Fu Fighter | 32 KiB | Plain | — | — | — |
 | Legend of Dragon Knight | 64 KiB | Common banked | `$FF` × 2,393 | — | — |
 | Magic Jigsaw | 32 KiB | Plain | `$FF` × 151 | — | — |
 | Marauder | 32 KiB | Plain | `$FF` × 171 | — | — |
 | Mars Voyage | 64 KiB | Common banked | — | — | — |
+| Mighty Boxer | 128 KiB | Common banked | — | — | — |
 | Mighty Tank | 32 KiB | Plain | `$FF` × 18 | — | — |
 | Mini Golf | 32 KiB | Plain | — | — | — |
 | Money Maze | 32 KiB | Plain | `$FF` × 1,659 | — | — |

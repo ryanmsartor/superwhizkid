@@ -2,27 +2,31 @@
 
 ## Scope
 
-The current unattended baseline runs all 58 locally available cartridges with each of the two known
-BIOS revisions for 1,000 frames after cartridge entry at `$6020`. The resulting 116-case report is
+The current unattended baseline covers all 62 MAME-catalogued cartridges with each of the two known
+BIOS revisions for 1,000 frames after cartridge entry at `$6020`. The resulting 124-case report is
 kept outside the repository because it includes local filenames and hashes; it contains counters and
 derived state, not ROM or BIOS bytes.
+
+The final four catalogue additions—Mighty Boxer, Kiki Inland, Fortress of Fierceness, and
+Incantational Couple—were run as an eight-case extension under the same 1,000-frame policy. All eight
+passed; the aggregate table combines those results with the established 58-title baseline.
 
 This baseline supersedes the former 300-frame general-compatibility sweep. Shorter or input-driven
 traces remain relevant only when they exercise a path an unattended run does not reach.
 
 ## Results
 
-All 116 combinations completed successfully. Every run produced nonblank video and controller reads,
+All 124 combinations completed successfully. Every run produced nonblank video and controller reads,
 and none reported an unsupported opcode or persistent self-loop. Cartridge sizes span 16 through
 512 KiB and include the fingerprint-selected 4-in-1 mapper.
 
 | Finding | UMC/NCR BIOS | Bit Corporation BIOS | Interpretation |
 | --- | ---: | ---: | --- |
-| Passing combinations | 58/58 | 58/58 | No failure in the observed window |
-| Titles with controller reads | 58/58 | 58/58 | The longer window reaches late title-screen polling |
-| Titles with audible output | 57/58 | 57/58 | Tornado remains silent until input advances its title state |
-| Titles exercising UART clocks | 1/58 | 1/58 | World Cup Soccer clocks the link UART 1,136 times |
-| Titles with persistent self-loops | 0/58 | 0/58 | No observed execution trap |
+| Passing combinations | 62/62 | 62/62 | No failure in the observed window |
+| Titles with controller reads | 62/62 | 62/62 | The longer window reaches late title-screen polling |
+| Titles with audible output | 61/62 | 61/62 | Tornado remains silent until input advances its title state |
+| Titles exercising UART clocks | 2/62 | 2/62 | World Cup Soccer and Mighty Boxer exercise the UART |
+| Titles with persistent self-loops | 0/62 | 0/62 | No observed execution trap |
 
 ### Late behavior exposed by the longer window
 

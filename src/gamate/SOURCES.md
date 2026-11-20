@@ -237,10 +237,10 @@ hardware measurements take precedence where they conflict with an emulator.
   mock Netpacket frontend, rejects a third player, transmits `$A5` through eight real emulated UART
   accesses, receives `$3C`, and replays a timed two-byte `$A5/$5A` packet while verifying that both
   byte NMIs execute independently.
-- Cartridge/library validation: the current 1,000-frame, two-BIOS sweep passes 116/116. World Cup
-  Soccer is the only unattended title to exercise the UART, producing 1,136 transmit clocks under
-  either BIOS;
-  this made it the real-content transport test. Two headless RetroArch 1.20.0 instances connected on
+- Cartridge/library validation: the current 1,000-frame, two-BIOS sweep passes 124/124. World Cup
+  Soccer and Mighty Boxer exercise the UART unattended, producing 1,136 and 768 transmit clocks
+  respectively under either BIOS. World Cup Soccer remains the real-content transport test. Two
+  headless RetroArch 1.20.0 instances connected on
   localhost with the current protocol and ran World Cup Soccer for several accelerated emulated
   minutes without connection, protocol-size, or core errors.
 - Limitation: the transport is validated locally and preserves sender-relative edge spacing, but a
@@ -356,13 +356,12 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 - MAME software list: <https://github.com/mamedev/mame/blob/954def46685cd0276671138fbd032036b1a771fb/hash/gamate.xml>
 - Neo Fuji historical catalogue: <https://fuji.12bit.club/gamate/?p=games>
-- Accessed: 2026-11-19.
+- Accessed: 2026-11-19; local-match inventory refreshed 2026-11-20.
 - Used for: establishing the known dumped-image baseline, preserving reported and rumored undumped
   cartridge identities separately, reconciling historical naming/serial disagreements, and matching
   the local collection by full-file SHA-1.
-- Result: all 58 local cartridge images match current MAME entries exactly, covering 58 of its 62
-  catalogued dumps. The four catalogued images absent locally are Mighty Boxer, Kiki Inland,
-  Fortress of Fierceness, and Incantational Couple. Neo Fuji is treated as historical catalogue
+- Result: all 62 local cartridge images match the pinned MAME entries exactly, covering all 62
+  catalogued dumps. Neo Fuji is treated as historical catalogue
   evidence rather than dump verification because its page explicitly combines owned material,
   auctions, other websites, and rumors.
 - Full inventory and methodology: [`../../docs/ROM_CORPUS.md`](../../docs/ROM_CORPUS.md).
@@ -480,7 +479,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 ### Commercial cartridge header and boot-ABI analysis
 
-- Local origin: all 58 user-supplied cartridge images and both recognized BIOS revisions, read in
+- Local origin: all 62 user-supplied cartridge images and both recognized BIOS revisions, read in
   place without retaining ROM or firmware bytes.
 - Method: `tools/gamate-rom-header-report.py` reports structural metadata and
   `tools/gamate-rom-layout-report.py` reports trailing fill, uniform banks, aligned duplication, and
@@ -489,7 +488,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   dispatchers and the alternate UMC `$6002` format-marker check.
 - Used for: establishing the commercial header layout, checksum range, `$6020` start stub, `$6023`
   NMI callback, `$6026` IRQ callback, multicart component layout, and corpus padding conventions.
-- Result: all 58 checksums validate; all start and IRQ slots are absolute jumps; four games use an
+- Result: all 62 checksums validate; all start and IRQ slots are absolute jumps; four games use an
   explicit no-op NMI callback; and the 4-in-1 contains four independently valid component headers.
   No dump is a systematic half mirror. Four 512 KiB games have terminal uniform banks, while Hot
   Hero has the corpus's only repeated nonuniform regions at 16/32 KiB granularity. Bytes
@@ -735,16 +734,17 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 ### Post-entry BIOS runtime API trace
 
-- Local origin: all 58 user-supplied cartridges were executed under both authentic BIOS revisions
-  for 1,000 post-entry frames without input. The combined TSV report remains outside the repository
-  and contains derived transition metadata but no ROM or BIOS payload.
+- Local origin: all 62 user-supplied cartridges were executed under both authentic BIOS revisions
+  for 1,000 post-entry frames without input. The final four catalogue additions were run as an
+  eight-case extension to the established 58-title matrix. The combined TSV reports remain outside
+  the repository and contain derived transition metadata but no ROM or BIOS payload.
 - Method: the independently authored `gamatebioscalls` diagnostic classifies executed control-flow
   transitions across the cartridge/BIOS boundary. It separates hardware IRQ/NMI entry, direct calls
   and jumps, callback returns, BIOS callback dispatch, and interrupt/subroutine returns. Mapper bank,
   count, and first frame are retained. `tools/gamate-bios-call-sweep.sh` runs the full matrix.
-- Result: 116/116 runs completed. Every cartridge directly called the stable 18-slot service table at
-  `$F000-$F033`; no direct target outside it was observed. Per BIOS, 161,958 direct calls arose from
-  1,031 distinct source/bank/target rows. The entire direct-event multiset matched between BIOS
+- Result: 124/124 runs completed. Every cartridge directly called the stable 18-slot service table at
+  `$F000-$F033`; no direct target outside it was observed. Per BIOS, 163,208 direct calls arose from
+  1,109 distinct source/bank/target rows. The entire direct-event multiset matched between BIOS
   revisions. `$F030` and `$F033` first appeared at frame 408, demonstrating that the former 300-frame
   default was insufficient for this audit. All games received `$6026` IRQ callbacks; no `$6023` NMI
   callback occurred without link input.
@@ -764,8 +764,8 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Used for: the staged probing plan in `docs/BIOS_RUNTIME_API_ANALYSIS.md` and future clustering of
   behavioral call signatures. Derived clusters remain hypotheses until controlled probes establish
   helper semantics.
-- Result: the 1,000-frame paired sweep completed 323,838 calls across the 116-case matrix, split
-  evenly at 161,919 per BIOS. Another 39 calls per BIOS were open at the final frame boundary. All
+- Result: the 1,000-frame paired sweep completed 326,334 calls across the 124-case matrix, split
+  evenly at 163,167 per BIOS. Another 41 calls per BIOS were open at the final frame boundary. All
   cases passed with no unmatched return or pairing-stack overflow. Per-slot counts and the complete
   cartridge/source/mapper/input-output-register signature multisets matched across BIOS revisions;
   timing and summarized effects could differ when the 58-master-clock entry-phase offset changed
@@ -773,8 +773,8 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   counts and effect categories from the local derived report.
 - Hardware-state clustering extension: completed-call records now include entry/exit VRAM address,
   scroll, LCD mode flags, AY address, and mapper banks. These are emulator state observations, not
-  copied firmware or cartridge bytes. A repeated 58-cartridge/two-BIOS/1,000-frame sweep completed
-  116/116 cases. The summary tool reports register and status preservation, input-A timing groups,
+  copied firmware or cartridge bytes. The 62-cartridge/two-BIOS/1,000-frame matrix completed
+  124/124 cases. The summary tool reports register and status preservation, input-A timing groups,
   and frequent hardware-state transitions for a selected slot.
 - `$F030` contract use: 362 paired calls across both BIOSes established exact X/Y/S and I/D/V
   preservation, N/Z derived from returned A, 174-master-clock uninterrupted timing, and no hardware
@@ -896,14 +896,15 @@ into the repository, build output, tests, or releases.
   input mappings, video/audio callbacks, fixed state size, serialization restoration, reset, unload,
   and a second content load. This scaffolding was authored for superwhizkid; no emulator source or
   commercial firmware, BIOS, or game-ROM bytes were used to create it.
-- `tools/gamate-sweep.sh` ran all 58 locally supplied cartridges under both validated BIOS revisions
-  for 1,000 frames after `$6020`: 116/116 combinations booted and produced nonblank video with no
-  unsupported opcode or persistent self-loop diagnosis. Cartridge sizes covered 16, 32, 64, 128,
+- `tools/gamate-sweep.sh` and equivalent direct read-only invocations covered all 62 locally supplied
+  cartridges under both validated BIOS revisions for 1,000 frames after `$6020`: 124/124 combinations
+  booted and produced nonblank video with no unsupported opcode or persistent self-loop diagnosis.
+  Cartridge sizes covered 16, 32, 64, 128,
   256, and 512 KiB, including the fingerprinted 4-in-1 mapper. The report remains outside the
   repository and contains local filenames, hashes, and counters but no input bytes. All titles
-  performed controller reads in this window. World Cup Soccer alone exercised the UART, with 1,136
-  clocks under either BIOS. See `docs/COMPATIBILITY_SWEEP_ANALYSIS.md`. This is broad automated smoke
-  coverage, not a claim that every title is playable or hardware-accurate.
+  performed controller reads in this window. World Cup Soccer and Mighty Boxer exercised the UART;
+  the latter produced 768 clocks under either BIOS. See `docs/COMPATIBILITY_SWEEP_ANALYSIS.md`. This
+  is broad automated smoke coverage, not a claim that every title is playable or hardware-accurate.
 - Tornado was the sole title without audible output during the unattended 1,000-frame sweep. It was
   investigated with per-register AY/channel and controller-read diagnostics. At its title state
   it deliberately rewrites registers 0–13 in sequence, leaving periods and volumes zero and mixer

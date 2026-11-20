@@ -282,7 +282,7 @@ redistributing commercial ROM bytes.
 
 ## Source handling
 
-- The local 58-cartridge collection is user-supplied and must remain read-only. Do not copy ROM
+- The local 62-cartridge collection is user-supplied and must remain read-only. Do not copy ROM
   bytes into the repository, retained traces, reports, tests, or releases.
 - Publish hashes, addresses, decoded metadata, statistics, control-flow findings, and original
   analysis rather than copyrighted game data.

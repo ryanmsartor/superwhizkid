@@ -30,20 +30,21 @@ diagnostic.
 
 ## Complete unattended baseline
 
-The first baseline covered 58 cartridges under both BIOS revisions for 1,000 post-entry frames:
+The baseline now covers all 62 catalogued cartridges under both BIOS revisions for 1,000 post-entry
+frames. The final four titles were added as an eight-case extension to the established matrix:
 
-- 116/116 combinations completed without tracer overflow or execution failure.
+- 124/124 combinations completed without tracer overflow or execution failure.
 - Every cartridge made at least one direct call into the BIOS.
 - Every direct entry targeted one of 18 slots from `$F000` through `$F033`, spaced exactly three
   bytes apart.
 - The complete direct-event multiset was identical across BIOS revisions: cartridge, source address,
   mapper bank, target slot, transition type, call count, and first-observed frame all matched.
-- Per BIOS, the run observed 161,958 direct cartridge-to-BIOS calls from 1,031 distinct
+- Per BIOS, the run observed 163,208 direct cartridge-to-BIOS calls from 1,109 distinct
   source/bank/target event rows.
 - Direct entries were `JSR` except for tail jumps from Nightmare of Santa Claus to `$F027` and from
   Tennis to `$F015`. No indirect jump, `BRK`, fall-through, or target outside the service table was
   observed.
-- All 58 titles received periodic cartridge IRQ callbacks at `$6026` during the window.
+- All 62 titles received periodic cartridge IRQ callbacks at `$6026` during the window.
 - No `$6023` NMI callback occurred because the unattended sweep supplied no link traffic.
 
 The identical call surface demonstrates a stable BIOS ABI. The two firmware revisions may implement
@@ -59,21 +60,21 @@ frame window.
 | Service slot | Titles | Calls | First frame | Observed entry form |
 | --- | ---: | ---: | ---: | --- |
 | `$F000` | 8 | 8 | 6 | `JSR` |
-| `$F003` | 29 | 3,517 | 2 | `JSR` |
-| `$F006` | 25 | 3,169 | 5 | `JSR` |
-| `$F009` | 38 | 1,863 | 3 | `JSR` |
-| `$F00C` | 57 | 124 | 1 | `JSR` |
-| `$F00F` | 35 | 98 | 1 | `JSR` |
-| `$F012` | 35 | 19,274 | 5 | `JSR` |
-| `$F015` | 38 | 20,610 | 5 | `JSR`, tail `JMP` |
+| `$F003` | 30 | 3,725 | 2 | `JSR` |
+| `$F006` | 26 | 3,233 | 5 | `JSR` |
+| `$F009` | 41 | 2,052 | 3 | `JSR` |
+| `$F00C` | 61 | 129 | 1 | `JSR` |
+| `$F00F` | 39 | 103 | 1 | `JSR` |
+| `$F012` | 39 | 19,518 | 5 | `JSR` |
+| `$F015` | 42 | 20,912 | 5 | `JSR`, tail `JMP` |
 | `$F018` | 15 | 24 | 5 | `JSR` |
-| `$F01B` | 12 | 17 | 5 | `JSR` |
-| `$F01E` | 18 | 109 | 5 | `JSR` |
+| `$F01B` | 13 | 18 | 5 | `JSR` |
+| `$F01E` | 19 | 110 | 5 | `JSR` |
 | `$F021` | 14 | 46 | 5 | `JSR` |
-| `$F024` | 38 | 63 | 1 | `JSR` |
-| `$F027` | 24 | 3,515 | 5 | `JSR`, tail `JMP` |
-| `$F02A` | 21 | 4,707 | 1 | `JSR` |
-| `$F02D` | 20 | 104,471 | 3 | `JSR` |
+| `$F024` | 39 | 65 | 1 | `JSR` |
+| `$F027` | 25 | 3,598 | 5 | `JSR`, tail `JMP` |
+| `$F02A` | 22 | 4,779 | 1 | `JSR` |
+| `$F02D` | 22 | 104,545 | 3 | `JSR` |
 | `$F030` | 8 | 181 | 408 | `JSR` |
 | `$F033` | 1 | 162 | 408 | `JSR` |
 
@@ -105,7 +106,7 @@ A BIOS-free implementation must therefore provide:
 5. Correct interaction between BIOS helpers and interrupts that occur while a helper is running.
 
 The corpus-wide use of the table favors a small resident clean-room firmware over setting PC directly
-to `$6020`. A direct jump without the table would fail immediately in all 58 titles observed here.
+to `$6020`. A direct jump without the table would fail immediately in all 62 titles observed here.
 
 ## Next analysis stages
 
@@ -131,11 +132,11 @@ This is now implemented as the optional final output argument to `gamatebioscall
 as open rather than incorrectly paired. Direct tail jumps obtain their expected return from the
 existing cartridge stack frame.
 
-The first full paired sweep completed all 116 cartridge/BIOS cases under a stricter validator that
+The full paired sweep completed all 124 cartridge/BIOS cases under a stricter validator that
 fails a run on any unmatched BIOS return or pairing-stack overflow:
 
-- 323,838 service calls completed within the observation windows: 161,919 per BIOS revision.
-- Another 39 calls per BIOS began before the final frame boundary and remained legitimately open.
+- 326,334 service calls completed within the observation windows: 163,167 per BIOS revision.
+- Another 41 calls per BIOS began before the final frame boundary and remained legitimately open.
 - Every slot's completed-call count matched exactly between BIOS revisions.
 - For a given cartridge, source, slot, mapper state, and input/output register tuple, the complete
   signature multiset was identical between BIOS revisions.
@@ -147,13 +148,13 @@ calling convention. They do not yet identify the meaning of any slot.
 
 | Slot | Completed calls | Clock range | Calls changing VRAM | Calls changing AY registers | Calls spanning IRQ/NMI |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `$F02D` | 208,940 | 196–114,978 | 42,556 | 60 | 1,580 |
-| `$F015` | 41,220 | 974–23,158 | 33,998 | 58 | 2,848 |
-| `$F012` | 38,546 | 494–10,692 | 6,890 | 34 | 2,486 |
-| `$F02A` | 9,414 | 202–114,436 | 8,822 | 8 | 394 |
-| `$F003` | 7,008 | 42–268,662 | 0 | 1,748 | 6,948 |
-| `$F027` | 7,026 | 6,326–309,980 | 2,898 | 414 | 4,660 |
-| `$F006` | 6,326 | 42–168,820 | 0 | 1,338 | 6,134 |
+| `$F02D` | 209,088 | 196–114,978 | 42,694 | 60 | 1,584 |
+| `$F015` | 41,824 | 594–23,158 | 34,596 | 62 | 3,034 |
+| `$F012` | 39,034 | 494–10,692 | 7,276 | 36 | 2,516 |
+| `$F02A` | 9,558 | 202–114,436 | 8,956 | 8 | 396 |
+| `$F003` | 7,424 | 42–268,662 | 0 | 1,842 | 7,362 |
+| `$F027` | 7,192 | 6,326–309,980 | 3,064 | 472 | 4,826 |
+| `$F006` | 6,454 | 42–168,820 | 0 | 1,352 | 6,262 |
 
 These are observational categories, not semantic labels. In particular, a call that spans an IRQ can
 include callback memory or peripheral effects in its summary. The interrupt counters make those cases

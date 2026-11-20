@@ -4,17 +4,16 @@ This document establishes the cartridge dataset available for static analysis. I
 current MAME software list with Neo Fuji's historical catalogue, then identifies the exact files in
 the local, user-supplied collection by SHA-1.
 
-The inventory was generated on 2026-11-19. Cartridge ROMs and system firmware are catalogued in
-separate tables so their different roles and coverage remain clear.
+The inventory was generated on 2026-11-19 and refreshed on 2026-11-20. Cartridge ROMs and system
+firmware are catalogued in separate tables so their different roles and coverage remain clear.
 
 ## Scope summary
 
 - Current MAME catalogue: 62 dumped images, including two distinct Bomb Blaster dumps.
-- Local collection: 58 cartridge images.
-- Exact local matches to the MAME SHA-1 catalogue: 58 of 58.
-- Coverage of currently catalogued MAME images: 58 of 62 (93.5%).
-- MAME-catalogued dumps absent locally: Mighty Boxer, Kiki Inland, Fortress of Fierceness, and
-  Incantational Couple.
+- Local collection: 62 cartridge images.
+- Exact local matches to the MAME SHA-1 catalogue: 62 of 62.
+- Coverage of currently catalogued MAME images: 62 of 62 (100%).
+- No MAME-catalogued dump is absent locally.
 - No local cartridge image is unmatched or of uncertain identity.
 - Local firmware collection: both recognized 4 KiB BIOS revisions, identified by SHA-1.
 
@@ -23,7 +22,7 @@ catalogued by MAME but is not present in the local collection. File sizes are by
 
 ## System firmware images
 
-These images are internal system firmware, not cartridges, and are not included in the 58-of-62
+These images are internal system firmware, not cartridges, and are not included in the 62-of-62
 cartridge coverage calculation.
 
 | Firmware variant | Size | Local filename | Local SHA-1 |
@@ -72,17 +71,17 @@ compatibility validation. The files are read locally and are not distributed wit
 | C1036 | Jewelriss | 32,768 | `Jewelriss (Bit Corp) (1990).bin` | `23f4adad99f6c17fb556b512b6eca2645033aadd` |
 | C1037 | Nightmare of Santa Claus | 32,768 | `Nightmare of Santa Claus (Bit Corp) (1991).bin` | `ff3ad53998dd5858f1176767786ec187ea8b059b` |
 | C1038 | Mars Voyage | 65,536 | `Mars Voyage (Bit Corp) (1991).bin` | `01163f89447c68554cd2fe60b22dea7b578f1605` |
-| C1041 | Mighty Boxer | 131,072 | — | — |
+| C1041 | Mighty Boxer | 131,072 | `Mighty Boxer (World).bin` | `741f56cebe672e93985a2c48368e92bc897952aa` |
 | C1042 | Flying Goblin | 65,536 | `Flying Goblin (Bit Corp) (1991).bin` | `b07681e28b65af53fed23def3f6305ab929bb8f1` |
 | C1043 | Boom | 32,768 | `Boom (Bit Corp) (1991).bin` | `02f9a07b251bc29d0e5b3d6a4dfde0ab63bd65a3` |
 | C1044 | Snowman Legend | 32,768 | `Snowman Legend (Bit Corp) (1991).bin` | `19184793176d7aba7e353819aca57030254666ae` |
 | C1045 | World Cup Soccer | 65,536 | `World Cup Soccer (Bit Corp) (199X).bin` | `148bd0e461d8f967b483136460a770820d2e7226` |
-| C1046 | Kiki Inland | 65,536 | — | — |
+| C1046 | Kiki Inland | 65,536 | `Kiki Inland (World).bin` | `fa2b9666c9c1090573c40cafa273c9ff5c1787be` |
 | C1047 | Fortune 'n Luck | 131,072 | `Fortune 'n Luck (Bit Corp) (1992).bin` | `8719418a6b30c2cc9d013d35d1baacde86016da3` |
 | C1048 | Baseball | 65,536 | `Baseball (Bit Corp) (1991).bin` | `f10e180c4aac41e9c710ce38ca9a93ca6f331f57` |
 | C1049 | Punk Boy | 65,536 | `Punk Boy (Bit Corp) (1992).bin` | `1b3082be0698c12c8fc978db6a0c63c8958c33f8` |
-| C1050 | Fortress of Fierceness | 32,768 | — | — |
-| C1051 | Incantational Couple | 32,768 | — | — |
+| C1050 | Fortress of Fierceness | 32,768 | `Fortress of Fierceness (World).bin` | `aa971e546da8957de29837e5310452c129771967` |
+| C1051 | Incantational Couple | 32,768 | `Incantational Couple (World).bin` | `bbb5bd0466b79657e44c4e9fde603ec645e77bfe` |
 | C1052 | Famous 7 | 65,536 | `Famous 7 (UMC) (1993).bin` | `ea422fe969b260296b99397cdeff6ae053ac4a86` |
 | C1053 | Tough Guy | 131,072 | `Tough Guy (UMC) (1993).bin` | `5515f7dc5a00fa38677c4ac5b73af232008f3e51` |
 | C1054 | Magic Jigsaw | 32,768 | `Magic Jigsaw (Bit Corp) (1991).bin` | `75004583a83225e8379fa3f34433e0a76222e1f7` |
@@ -143,10 +142,10 @@ released or that a ROM currently exists.
 
 - MAME, [`hash/gamate.xml` at commit `954def46685cd0276671138fbd032036b1a771fb`](https://github.com/mamedev/mame/blob/954def46685cd0276671138fbd032036b1a771fb/hash/gamate.xml), accessed 2026-11-19. Used as the dumped-image baseline for serials, canonical catalogue titles, sizes, and reference SHA-1 values; its comments also identify undumped serial gaps. The file is CC0-1.0.
 - Neo Fuji, [Gamate Games](https://fuji.12bit.club/gamate/?p=games), accessed 2026-11-19. Used as an independent historical catalogue of confirmed, reported, and rumored cartridges and to preserve older title/serial assignments. Its page explicitly describes its list as compiled from websites, auctions, owned material, and rumors, so it is not treated as a dump-verification database.
-- Local user-supplied collection, read in place on 2026-11-19. SHA-1 values were computed with
-  `sha1sum`; filenames and hashes are recorded, but no ROM or BIOS bytes were copied into the
-  repository.
+- Local user-supplied collection, read in place on 2026-11-19 and refreshed on 2026-11-20. SHA-1
+  values were computed with `sha1sum`; filenames and hashes are recorded, but no ROM or BIOS bytes
+  were copied into the repository.
 
 The MAME list was matched to the local collection by full-file SHA-1. Title-based matching was not
-used to establish identity. All 58 local cartridge files matched exactly, including both Bomb
+used to establish identity. All 62 local cartridge files matched exactly, including both Bomb
 Blaster variants and the 4-in-1 image.
