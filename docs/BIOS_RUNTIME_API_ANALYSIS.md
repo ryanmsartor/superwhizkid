@@ -183,23 +183,61 @@ combines 362 completed calls across both BIOS revisions; the two revisions have 
 | State | Advances the nonzero 16-bit feedback state at `$012-$013`; `$014` is scratch feedback. |
 | Return | A receives the new `$012` value. |
 | Preserved registers | X, Y, and S in 362/362 calls. |
-| Status | I, D, and V preserved in 362/362 calls; N and Z describe returned A in 362/362 calls. Carry behavior remains unresolved. |
-| Uninterrupted timing | 174 master clocks (87 CPU cycles). |
+| Status | I, D, and V are preserved. N and Z describe returned A. Controlled probes establish that carry receives the pre-advance state’s bit 15, independent of incoming carry. |
+| Uninterrupted timing | 174 master clocks (87 CPU cycles) for a nonzero state; 188 master clocks when the zero-state repair path is taken. |
 | Hardware effects | None in the 360 uninterrupted calls: no VRAM, LCD, AY, mapper, UART, scroll, or hardware-address-state change. |
 | Interrupt interaction | Two calls included a periodic IRQ, took 910 master clocks, and include callback-attributed effects. |
 
 Observed input A values cover much of the byte range and do not correlate with the returned value,
-but this is not yet a controlled proof that A is ignored. Likewise, carry matched its entry value in
-only 224 of 362 calls; its relationship to feedback state needs a purpose-written state probe before
-replacement code can promise a carry result. Replacement tests should initially require the resolved
-properties above and leave carry unspecified.
+but this is not yet a controlled proof that A is ignored. A controlled state matrix varied incoming
+carry and selected states on either side of bit 15. Incoming carry had no effect; returned carry
+always matched the state’s original bit 15. A zero state took 14 extra master clocks and produced the
+same derived result as starting from `$FFFF`, establishing that the repair path seeds `$FFFF` before
+the ordinary advance.
 
-`$F000` is the next narrow candidate rather than one of the high-volume slots. Its sixteen observed
-calls are uninterrupted and identical in duration at 3,278 master clocks. Each issues 64 VRAM writes,
-ends at VRAM address `$128B`, and leaves scroll, AY selection, and mapper bank unchanged. It also
-forces A/X/Y to `$38/$40/$20`. It sets the diagnostic plane/increment flags while retaining an
-already-set window flag. This is consistent with a fixed drawing helper, but its visual purpose and
-input contract remain unnamed pending controlled probes.
+### Second resolved contract: `$F000`
+
+`gamatebiosprobe` boots an authentic BIOS and cartridge to the normal `$6020` entry boundary, changes
+only explicitly named entry-state fields, and invokes one public service slot with a synthetic
+subroutine return. It reports derived register, timing, address-range, hash, and write-count data; it
+does not emit BIOS instructions, RAM contents, or VRAM contents. IRQ timing is reset before the call
+so that a narrow service probe is not contaminated by a periodic cartridge callback.
+
+A controlled `$F000` matrix varied A, X, Y, status, incoming VRAM address, scroll, LCD flags, AY
+selection, mapper state, VRAM fill, and RAM `$015`. Both BIOS revisions produced identical derived
+results throughout the matrix.
+
+| Property | Controlled contract |
+| --- | --- |
+| Input RAM | `$015` is the only non-stack RAM location read before it is written. It is the cached raw LCD-control value. |
+| Return | A/X/Y become `$38/$40/$20`; S is restored; status becomes `$22` for tested entry states. |
+| Timing | 3,278 master clocks (1,639 CPU cycles), with no interrupt included. |
+| VRAM | 64 writes to 64 unique addresses; final address `$128B`. With a common initial fill, the final full-VRAM hash and changed-address extent were identical across all tested inputs and both BIOSes. |
+| LCD state | Writes cached control from `$015` while forcing row increment; the service's drawing sequence determines the final plane. Other cached mode bits remain effective. |
+| Preserved hardware state | Scroll X/Y, AY selection, current bank, and first bank. |
+| Other hardware effects | No AY-register, mapper, UART, IRQ, or NMI effects. |
+
+The invariant final VRAM result supports the narrow name **fixed bitmap writer**. It does not identify
+what the bitmap depicts, and the bitmap bytes are deliberately neither retained nor published. A
+clean-room replacement must not copy that firmware-resident asset: it can use an independently
+authored image, or omit the drawing only after compatibility testing demonstrates that callers do not
+depend on the pixels. The observed `$015` dependency and LCD/VRAM side effects remain part of the ABI
+even if the replacement artwork differs.
+
+### Next candidate: `$F033`
+
+`$F033` is observed only in Tornado in the current corpus. A first controlled matrix establishes a
+useful boundary without yet resolving its complete contract:
+
+- it reads no inherited non-stack RAM and writes exactly `$0A1-$0A7`;
+- it preserves X, S, VRAM/LCD state, scroll, AY selection, and mapper state;
+- its output and timing vary with register input, so it is not a fixed-data writer;
+- both BIOS revisions produce identical derived results; and
+- Tornado immediately supplies the `$0A1` buffer to service `$F012` after calling `$F033`.
+
+This call relationship is consistent with a value-to-display-buffer formatter, but that remains a
+hypothesis. The next probe should establish register width, byte order, buffer encoding, padding, and
+the meanings of returned A/Y before assigning a semantic name or writing replacement code.
 
 ### Stage 3: extend reachable paths
 
@@ -245,6 +283,11 @@ Use purpose-written cartridges and controlled entry-state perturbations only aft
 suggest a narrow contract. Vary one register or state field at a time and test named outcomes rather
 than copying authentic working memory. This stage should establish which boot fields and helper
 effects are functionally required by a clean-room resident replacement.
+
+The first implementation of this stage is `gamatebiosprobe`, described in the `$F000` contract above.
+Its option syntax permits controlled CPU-register, RAM, VRAM-fill, LCD, scroll, AY-selection, and
+mapper-state perturbations. Public documentation should retain only behavioral summaries needed to
+specify an ABI; local full-state hashes are comparison aids rather than distributable firmware data.
 
 ### Parallel mapper audit
 

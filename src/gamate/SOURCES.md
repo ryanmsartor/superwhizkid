@@ -779,13 +779,37 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - `$F030` contract use: 362 paired calls across both BIOSes established exact X/Y/S and I/D/V
   preservation, N/Z derived from returned A, 174-master-clock uninterrupted timing, and no hardware
   state effects. Existing RAM transition analysis supplies the `$012-$014` LFSR state/scratch role.
-  Carry is intentionally left unresolved because it was not preserved consistently and has not yet
-  been isolated with a controlled state probe. Used for the first resolved service table in
+  A subsequent controlled matrix varied incoming carry and selected nonzero states: returned carry
+  equals the pre-advance state’s bit 15 and does not depend on incoming carry. A zero state took 188
+  rather than 174 master clocks and matched the derived result from `$FFFF`, identifying the repair
+  seed as `$FFFF`. Used for the first resolved service table in
   `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
 - `$F000` prioritization: sixteen uninterrupted calls each took 3,278 master clocks, issued 64 VRAM
   writes, ended at VRAM address `$128B`, preserved scroll/AY-selection/mapper state, and returned
   A/X/Y as `$38/$40/$20`. This evidence is used only to select it as the next narrow probe target;
   no visual or drawing semantic is assigned yet.
+- Controlled `$F000` method: the independently authored `gamatebiosprobe` boots through an authentic
+  BIOS and cartridge to `$6020`, applies named one-field entry-state perturbations, invokes a public
+  service slot with a synthetic subroutine return, and reports only derived registers, timing,
+  changed-address summaries, hashes, and peripheral counters. The local matrix varied CPU registers
+  and status, VRAM address and fill, LCD flags, scroll, AY selection, mapper state, and RAM `$015`.
+- Controlled `$F000` result: BIT and UMC BIOS revisions agreed exactly. The service takes 3,278 master
+  clocks, writes 64 unique VRAM addresses, ends at `$128B`, returns A/X/Y as `$38/$40/$20`, restores
+  S, and preserves scroll, AY selection, and mapper state. `$015` was the only non-stack inherited RAM
+  location read before write; varying it shows that it is the cached LCD-control input, with row
+  increment forced by the service. All tested other inputs left the final VRAM comparison unchanged.
+  Used for the bounded fixed-bitmap-writer contract in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
+- Controlled `$F000` limitations and legal boundary: the matrix tests selected extremes rather than
+  every possible machine state. It does not identify the displayed image or prove that callers ignore
+  its pixels. No BIOS instructions, bitmap bytes, RAM contents, or VRAM contents are retained or
+  published; hashes are local equality checks. Any replacement artwork must be independently authored,
+  and omission of the drawing requires separate compatibility evidence.
+- Initial `$F033` probe: controlled register variation under both BIOS revisions found no inherited
+  non-stack RAM reads and exactly seven output locations at `$0A1-$0A7`, with register-dependent
+  timing and results but no peripheral effects. Independent static inspection of Tornado's cartridge
+  caller shows that it passes the `$0A1` buffer to `$F012` immediately afterward. Used to record a
+  formatter hypothesis and the remaining width/byte-order/encoding questions in
+  `docs/BIOS_RUNTIME_API_ANALYSIS.md`; no cartridge or BIOS instruction listing is retained.
 - Input-coverage method: `tools/gamate-bios-input-campaign.sh` applies independently authored,
   deterministic schedules for long Start, Select/Start plus A/B actions, and every individual control
   plus legal direction/button combinations. `tools/gamate-bios-call-coverage.py` compares derived
