@@ -49,7 +49,7 @@ def parse(path):
 
 def execution_signature(case):
     values = [case[name] for name in FIELDS]
-    values[-1] = re.sub(r"RAM=[0-9A-F]+ ", "", values[-1])
+    values[-1] = re.sub(r"\bRAM=[0-9A-F]+ ", "", values[-1])
     return tuple(values)
 
 

@@ -672,6 +672,14 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   `$0E0-$0FF` affected none. The page-2 chunks affected 2, 12, 12, 6, 4, 10, 4, and 0 cases in
   ascending address order. For each parent block, the union of chunk-level changed cases exactly
   matched the parent set, with no parent-only interaction case at this resolution.
+- Byte/four-byte extension: all 32 bytes at `$000-$01F` and eight aligned groups at `$0C0-$0DF`
+  were independently cleared in another 4,640 passing runs. `$000C` alone affected the same 106
+  cases as its sixteen-byte parent; `$0011` alone affected the same 102 cases as its parent.
+  `$004-$009` and `$012-$013` produced smaller title-specific changes. Only `$0CC-$0CF`,
+  `$0D0-$0D3`, `$0D8-$0DB`, and `$0DC-$0DF` affected execution among the four-byte groups. Child
+  unions exactly matched all four parent sets. The summary tool's final-state normalization uses a
+  word-boundary match for `RAM=` so final `VRAM=` remains part of the execution signature; separate
+  final-video and final-VRAM columns provide narrower presentation/storage views.
 - Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md`, the detailed block/title matrix in
   `docs/BIOS_ENTRY_RAM_ANALYSIS.md`, rejection of blanket RAM initialization for BIOS skipping, and
   prioritization of semantic zero-page and upper-work-buffer analysis. Authentic BIOS execution

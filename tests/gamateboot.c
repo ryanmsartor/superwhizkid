@@ -123,6 +123,24 @@ static bool perturbEntryRam(struct Gamate* g) {
 			return true;
 		}
 	}
+	if (!strncmp(pattern, "zero-byte-", 10) && strlen(pattern) == 13) {
+		char* end;
+		unsigned address = (unsigned) strtoul(pattern + 10, &end, 16);
+		if (!*end && address < 0x400) {
+			g->ram[address] = 0;
+			printf("entry RAM replaced with diagnostic pattern: %s\n", pattern);
+			return true;
+		}
+	}
+	if (!strncmp(pattern, "zero-quad-", 10) && strlen(pattern) == 12) {
+		char* end;
+		unsigned quad = (unsigned) strtoul(pattern + 10, &end, 16);
+		if (!*end && quad < 0x100) {
+			memset(g->ram + quad * 4, 0x00, 4);
+			printf("entry RAM replaced with diagnostic pattern: %s\n", pattern);
+			return true;
+		}
+	}
 	uint8_t callback = g->ram[0x00C];
 	uint8_t checksum[4] = { g->ram[0x0E0], g->ram[0x0E1], g->ram[0x0E5], g->ram[0x0E6] };
 	uint8_t stack[0x100];

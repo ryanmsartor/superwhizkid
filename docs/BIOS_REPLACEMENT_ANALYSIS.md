@@ -198,6 +198,13 @@ A further sixteen-byte sweep split `$000-$03F`, `$0C0-$0FF`, `$200-$23F`, and `$
 affected 102. `$0E0-$0FF`, including the inherited checksum copies, and `$270-$27F` produced no
 observed post-entry difference. Each parent's changed cases exactly equaled the union of its chunks.
 
+Byte-level refinement identifies `$000C`, the callback-enable flag, as accounting for the affected
+membership of `$000-$00F`: clearing it changes 106 cases across 53 titles. `$0011` independently
+accounts for all 102 cases affected by `$010-$01F`, although its semantics remain under
+investigation. Smaller dependencies occur at `$004-$009` and `$012-$013`. Four-byte refinement
+localizes the active `$0C0-$0DF` regions to `$0CC-$0CF`, `$0D0-$0D3`, `$0D8-$0DB`, and
+`$0DC-$0DF`; the intervening groups had no observed effect.
+
 Post-entry access tracking found at least one cartridge read-before-write in every case, and the
 union across the corpus covered all 1,024 physical RAM bytes. BIOS code read inherited bytes before
 their first post-entry write in 110 of 116 cases. Repeating authentic-state tracking with the broad

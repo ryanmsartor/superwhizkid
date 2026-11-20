@@ -74,6 +74,56 @@ shows that the inherited copies were not needed by these exercised post-entry pa
 to the other fifteen bytes. `$010-$01F` independently affects 51 titles and therefore contains at
 least one additional broadly consumed field or counter.
 
+## Byte and four-byte refinement
+
+All 32 individual bytes in `$000-$01F` and all eight aligned four-byte groups in `$0C0-$0DF` were
+then cleared independently. The same 116-case, 1,000-frame matrix produced 4,640 additional passing
+runs. “Execution” here includes final VRAM; only the deliberately changed final RAM hash is excluded.
+
+| Address | Changed executions | Final-video changes | Final-VRAM changes | Affected titles or observation |
+| --- | ---: | ---: | ---: | --- |
+| `$000-$003` | 0 each | 0 | 0 | No observed effect |
+| `$004` | 2 | 0 | 0 | Further Adventures of Hannibal The Cat |
+| `$005` | 2 | 0 | 0 | Further Adventures of Hannibal The Cat |
+| `$006` | 2 | 0 | 2 | Myth of Asamia |
+| `$007` | 2 | 0 | 2 | Myth of Asamia; retained VRAM only |
+| `$008` | 2 | 0 | 2 | Myth of Asamia |
+| `$009` | 2 | 0 | 2 | Myth of Asamia; retained VRAM only |
+| `$00A-$00B` | 0 each | 0 | 0 | No observed effect; `$00B` was already zero |
+| `$00C` | 106 | 20 | 23 | 53 titles; exactly the same affected-case membership as chunk `$000-$00F` |
+| `$00D-$00F` | 0 each | 0 | 0 | No observed effect; `$00E-$00F` were already zero |
+| `$010` | 0 | 0 | 0 | No observed effect |
+| `$011` | 102 | 4 | 5 | 51 titles; exactly the same affected-case membership as chunk `$010-$01F` |
+| `$012` | 4 | 2 | 2 | Hot Hero; Magic Jigsaw |
+| `$013` | 2 | 2 | 2 | Magic Jigsaw |
+| `$014-$017` | 0 each | 0 | 0 | Already zero at entry |
+| `$018-$019` | 0 each | 0 | 0 | Nonzero at entry, with no observed effect when cleared |
+| `$01A` | 0 | 0 | 0 | Already zero at entry |
+| `$01B-$01D` | 0 each | 0 | 0 | Nonzero at entry, with no observed effect when cleared |
+| `$01E-$01F` | 0 each | 0 | 0 | Already zero at entry |
+
+All affected byte-level cases paired across both BIOS revisions. `$000C` is the already documented
+callback-enable flag. Clearing it alone accounts for the broad membership of the first chunk's
+result, consistent with disabling BIOS dispatch to cartridge callbacks; other bytes in that chunk
+still produce narrower title-specific changes. `$0011` similarly accounts for the second chunk's
+affected membership, but its precise meaning remains to be established. Its broad reach makes a
+BIOS-maintained timing or interrupt field plausible, not proven.
+
+| Four-byte group | Changed executions | Final-video changes | Final-VRAM changes | Affected titles |
+| --- | ---: | ---: | ---: | --- |
+| `$0C0-$0C3` | 0 | 0 | 0 | None observed |
+| `$0C4-$0C7` | 0 | 0 | 0 | None observed |
+| `$0C8-$0CB` | 0 | 0 | 0 | None observed |
+| `$0CC-$0CF` | 18 | 2 | 3 | Baseball; Devil Castle; Fantasy Travel; Flying Goblin; Fortune 'n Luck; Galaxy Invaders; Money Maze; Punk Boy; Snowman Legend |
+| `$0D0-$0D3` | 16 | 0 | 0 | Boom; Kill Shot; Legend of Dragon Knight; Marauder; Money Maze; Myth of Asamia; Nightmare of Santa Claus; Tennis |
+| `$0D4-$0D7` | 0 | 0 | 0 | None observed |
+| `$0D8-$0DB` | 8 | 0 | 0 | Dino Bibo; Money Maze; Nightmare of Santa Claus; Tennis |
+| `$0DC-$0DF` | 4 | 0 | 0 | One Million Whys; Pipemania |
+
+For chunks `$000-$00F`, `$010-$01F`, `$0C0-$0CF`, and `$0D0-$0DF`, the union of the child-level
+affected cases exactly equals the parent's set. No parent-only dependency requiring multiple child
+regions to be cleared together was observed at this resolution.
+
 ## Interpretation
 
 The earlier page sweep is now substantially narrower:
@@ -91,18 +141,21 @@ The earlier page sweep is now substantially narrower:
   experiment. A zero observed count remains coverage evidence, not proof that a block is irrelevant
   in all later gameplay.
 
-The next efficient refinement is individual-byte perturbation of `$000-$01F`, beginning with the
-known callback byte `$000C`, followed by 4-byte subdivisions of `$0C0-$0DF`. The page-2 chunks are
-already title-specific enough to pair with static cartridge-code analysis before subdividing them
-further. After candidate fields are identified, inverse tests must preserve only those fields while
-clearing their surrounding chunk to test sufficiency, not merely necessity.
+The next efficient step is semantic analysis of `$0011` using BIOS access traces and cartridge
+callback behavior, followed by inverse tests that preserve `$000C` and `$0011` while clearing their
+surrounding chunks. The smaller `$004-$009`, `$012-$013`, and `$0CC-$0DF` title groups should be
+paired with static cartridge reads before further subdivision. The page-2 chunks are already
+title-specific enough for the same approach. Inverse tests are necessary to establish sufficiency,
+not merely the necessity demonstrated by independent clearing.
 
 ## Reproduction and limits
 
 `GAMATEBOOT_ENTRY_RAM=zero-block-NN` selects hexadecimal block `00` through `0F` in the diagnostic
 `gamateboot` executable. `GAMATEBOOT_ENTRY_RAM=zero-chunk-NN` selects a sixteen-byte physical chunk
-from `00` through `3F`. `tools/gamate-ram-perturbation-summary.py` compares aggregate reports against
-an authentic-entry report. Raw reports and user-supplied software remain outside the repository.
+from `00` through `3F`; `zero-byte-NNN` selects one physical byte, and `zero-quad-NN` selects an
+aligned four-byte group by index. `tools/gamate-ram-perturbation-summary.py` compares aggregate
+reports against an authentic-entry report. Raw reports and user-supplied software remain outside
+the repository.
 
 These are behavioral results from the current emulator and exercised paths, not physical hardware
 traces. Independent block clearing detects a dependency when removing one region changes an
