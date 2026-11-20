@@ -876,8 +876,32 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   Invaders, Mighty Tank, Tornado, and Witty Apee range from 640 to 5,120 VRAM writes and 40,716 to
   236,184 master clocks, establishing caller-defined size. Their ordered reads consistently interleave
   a sequential control stream with eight-byte graphics records; complex callers select many
-  such records. This supports a command-stream-driven, two-plane eight-row graphics blitter, but does
-  not establish command encodings or compression. No cartridge bytes or decoded payload were retained.
+  such records.
+- `$F018` control-stream perturbation method: the diagnostic probe accepts an in-memory physical-ROM
+  XOR applied only to its private cartridge copy after reaching an authentic call. Single-bit changes
+  were applied to row selectors, tile selectors, run lengths, row terminators, and the stream terminator;
+  results were classified from ordered ROM addresses, VRAM coverage, write counts, timing, and return
+  behavior. The local source bytes and decoded graphics were neither printed by the probe nor retained.
+- `$F018` command result: a row selector chooses an absolute eight-pixel-high VRAM band. It is followed
+  by `(tile_index, run_length)` pairs and an `$FF` row delimiter; `$FE` ends the stream. A nonzero tile
+  selects `plane_base + tile_index * 8`, while tile zero advances horizontally without a ROM lookup or
+  VRAM write. Each record supplies eight vertical bytes and is repeated horizontally by the run length.
+  The stream is replayed using the other plane base. Both BIOS revisions produced the same Tornado ROM
+  access sequence, clocks, VRAM coverage, output hash, and peripheral effects. This establishes a
+  two-plane tile-row blitter, but does not independently establish a more general compression command.
+  No cartridge bytes or decoded payload were retained.
+- `$F018` caller-parameter comparison: low-byte XOR perturbations were run at the first authentic call
+  in all 11 catalog titles observed to reach the service: 4-in-1, Baseball, Devil Castle, Enchanted
+  Bricks, Galaxy Invaders, GP Race, Kung-Fu Fighter, Mighty Tank, Tornado, Vindicators, and Witty Apee.
+  `$000-$001` consistently controls stream parsing; malformed shifts either failed to return, expanded
+  into runaway/misaligned work, or encountered an immediate terminator. `$006-$007` and `$008-$009`
+  independently shifted the corresponding plane's graphics reads and changed output while preserving
+  geometry and write count in every title. Used for the stable caller ABI table in
+  `docs/BIOS_RUNTIME_API_ANALYSIS.md`; no entry RAM or cartridge bytes were retained.
+- `$F018` adjacent-RAM result: full-byte entry perturbations at `$002-$005` left timing, ROM reads,
+  VRAM writes, coverage, and output unchanged in all 11 callers. Access coverage shows `$002-$003`
+  are overwritten by every call, while `$004-$005` are neither read nor written. They are classified
+  as service scratch/output and caller-preserved unused bytes respectively, not required inputs.
 - Input-coverage method: `tools/gamate-bios-input-campaign.sh` applies independently authored,
   deterministic schedules for long Start, Select/Start plus A/B actions, and every individual control
   plus legal direction/button combinations. `tools/gamate-bios-call-coverage.py` compares derived

@@ -169,6 +169,24 @@ static bool applyOption(struct Gamate* g, const char* option) {
 	OPTION("firstbank", 0xFF, g->firstBank = (uint8_t) value);
 	OPTION("vram_fill", 0xFF, memset(g->vram, (uint8_t) value, sizeof(g->vram)));
 #undef OPTION
+	// These perturb only the probe's private loaded copies; source files are never modified.
+	if (nameLength == 11 && !memcmp(option, "romxor", 6)) {
+		char offsetText[6] = {
+			option[6], option[7], option[8], option[9], option[10], 0
+		};
+		unsigned long offset;
+		if (!parseHex(offsetText, GAMATE_MAX_ROM_SIZE - 1, &offset) ||
+				offset >= g->romSize || value > 0xFF) return false;
+		g->rom[offset] ^= (uint8_t) value;
+		return true;
+	}
+	if (nameLength == 9 && !memcmp(option, "ramxor", 6)) {
+		char addressText[4] = { option[6], option[7], option[8], 0 };
+		unsigned long address;
+		if (!parseHex(addressText, 0x3FF, &address) || value > 0xFF) return false;
+		g->ram[address] ^= (uint8_t) value;
+		return true;
+	}
 	if (nameLength == 6 && !memcmp(option, "ram", 3)) {
 		char addressText[4] = { option[3], option[4], option[5], 0 };
 		unsigned long address;

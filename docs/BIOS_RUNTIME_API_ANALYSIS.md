@@ -344,15 +344,71 @@ complete trace resolves the broad structure:
 
 Ordered traces from Baseball, Enchanted Bricks, Galaxy Invaders, Mighty Tank, and Witty Apee show the
 same general interleaving of a sequential control stream with eight-byte graphics records. Complex
-screens select many records rather than repeating one. The evidence therefore identifies `$F018` as
-a command-stream-driven, two-plane eight-row graphics blitter. It does **not** yet establish the
-individual command encodings or whether any commands implement compression, so the earlier generic
-“decompressor” label is intentionally withdrawn.
+screens select many records rather than repeating one. Bitwise, in-memory perturbations of Tornado's
+control fields resolve the stream grammar without retaining its original bytes:
+
+| Field | Measured interpretation | Perturbation result |
+| --- | --- | --- |
+| Row selector | Absolute eight-pixel-high VRAM band | A one-bit change moves that band's writes by the corresponding tile-row distance. |
+| Tile index | Eight-byte record at `plane_base + index * 8` | A one-bit change shifts only that run's eight-byte ROM-read span by the predicted amount. |
+| Run length | Horizontal repetition count in byte columns | Bit changes add or remove exactly eight VRAM writes per column per active plane. |
+| `$FF` | End of the current row's run list | Changing it causes subsequent fields to be consumed as another run until a later delimiter resynchronizes parsing. |
+| `$FE` | End of the complete stream | Changing the final marker prevents the authentic call from returning cleanly within the probe bound. |
+
+A row begins with its selector, followed by zero or more `(tile_index, run_length)` pairs and `$FF`.
+After `$FF`, the next byte is another row selector or `$FE`. Tile index zero is transparent: it
+advances the horizontal position by the run length without reading graphics or writing VRAM. This
+explains Tornado's 24-row untouched interval: those rows consist entirely of transparent runs rather
+than a special skip opcode. Nonzero indices fetch one eight-byte vertical tile record and repeat it
+horizontally. Baseball's trace repeatedly fetches only the next two control bytes between different
+eight-byte records, independently confirming that one row may contain multiple run pairs. The BIOS
+traverses the complete stream again with the other plane's base pointer.
+
+This identifies `$F018` as a command-stream-driven, two-plane tile-row blitter. The stream supports
+transparent and repeated-tile runs, but no independently observed command currently establishes a
+more general compression scheme; the earlier generic “decompressor” label is therefore withdrawn.
 
 The operation is not fixed-size across software. First authentic calls from six representative titles
-range from 640 to 5,120 VRAM writes and 40,716 to 236,184 master clocks. The next analysis step is an
-input/output perturbation matrix for the control records: vary one caller-owned control byte at a time,
-then classify changes in source selection, VRAM destination, emitted dimensions, and termination.
+range from 640 to 5,120 VRAM writes and 40,716 to 236,184 master clocks. The caller comparison below
+tests whether its parameter-block roles remain consistent across that variation.
+
+#### Caller parameter-word comparison
+
+Low-byte XOR perturbations establish the same three pointer roles in every known first-call `$F018`
+caller. “Geometry preserved” means clocks and VRAM-write count remain at baseline while the output
+hash changes; small ROM-read-count changes can occur when a one-byte base shift crosses an indexed
+record boundary.
+
+| Cartridge | `$000-$001` control pointer bit-0 XOR | `$006-$007` first plane base | `$008-$009` second plane base |
+| --- | --- | --- | --- |
+| 4-in-1 | Malformed; no clean bounded return | Geometry preserved; output changed | Geometry preserved; output changed |
+| Baseball | Runaway/misaligned work before return | Geometry preserved; output changed | Geometry preserved; output changed |
+| Devil Castle | Runaway/misaligned work before return | Geometry preserved; output changed | Geometry preserved; output changed |
+| Enchanted Bricks | Runaway/misaligned work before return | Geometry preserved; output changed | Geometry preserved; output changed |
+| Galaxy Invaders | Malformed; no clean bounded return | Geometry preserved; output changed | Geometry preserved; output changed |
+| GP Race | Runaway/misaligned work before return | Geometry preserved; output changed | Geometry preserved; output changed |
+| Kung-Fu Fighter | Immediate termination with no VRAM writes | Geometry preserved; output changed | Geometry preserved; output changed |
+| Mighty Tank | Runaway/misaligned work before return | Geometry preserved; output changed | Geometry preserved; output changed |
+| Tornado | Malformed; no clean bounded return | Geometry preserved; output changed | Geometry preserved; output changed |
+| Vindicators | Runaway/misaligned work before return | Geometry preserved; output changed | Geometry preserved; output changed |
+| Witty Apee | Immediate termination with no VRAM writes | Geometry preserved; output changed | Geometry preserved; output changed |
+
+For Tornado, the ordered physical reads make the base-pointer result especially direct: perturbing
+`$006` shifts only the first eight-byte graphics span by one byte, and perturbing `$008` shifts only
+the second. The stream span does not move. Conversely, perturbing `$000` affects stream parsing rather
+than either graphics base. The cross-title matrix establishes these as stable caller ABI fields rather
+than a Tornado-specific layout.
+
+Full-byte entry perturbations of `$002-$005` leave clocks, ordered ROM reads, VRAM coverage, write
+count, and output unchanged in all 11 callers. Access coverage separates the pairs: `$002-$003` are
+overwritten deterministically by every measured call and therefore serve as service scratch/output;
+`$004-$005` are neither read nor written and remain caller-preserved. They are not required `$F018`
+inputs in the observed first-call population.
+
+The next analysis step is a structural sweep of authentic streams across calls and titles: count rows
+and runs, sum horizontal spans, identify repeated stream/base triples, and flag wrapping or out-of-range
+selectors. That can distinguish the ordinary contract from caller-specific edge cases before a
+clean-room replacement is designed.
 
 ### Stage 3: extend reachable paths
 
