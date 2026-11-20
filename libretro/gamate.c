@@ -31,6 +31,8 @@ static const uint16_t* activePalette = contrastPalette;
 static const uint16_t originalPalette[4] = { 0xCE93, 0x8CEB, 0x5327, 0x1102 };
 static const uint16_t gamateLcdPalette[4] = { 0x8C69, 0x6348, 0x3208, 0x1906 };
 static const uint16_t greyscalePalette[4] = { 0xFFFF, 0xAD55, 0x52AA, 0x0000 };
+static const uint16_t maximumContrastInk[3] = { 0x0040, 0x0848, 0x0000 };
+static unsigned selectedPaletteIndex;
 static uint16_t shades[3 * 256 + 1];
 static uint16_t lcdLevel[GAMATE_WIDTH * GAMATE_HEIGHT];
 static unsigned lcdDarken = 256, lcdFade = 256;
@@ -244,12 +246,12 @@ void retro_set_environment(retro_environment_t cb) {
 			},
 			"original"
 		},
-		{ "superwhizkid_contrast", "Contrast", "Adjusts the distance between the three ink shades and the unchanged background color. L3 decreases and R3 increases the level during play.",
-			{ { "0", NULL }, { "1", NULL }, { "2", NULL }, { "3", NULL },
+		{ "superwhizkid_contrast", "Contrast", "Adjusts the distance between the three ink shades and the unchanged background color. At 16, all ink shades merge. L3 decreases and R3 increases the level during play.",
+			{ { "1", NULL }, { "2", NULL }, { "3", NULL },
 				{ "4", NULL }, { "5", NULL }, { "6", NULL }, { "7", NULL },
 				{ "8", "8 (default)" }, { "9", NULL }, { "10", NULL }, { "11", NULL },
 				{ "12", NULL }, { "13", NULL }, { "14", NULL }, { "15", NULL },
-				{ NULL, NULL } }, "8" },
+				{ "16", NULL }, { NULL, NULL } }, "8" },
 		{ "superwhizkid_audio_output", "Audio Output", "Selects the output mix. Stereo preserves the Gamate's channel panning; Mono combines both sides equally; Built-in Speaker applies an estimated band-limited, softly distorting response based on recordings of real hardware.",
 			{ { "stereo", "Stereo" }, { "mono", "Mono" },
 				{ "speaker", "Built-in Speaker" }, { NULL, NULL } }, "stereo" },
@@ -268,7 +270,7 @@ void retro_set_environment(retro_environment_t cb) {
 	};
 	static const struct retro_variable variables[] = {
 		{ "superwhizkid_palette", "Palette; original|accurate|greyscale" },
-		{ "superwhizkid_contrast", "Contrast; 8|0|1|2|3|4|5|6|7|9|10|11|12|13|14|15" },
+		{ "superwhizkid_contrast", "Contrast; 8|1|2|3|4|5|6|7|9|10|11|12|13|14|15|16" },
 		{ "superwhizkid_audio_output", "Audio Output; stereo|mono|speaker" },
 		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting; off|1|2|3|4|5" },
@@ -292,8 +294,12 @@ static uint16_t blend565(uint16_t a, uint16_t b, unsigned t) {
 	return (uint16_t) (r << 11 | g << 5 | bl);
 }
 
-static unsigned contrastChannel(unsigned background, unsigned ink, unsigned maximum) {
-	int value = (int) background + ((int) ink - (int) background) * (int) contrastLevel / 8;
+static unsigned contrastChannel(unsigned background, unsigned ink, unsigned endpoint,
+		unsigned maximum) {
+	int value = contrastLevel <= 8 ?
+		(int) background + ((int) ink - (int) background) * (int) contrastLevel / 8 :
+		((int) ink * (int) (16 - contrastLevel) +
+			(int) endpoint * (int) (contrastLevel - 8)) / 8;
 	if (value < 0) return 0;
 	return (unsigned) value > maximum ? maximum : (unsigned) value;
 }
@@ -303,10 +309,14 @@ static void buildContrastPalette(void) {
 	unsigned br = selectedPalette[0] >> 11;
 	unsigned bg = selectedPalette[0] >> 5 & 63;
 	unsigned bb = selectedPalette[0] & 31;
+	uint16_t endpoint = maximumContrastInk[selectedPaletteIndex];
+	unsigned er = endpoint >> 11;
+	unsigned eg = endpoint >> 5 & 63;
+	unsigned eb = endpoint & 31;
 	for (unsigned i = 1; i < 4; i++) {
-		unsigned r = contrastChannel(br, selectedPalette[i] >> 11, 31);
-		unsigned g = contrastChannel(bg, selectedPalette[i] >> 5 & 63, 63);
-		unsigned b = contrastChannel(bb, selectedPalette[i] & 31, 31);
+		unsigned r = contrastChannel(br, selectedPalette[i] >> 11, er, 31);
+		unsigned g = contrastChannel(bg, selectedPalette[i] >> 5 & 63, eg, 63);
+		unsigned b = contrastChannel(bb, selectedPalette[i] & 31, eb, 31);
 		contrastPalette[i] = (uint16_t) (r << 11 | g << 5 | b);
 	}
 }
@@ -322,8 +332,10 @@ static void readOptions(void) {
 	struct retro_variable var = { "superwhizkid_palette", NULL };
 	const char* palette = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ?
 		var.value : "original";
-	selectedPalette = !strcmp(palette, "accurate") ? gamateLcdPalette :
-		!strcmp(palette, "greyscale") ? greyscalePalette : originalPalette;
+	selectedPaletteIndex = !strcmp(palette, "accurate") ? 1 :
+		!strcmp(palette, "greyscale") ? 2 : 0;
+	selectedPalette = selectedPaletteIndex == 1 ? gamateLcdPalette :
+		selectedPaletteIndex == 2 ? greyscalePalette : originalPalette;
 
 	var.key = "superwhizkid_contrast";
 	var.value = NULL;
@@ -331,7 +343,8 @@ static void readOptions(void) {
 		var.value : "8";
 	char* contrastEnd;
 	unsigned newContrast = (unsigned) strtoul(contrastValue, &contrastEnd, 10);
-	contrastLevel = *contrastValue && !*contrastEnd && newContrast <= 15 ? newContrast : 8;
+	contrastLevel = *contrastValue && !*contrastEnd && newContrast >= 1 && newContrast <= 16 ?
+		newContrast : 8;
 	buildContrastPalette();
 	buildShades();
 
@@ -521,11 +534,11 @@ static void readInput(void) {
 	shortcuts |= inputStateCb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3) ? 1 : 0;
 	shortcuts |= inputStateCb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3) ? 2 : 0;
 	unsigned oldContrast = contrastLevel;
-	if ((shortcuts & 1) && !(contrastShortcutButtons & 1) && contrastLevel) contrastLevel--;
-	if ((shortcuts & 2) && !(contrastShortcutButtons & 2) && contrastLevel < 15) contrastLevel++;
+	if ((shortcuts & 1) && !(contrastShortcutButtons & 1) && contrastLevel > 1) contrastLevel--;
+	if ((shortcuts & 2) && !(contrastShortcutButtons & 2) && contrastLevel < 16) contrastLevel++;
 	if (contrastLevel != oldContrast) {
-		static const char* values[] = { "0", "1", "2", "3", "4", "5", "6", "7",
-			"8", "9", "10", "11", "12", "13", "14", "15" };
+		static const char* values[] = { NULL, "1", "2", "3", "4", "5", "6", "7",
+			"8", "9", "10", "11", "12", "13", "14", "15", "16" };
 		struct retro_variable contrast = { "superwhizkid_contrast", values[contrastLevel] };
 		buildContrastPalette();
 		buildShades();

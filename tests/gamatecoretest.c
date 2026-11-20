@@ -93,12 +93,12 @@ static bool environment(unsigned command, void* data) {
 				contrastValues = true;
 				for (unsigned i = 0; i < 16; i++) {
 					char expectedValue[3];
-					snprintf(expectedValue, sizeof(expectedValue), "%u", i);
+					snprintf(expectedValue, sizeof(expectedValue), "%u", i + 1);
 					contrastValues &= options->values[i].value &&
 						!strcmp(options->values[i].value, expectedValue);
 				}
-				contrastValues &= !options->values[16].value && options->values[8].label &&
-					!strcmp(options->values[8].label, "8 (default)");
+				contrastValues &= !options->values[16].value && options->values[7].label &&
+					!strcmp(options->values[7].label, "8 (default)");
 			}
 			if (!strcmp(options->key, "superwhizkid_flicker_reduction")) {
 				flickerValues = options->values[3].value &&
@@ -262,10 +262,11 @@ static void writeTestFirmware(const char* name, uint8_t marker) {
 		0xA9, 0x00, 0x8D, 0x01, 0x40, // tone A period high
 		0xA9, 0x3E, 0x8D, 0x07, 0x40, // enable tone A only
 		0xA9, 0x0F, 0x8D, 0x08, 0x40, // channel A volume
+		0xA9, 0x00, 0x8D, 0x09, 0x00, // default controlled plane-1 byte to zero
 		0xA9, 0x00, 0x8D, 0x04, 0x50, // plane 0, X address 0
 		0xA9, 0x0A, 0x8D, 0x05, 0x50, // row 10 (initial visible top row)
 		0xA9, 0x80, 0x8D, 0x07, 0x50, // set its first pixel
-		0xAD, 0x02, 0x00,             // loop ($E02A): LDA $0002
+		0xAD, 0x02, 0x00,             // loop ($E02F): LDA $0002
 		0xF0, 0xFB,                   // BEQ loop
 		0xAD, 0x00, 0x44,             // LDA $4400
 		0x8D, 0x00, 0x00,             // STA $0000
@@ -274,6 +275,10 @@ static void writeTestFirmware(const char* name, uint8_t marker) {
 		0xA9, 0x0A, 0x8D, 0x05, 0x50, // reset row 10
 		0xAD, 0x04, 0x00,             // read controlled pixel byte
 		0x8D, 0x07, 0x50,             // write controlled pixel byte
+		0xA9, 0x80, 0x8D, 0x04, 0x50, // reset plane 1/X address
+		0xA9, 0x0A, 0x8D, 0x05, 0x50, // reset row 10
+		0xAD, 0x09, 0x00,             // read controlled plane-1 byte
+		0x8D, 0x07, 0x50,             // write controlled plane-1 byte
 		0xAD, 0x05, 0x00,             // check one-shot UART request
 		0xF0, 0x23,                   // skip UART block when zero
 		0xAD, 0x06, 0x00,             // transmitter data
@@ -283,16 +288,16 @@ static void writeTestFirmware(const char* name, uint8_t marker) {
 		0xAD, 0x00, 0x4C, 0xAD, 0x00, 0x4C,
 		0xAD, 0x00, 0x4C, 0xAD, 0x00, 0x4C,
 		0xA9, 0x00, 0x8D, 0x05, 0x00, // clear one-shot request
-		0x4C, 0x2A, 0xE0              // JMP loop
+		0x4C, 0x2F, 0xE0              // JMP loop
 	};
 	memcpy(firmware, program, sizeof(program));
 	uint8_t nmi[] = {
 		0xAD, 0x00, 0x48, 0x8D, 0x07, 0x00, // save received byte
 		0xEE, 0x08, 0x00, 0x40              // count received-byte NMIs, RTI
 	};
-	memcpy(firmware + 0x080, nmi, sizeof(nmi));
-	firmware[0xFFA] = 0x80;
-	firmware[0xFFB] = 0xE0;
+	memcpy(firmware + 0x100, nmi, sizeof(nmi));
+	firmware[0xFFA] = 0x00;
+	firmware[0xFFB] = 0xE1;
 	firmware[0xFFC] = 0x00;
 	firmware[0xFFD] = 0xE0;
 	writeFirmwareFile(name, firmware);
@@ -496,22 +501,54 @@ int main(int argc, char** argv) {
 	p_retro_run();
 	assert(firstVideoPixel == 0x8CEB); // invalid palette falls back to Original
 
-	// Contrast level 8 preserves the selected palette exactly. Level 0 collapses only the three ink
-	// shades into the unchanged background, while higher levels move them farther from it.
-	contrastOption = "0";
+	// Contrast level 8 preserves the selected palette exactly. Level 1 is the minimum, and level 16
+	// collapses all three ink shades to a palette-specific dark endpoint while leaving the background
+	// unchanged.
+	contrastOption = "1";
 	optionUpdate = true;
 	p_retro_run();
-	assert(firstVideoPixel == 0xCE93);
-	contrastOption = "8";
+	assert(firstVideoPixel != 0xCE93 &&
+		colorDistance(firstVideoPixel, 0xCE93) < colorDistance(0x8CEB, 0xCE93));
+	activeButton = RETRO_DEVICE_ID_JOYPAD_L3;
+	p_retro_run();
+	assert(!strcmp(contrastOption, "1"));
+	activeButton = ~0u;
+	p_retro_run();
+	contrastOption = "0"; // removed legacy level is invalid and falls back to the default
 	optionUpdate = true;
 	p_retro_run();
 	assert(firstVideoPixel == 0x8CEB);
 	unsigned defaultContrastDistance = colorDistance(firstVideoPixel, 0xCE93);
-	contrastOption = "15";
+	contrastOption = "16";
 	optionUpdate = true;
 	p_retro_run();
-	assert(colorDistance(firstVideoPixel, 0xCE93) > defaultContrastDistance);
+	assert(firstVideoPixel == 0x0040); // Original retains its green-black ink character
 	ram[4] = 0;
+	ram[9] = 0xFF;
+	p_retro_run();
+	assert(firstVideoPixel == 0x0040);
+	ram[4] = 0xFF;
+	p_retro_run();
+	assert(firstVideoPixel == 0x0040);
+	paletteOption = "accurate";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0x0848); // Gamate LCD converges on blue-black
+	paletteOption = "greyscale";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0x0000 && frameIsGreyscale); // neutral through absolute black
+	paletteOption = "original";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0x0040);
+	activeButton = RETRO_DEVICE_ID_JOYPAD_R3;
+	p_retro_run();
+	assert(!strcmp(contrastOption, "16") && firstVideoPixel == 0x0040);
+	activeButton = ~0u;
+	p_retro_run();
+	ram[4] = 0;
+	ram[9] = 0;
 	p_retro_run();
 	assert(firstVideoPixel == 0xCE93); // the background color never changes
 	ram[4] = 0xFF;
