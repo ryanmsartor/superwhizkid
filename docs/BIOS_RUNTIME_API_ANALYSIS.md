@@ -275,6 +275,34 @@ yet established, so the narrower name **strided RAM initializer** is retained. S
 loop arithmetic and result; no observed commercial call enters that mode, and D-set behavior is not
 part of the replacement contract.
 
+### Fifth resolved contract: `$F00F`
+
+`$F00F` is a fixed plane-0 VRAM rectangle clear. Logical plane/address coverage from the controlled
+probe establishes 25 rows of 31 consecutive bytes:
+
+- rows 230 through 254;
+- byte columns 0 through 30 (pixel columns 0 through 247); and
+- plane 0 only.
+
+Equivalently, it writes zero to `$1CC0-$1CDE`, then the corresponding 31-byte span every `$20`
+addresses through `$1FC0-$1FDE`. It deliberately leaves byte column 31 and row 255 untouched.
+
+| Property | Controlled contract |
+| --- | --- |
+| Input registers | Tested A/X/Y values are ignored. |
+| Input RAM | Reads cached LCD control at `$015`; no other inherited non-stack RAM is read. |
+| VRAM effect | Writes zero to 775 unique plane-0 locations forming the fixed 31-byte × 25-row rectangle. Initial VRAM contents do not affect coverage or output. |
+| Return | A, X, and Y become zero; S is restored; final VRAM address is `$1FFE`. |
+| Status | C and Z are set; N is clear; I, D, and V are preserved across tested entry states. |
+| Timing | 15,930 master clocks (7,965 CPU cycles). |
+| LCD state | Selects plane 0 and forces row increment while retaining the other cached mode bits from `$015`. Scroll is preserved. |
+| Scratch RAM | Leaves `$018-$01A/$01C-$01D` as `$1F,$E6,$00/$FF,$19` and `$0A8` as zero. |
+| Other hardware effects | No AY-register, mapper, UART, IRQ, or NMI effects. |
+
+Both BIOS revisions produced identical register, RAM, VRAM, timing, and hardware results. The cleared
+rectangle's later software purpose is not yet established, so the contract names the measured VRAM
+operation without labeling it as a screen, font, sprite, or workspace clear.
+
 ### Stage 3: extend reachable paths
 
 Apply repeatable Start, A, B, and directional schedules, including Tornado's known long Start press,
@@ -322,8 +350,10 @@ effects are functionally required by a clean-room resident replacement.
 
 The first implementation of this stage is `gamatebiosprobe`, described in the `$F000` contract above.
 Its option syntax permits controlled CPU-register, RAM, VRAM-fill, LCD, scroll, AY-selection, and
-mapper-state perturbations. Public documentation should retain only behavioral summaries needed to
-specify an ABI; local full-state hashes are comparison aids rather than distributable firmware data.
+mapper-state perturbations. Its diagnostic output reports VRAM write coverage as logical plane/address
+runs rather than interleaved storage offsets. Public documentation should retain only behavioral
+summaries needed to specify an ABI; local full-state hashes are comparison aids rather than
+distributable firmware data.
 
 ### Parallel mapper audit
 

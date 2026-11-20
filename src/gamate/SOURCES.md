@@ -841,6 +841,19 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Controlled `$F024` limitation: setting D changes its loop arithmetic. All observed commercial calls
   use D clear, so D-set behavior is excluded from the clean-room contract. The two strided fields are
   not assigned a sprite, object, or other semantic name until cartridge-side ownership is established.
+- Controlled `$F00F` method: the independent probe varied registers, status, cached LCD control, and
+  initial VRAM fills under both BIOS revisions. Diagnostic VRAM coverage was extended to report
+  logical plane/address runs, avoiding both pixel contents and the unreadable singleton pattern caused
+  by the emulator's interleaved plane storage.
+- Controlled `$F00F` result: both BIOSes take 15,930 master clocks and write zero to 775 unique plane-0
+  bytes: columns 0-30 across rows 230-254. The service ignores tested A/X/Y, reads only cached LCD
+  control `$015`, returns A/X/Y zero, restores S, leaves the final VRAM address at `$1FFE`, selects
+  plane 0 with row increment forced, and preserves scroll and all other peripheral state. It also
+  leaves fixed scratch values in `$018-$01A/$01C-$01D` and `$0A8`. Used for the plane-0 rectangle-clear
+  contract in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
+- Controlled `$F00F` limitation: the geometry and values are resolved, but the rectangle's software
+  role is not. It is deliberately not called a screen, font, sprite, or workspace clear without
+  cartridge-side evidence.
 - Input-coverage method: `tools/gamate-bios-input-campaign.sh` applies independently authored,
   deterministic schedules for long Start, Select/Start plus A/B actions, and every individual control
   plus legal direction/button combinations. `tools/gamate-bios-call-coverage.py` compares derived

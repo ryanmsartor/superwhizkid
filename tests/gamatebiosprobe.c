@@ -54,6 +54,28 @@ static uint32_t byteHash(const uint8_t* data, size_t size) {
 	return hash;
 }
 
+static bool coverageBit(const uint8_t* bits, unsigned offset) {
+	return bits[offset >> 3] & ((uint8_t) 1 << (offset & 7));
+}
+
+static void printVramCoverageRuns(const uint8_t* bits) {
+	printf("# vram_written_runs:");
+	for (unsigned plane = 0; plane < 2; plane++) {
+		for (unsigned address = 0; address < 0x2000;) {
+			if (!coverageBit(bits, (address << 1) | plane)) {
+				address++;
+				continue;
+			}
+			unsigned first = address;
+			do address++;
+			while (address < 0x2000 && coverageBit(bits, (address << 1) | plane));
+			if (address == first + 1) printf(" P%u:%04X", plane, first);
+			else printf(" P%u:%04X-%04X", plane, first, address - 1);
+		}
+	}
+	putchar('\n');
+}
+
 static uint8_t lcdFlags(const struct Gamate* g) {
 	return (g->vramPlane ? 0x01 : 0) | (g->incrementRow ? 0x02 : 0) |
 		(g->window ? 0x04 : 0) | (g->swapPlanes ? 0x08 : 0) |
@@ -210,6 +232,7 @@ int main(int argc, char** argv) {
 		if (bits[address >> 3] & ((uint8_t) 1 << (address & 7))) printf(" %03X", address);
 	}
 	putchar('\n');
+	printVramCoverageRuns(g.diagnostics.vramWritten);
 	printf("slot\tin_a\tin_x\tin_y\tin_s\tin_p\tout_a\tout_x\tout_y\tout_s\tout_p\t"
 		"clocks\tram_changed\tram_first\tram_last\tram_hash\t"
 		"vram_changed\tvram_first\tvram_last\tvram_hash\tvram_unique_written\t"
