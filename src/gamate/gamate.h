@@ -25,11 +25,22 @@ struct GamateCpu {
 struct GamateDiagnostics {
 	uint64_t instructions, unsupportedOpcodes, irqsTaken, nmisTaken;
 	uint64_t ayWrites, lcdWrites, vramWrites, bankWrites;
+#ifdef GAMATE_VRAM_DIAGNOSTICS
+	uint64_t vramTrackedWrites, vramReads, vramReadBeforeWrite;
+	uint64_t vramDisplayReads, vramDisplayReadBeforeWrite;
+#endif
 	uint64_t uartClocks, uartReceivedBits;
 	uint64_t ayRegisterWrites[16], ayActiveSamples[3];
 	uint64_t controllerReads, pressedControllerReads;
 	uint16_t lastUnsupportedPc;
 	uint8_t lastUnsupportedOpcode;
+#ifdef GAMATE_VRAM_DIAGNOSTICS
+	bool vramCoverageEnabled;
+	uint16_t vramUniqueWritten, vramUniqueReadBeforeWrite, vramUniqueDisplayReadBeforeWrite;
+	uint8_t vramWritten[0x4000 / 8];
+	uint8_t vramReadBeforeWriteMap[0x4000 / 8];
+	uint8_t vramDisplayReadBeforeWriteMap[0x4000 / 8];
+#endif
 };
 
 struct GamateAy {
@@ -101,6 +112,11 @@ void gamateSetLink(struct Gamate* gamate, GamateLinkBitCallback callback, void* 
 void gamateUartReceiveBit(struct Gamate* gamate, bool bit);
 // Immediate diagnostic preview; normal execution builds the picture progressively in run clocks.
 void gamateRenderSnapshot(struct Gamate* gamate);
+#ifdef GAMATE_VRAM_DIAGNOSTICS
+// Restarts diagnostic-only VRAM access coverage without changing machine state. This API and its
+// storage do not exist in normal core builds.
+void gamateResetVramDiagnostics(struct Gamate* gamate);
+#endif
 void gamateSetAudio(struct Gamate* gamate, int16_t* output, size_t frameCapacity, unsigned sampleRate);
 void gamateCpuReset(struct Gamate* gamate);
 unsigned gamateCpuStep(struct Gamate* gamate);

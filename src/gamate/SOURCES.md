@@ -606,6 +606,35 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   trace. Invariance does not prove necessity, and hashes were not used as a substitute for the direct
   RAM/VRAM comparisons. The sweep does not establish post-entry helper usage.
 
+### Cartridge-entry VRAM perturbation sweep
+
+- Local origin: all 58 user-supplied cartridges were run for 1,000 post-entry frames under both BIOS
+  revisions after replacing only entry VRAM with authentic, zero, `$FF`, alternating-plane, or
+  deterministic address-derived contents. Authentic and zero were repeated with the standard broad
+  controller schedule. Reports remain outside the repository and contain derived hashes/counters but
+  no ROM, BIOS, VRAM image, or framebuffer payload.
+- Method: independently authored diagnostics restart VRAM coverage at `$6020`, count CPU and active
+  LCD reads before a byte's first cartridge write, and retain bitmaps only in nonserialized diagnostic
+  state. The instrumentation is compiled into a separate diagnostic library used by test tools; the
+  normal library and libretro core contain neither its storage nor its per-access checks. A release
+  build's normal `gamate.c` object was byte-identical to the pre-instrumentation object. `gamateboot`
+  reports final machine hashes and behavioral counters;
+  `tools/gamate-vram-perturbation-summary.py` excludes expected VRAM/video differences when comparing
+  execution state. Purpose-written unit tests verify CPU/display read-before-write accounting and
+  ensure display blanking does not count a VRAM fetch.
+- Result: authentic versus cleared VRAM produced zero execution, final-video, or final-VRAM differences
+  in all 116 unattended cases and all 116 automated-input cases. Across all five unattended patterns,
+  arbitrary nonzero contents changed execution for seven titles under both BIOSes and changed the
+  final displayed frame for two; all 116 final VRAM images varied because cartridges need not rewrite
+  the whole 16 KiB backing store. Sixteen unattended titles performed CPU reads before writes, with
+  Insect War reading 12,800 distinct bytes before their first write.
+- Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md` and the clean-room policy that replacement startup may
+  clear VRAM instead of inheriting or reconstructing authentic startup graphics. It does not justify
+  uninitialized or arbitrary VRAM.
+- Limitations: 1,000-frame unattended and deterministic-input paths are broad but not exhaustive;
+  unknown cartridges or later gameplay may have additional requirements. The experiment evaluates
+  behavior in the current emulator, not power-on electrical VRAM state on physical hardware.
+
 ### Post-entry BIOS runtime API trace
 
 - Local origin: all 58 user-supplied cartridges were executed under both authentic BIOS revisions

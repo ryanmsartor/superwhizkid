@@ -123,6 +123,42 @@ boundary. Options include a small clean-room resident firmware or explicit high-
 interception. A resident replacement is easier to reason about with ordinary 6502 execution and less
 likely to create special CPU paths.
 
+## Entry-VRAM perturbation result
+
+The exact authentic startup image is not required by the tested commercial corpus. A controlled
+experiment replaced only the 16 KiB VRAM contents at `$6020`, preserving CPU, RAM, LCD state and
+phase, mapper, interrupts, audio, peripherals, and every other entry field.
+
+Five entry policies were tested for 1,000 frames across all 58 cartridges and both BIOS revisions:
+authentic contents, all zeroes, all `$FF`, alternating plane-oriented bytes, and a deterministic
+address-derived pattern. The authentic and cleared runs were also repeated with the standard broad
+controller-input schedule.
+
+| Comparison | Cases | Execution differences | Final-video differences | Final-VRAM differences |
+| --- | ---: | ---: | ---: | ---: |
+| Authentic versus cleared, unattended | 116 | 0 | 0 | 0 |
+| Authentic versus cleared, automated input | 116 | 0 | 0 | 0 |
+| All five patterns, unattended | 116 | 14 (7 titles under both BIOSes) | 4 (2 titles under both BIOSes) | 116 |
+
+“Execution” compares final CPU/RAM/mapper/LCD-address state, audio and peripheral activity, controller
+behavior, and relevant counters while deliberately excluding video and VRAM hashes. Under both
+unattended and automated-input coverage, clearing VRAM was exactly equivalent to inheriting the
+authentic startup image: every compared execution field, frame-1/60/1000 video and audio observation,
+final framebuffer hash, and final VRAM hash matched.
+
+The broader perturbations establish an important limit. Sixteen titles in the unattended run made
+CPU VRAM reads before writing every byte they read; input-driven coverage found fifteen such titles.
+Some read thousands of bytes, and Insect War read 12,800 distinct bytes before writing them. Arbitrary
+garbage is therefore unsafe: nonzero patterns changed execution in Dinosaur Park, Galaxy Invaders,
+Kill Shot, Mars Voyage, The Golden Pyramid, Tornado, and Witty Apee, while Galaxy Invaders and Tornado
+also retained a different final displayed frame.
+
+The supported replacement policy is consequently **clear VRAM**, not “VRAM contents do not matter.”
+The authentic logo/image bytes may be omitted without copying or reconstructing them. This conclusion
+applies to the current catalog and exercised paths; later gameplay or unknown cartridges could still
+impose additional initialized-state requirements, but the exact authentic image is no longer a
+blocker for clean-room replacement work.
+
 ## What should not be copied
 
 The sweep is useful as a behavioral oracle, not as replacement payload data. The project should not:
@@ -148,7 +184,9 @@ The following work remains necessary:
 3. Perturb invariant RAM fields individually or by functional group to determine which games read
    them before overwriting them.
 4. Test a clean RAM policy while preserving only documented callback/checksum state.
-5. Test clearing or independently drawing VRAM instead of inheriting authentic startup graphics.
+5. ~~Test clearing or independently drawing VRAM instead of inheriting authentic startup graphics.~~
+   Complete: cleared VRAM matches authentic entry exactly across unattended and automated-input
+   matrices; arbitrary nonzero contents are unsafe.
 6. Compare both authentic entry phases with a canonical replacement phase across the complete corpus.
 7. Verify reset, save-state, NMI, IRQ, UART, and frontend intro-skip behavior under replacement boot.
 8. Keep replacement-firmware tests purpose-written and free of authentic byte sequences or assets.

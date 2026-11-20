@@ -16,8 +16,15 @@ add_library(superwhizkid STATIC src/gamate/gamate.c src/gamate/cpu.c)
 target_include_directories(superwhizkid PUBLIC src)
 target_compile_options(superwhizkid PRIVATE -O3)
 
+# Heavy VRAM access instrumentation is compiled only into diagnostic executables. Keeping its checks
+# out of the normal library preserves the LCD hot path used by the libretro core.
+add_library(superwhizkid_diagnostics STATIC src/gamate/gamate.c src/gamate/cpu.c)
+target_include_directories(superwhizkid_diagnostics PUBLIC src)
+target_compile_definitions(superwhizkid_diagnostics PUBLIC GAMATE_VRAM_DIAGNOSTICS)
+target_compile_options(superwhizkid_diagnostics PRIVATE -O3)
+
 add_executable(gamatetest tests/gamatetest.c)
-target_link_libraries(gamatetest superwhizkid)
+target_link_libraries(gamatetest superwhizkid_diagnostics)
 target_compile_options(gamatetest PRIVATE -UNDEBUG)
 add_test(NAME gamate-unit COMMAND gamatetest)
 
@@ -25,7 +32,7 @@ add_executable(gamate-6502test tests/6502test.c src/gamate/cpu.c)
 target_include_directories(gamate-6502test PRIVATE src)
 
 add_executable(gamateboot tests/gamateboot.c)
-target_link_libraries(gamateboot superwhizkid)
+target_link_libraries(gamateboot superwhizkid_diagnostics)
 
 add_executable(gamatebioscalls tests/gamatebioscalls.c)
 target_link_libraries(gamatebioscalls superwhizkid)

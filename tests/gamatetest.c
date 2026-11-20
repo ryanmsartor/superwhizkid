@@ -143,6 +143,39 @@ static void testVideo(void) {
 	uint8_t bios[GAMATE_BIOS_SIZE] = { 0 }, rom[0x4000] = { 0 };
 	assert(gamateLoad(&g, rom, sizeof(rom), bios, sizeof(bios)));
 	g.protectionPassed = true;
+
+	// Diagnostic-only VRAM coverage distinguishes CPU/display reads before a post-boundary write.
+	gamateResetVramDiagnostics(&g);
+	gamateWrite(&g, 0x5004, 0x00);
+	gamateWrite(&g, 0x5005, 0x00);
+	gamateRead(&g, 0x5006);
+	assert(g.diagnostics.vramReads == 1 && g.diagnostics.vramReadBeforeWrite == 1 &&
+		g.diagnostics.vramUniqueReadBeforeWrite == 1);
+	gamateWrite(&g, 0x5004, 0x00);
+	gamateWrite(&g, 0x5005, 0x00);
+	gamateWrite(&g, 0x5007, 0x42);
+	gamateWrite(&g, 0x5004, 0x00);
+	gamateWrite(&g, 0x5005, 0x00);
+	assert(gamateRead(&g, 0x5006) == 0x42);
+	assert(g.diagnostics.vramTrackedWrites == 1 && g.diagnostics.vramUniqueWritten == 1 &&
+		g.diagnostics.vramReads == 2 && g.diagnostics.vramReadBeforeWrite == 1);
+	gamateResetVramDiagnostics(&g);
+	g.scrollX = g.scrollY = 0;
+	g.lcdClock = g.lcdRowEvent = 0;
+	gamateRunClocks(&g, 162);
+	assert(g.diagnostics.vramDisplayReads == 160 &&
+		g.diagnostics.vramDisplayReadBeforeWrite == 160 &&
+		g.diagnostics.vramUniqueDisplayReadBeforeWrite == 20);
+	gamateResetVramDiagnostics(&g);
+	g.displayBlank = true;
+	g.lcdClock = g.lcdRowEvent = 0;
+	gamateRunClocks(&g, 162);
+	assert(g.diagnostics.vramDisplayReads == 0);
+	g.displayBlank = false;
+	g.lcdClock = g.lcdRowEvent = 0;
+	g.masterClocks = g.frameClocks = g.irqClocks = 0;
+	g.frameDone = g.irq = false;
+	gamateResetVramDiagnostics(&g);
 	gamateWrite(&g, 0x5003, 0); // no vertical scroll
 	gamateWrite(&g, 0x5004, 0); // plane 0, address low
 	gamateWrite(&g, 0x5005, 0); // address high

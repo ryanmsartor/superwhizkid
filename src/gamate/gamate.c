@@ -155,6 +155,55 @@ static void incrementVram(struct Gamate* g) {
 	g->vramAddress = (g->vramAddress + (g->incrementRow ? 0x20 : 1)) & 0x1FFF;
 }
 
+#ifdef GAMATE_VRAM_DIAGNOSTICS
+static bool setVramDiagnosticBit(uint8_t* bits, uint16_t offset) {
+	uint8_t mask = (uint8_t) 1 << (offset & 7);
+	uint8_t* byte = &bits[offset >> 3];
+	bool newlySet = !(*byte & mask);
+	*byte |= mask;
+	return newlySet;
+}
+
+void gamateResetVramDiagnostics(struct Gamate* g) {
+	g->diagnostics.vramCoverageEnabled = true;
+	g->diagnostics.vramTrackedWrites = 0;
+	g->diagnostics.vramReads = 0;
+	g->diagnostics.vramReadBeforeWrite = 0;
+	g->diagnostics.vramDisplayReads = 0;
+	g->diagnostics.vramDisplayReadBeforeWrite = 0;
+	g->diagnostics.vramUniqueWritten = 0;
+	g->diagnostics.vramUniqueReadBeforeWrite = 0;
+	g->diagnostics.vramUniqueDisplayReadBeforeWrite = 0;
+	memset(g->diagnostics.vramWritten, 0, sizeof(g->diagnostics.vramWritten));
+	memset(g->diagnostics.vramReadBeforeWriteMap, 0,
+		sizeof(g->diagnostics.vramReadBeforeWriteMap));
+	memset(g->diagnostics.vramDisplayReadBeforeWriteMap, 0,
+		sizeof(g->diagnostics.vramDisplayReadBeforeWriteMap));
+}
+
+static void markVramRead(struct Gamate* g, uint16_t offset, bool display) {
+	if (!g->diagnostics.vramCoverageEnabled) return;
+	if (display) g->diagnostics.vramDisplayReads++;
+	else g->diagnostics.vramReads++;
+	if (g->diagnostics.vramWritten[offset >> 3] & ((uint8_t) 1 << (offset & 7))) return;
+	if (display) {
+		g->diagnostics.vramDisplayReadBeforeWrite++;
+		g->diagnostics.vramUniqueDisplayReadBeforeWrite += setVramDiagnosticBit(
+			g->diagnostics.vramDisplayReadBeforeWriteMap, offset);
+	} else {
+		g->diagnostics.vramReadBeforeWrite++;
+		g->diagnostics.vramUniqueReadBeforeWrite += setVramDiagnosticBit(
+			g->diagnostics.vramReadBeforeWriteMap, offset);
+	}
+}
+
+static void markVramWrite(struct Gamate* g, uint16_t offset) {
+	if (!g->diagnostics.vramCoverageEnabled) return;
+	g->diagnostics.vramTrackedWrites++;
+	g->diagnostics.vramUniqueWritten += setVramDiagnosticBit(g->diagnostics.vramWritten, offset);
+}
+#endif
+
 static void protectionWrite(struct Gamate* g, bool bit) {
 	static const uint8_t key[] = "BIT CORPORATION";
 	if (g->protectionPosition < 8) {
@@ -238,6 +287,9 @@ uint8_t gamateRead(struct Gamate* g, uint16_t address) {
 	}
 	if ((address & 0xFC00) == 0x5000 && (address & 7) == 6) {
 		uint16_t offset = (g->vramAddress << 1) | g->vramPlane;
+#ifdef GAMATE_VRAM_DIAGNOSTICS
+		markVramRead(g, offset, false);
+#endif
 		value = g->vram[offset];
 		incrementVram(g);
 		goto done;
@@ -328,6 +380,9 @@ void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
 		case 7: {
 			uint16_t offset = (g->vramAddress << 1) | g->vramPlane;
 			g->vram[offset] = value;
+#ifdef GAMATE_VRAM_DIAGNOSTICS
+			markVramWrite(g, offset);
+#endif
 			g->diagnostics.vramWrites++;
 			incrementVram(g);
 			break;
@@ -437,6 +492,9 @@ static void lcdRefreshRow(struct Gamate* g) {
 	for (int x = 0; x < GAMATE_WIDTH; x++) {
 		int px = (x + sx) & 0xFF;
 		int offset = (((sy & 0xFF) * 0x20) + (px >> 3)) << 1 | plane;
+#ifdef GAMATE_VRAM_DIAGNOSTICS
+		if (!g->displayBlank) markVramRead(g, (uint16_t) offset, true);
+#endif
 		uint8_t bit = g->displayBlank ? 0 : (g->vram[offset] >> (7 - (px & 7))) & 1;
 		size_t pixel = (size_t) line * GAMATE_WIDTH + x;
 		if (pass == 0) g->lcdAccum[pixel] = bit;

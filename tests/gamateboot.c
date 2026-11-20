@@ -76,6 +76,27 @@ static uint8_t buttonsForFrame(unsigned frame) {
 	return buttons;
 }
 
+static bool perturbEntryVram(struct Gamate* g) {
+	const char* pattern = getenv("GAMATEBOOT_ENTRY_VRAM");
+	if (!pattern || !*pattern || !strcmp(pattern, "authentic")) return true;
+	if (!strcmp(pattern, "zero")) {
+		memset(g->vram, 0x00, sizeof(g->vram));
+	} else if (!strcmp(pattern, "ones")) {
+		memset(g->vram, 0xFF, sizeof(g->vram));
+	} else if (!strcmp(pattern, "planes")) {
+		for (size_t i = 0; i < sizeof(g->vram); i++) g->vram[i] = i & 1 ? 0x55 : 0xAA;
+	} else if (!strcmp(pattern, "address")) {
+		for (size_t i = 0; i < sizeof(g->vram); i++) {
+			g->vram[i] = (uint8_t) (i ^ i >> 5 ^ i >> 9);
+		}
+	} else {
+		fprintf(stderr, "unknown GAMATEBOOT_ENTRY_VRAM pattern: %s\n", pattern);
+		return false;
+	}
+	printf("entry VRAM replaced with diagnostic pattern: %s\n", pattern);
+	return true;
+}
+
 int main(int argc, char** argv) {
 	if (argc < 3 || argc > 4) {
 		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin [frames-after-entry]\n", argv[0]);
@@ -136,6 +157,13 @@ int main(int argc, char** argv) {
 		(unsigned long long) g.masterClocks, g.frameClocks, g.irqClocks, g.lcdRowEvent, g.lcdClock,
 		byteHash(g.ram, sizeof(g.ram)), byteHash(g.vram, sizeof(g.vram)), g.scrollX, g.scrollY,
 		g.incrementRow, g.window, g.swapPlanes, g.displayBlank, g.displayStopped);
+	if (!perturbEntryVram(&g)) {
+		gamateFree(&g);
+		return 2;
+	}
+	if (getenv("GAMATEBOOT_VRAM_COVERAGE") || getenv("GAMATEBOOT_ENTRY_VRAM")) {
+		gamateResetVramDiagnostics(&g);
+	}
 	// Diagnostic experiment only: remove the oscillator/display phase inherited from the BIOS while
 	// preserving CPU, RAM, VRAM, registers, and cartridge state. Normal emulation never does this.
 	if (getenv("GAMATEBOOT_NORMALIZE_ENTRY_PHASE")) {
@@ -217,6 +245,19 @@ int main(int argc, char** argv) {
 		(unsigned long long) g.diagnostics.pressedControllerReads);
 	printf("first events: audio=%u controller-read=%u pressed-read=%u\n",
 		firstAudible, firstControllerRead, firstPressedRead);
+	printf("final state: PC=%04X RAM=%08X VRAM=%08X bank=%u/%u scroll=%u/%u "
+		"vram-position=%04X/%u\n", g.cpu.pc, byteHash(g.ram, sizeof(g.ram)),
+		byteHash(g.vram, sizeof(g.vram)), g.firstBank, g.bank, g.scrollX, g.scrollY,
+		g.vramAddress, g.vramPlane);
+	printf("VRAM coverage: writes=%llu unique-written=%u cpu-reads=%llu "
+		"read-before-write=%llu/%u display-reads=%llu display-before-write=%llu/%u\n",
+		(unsigned long long) g.diagnostics.vramTrackedWrites, g.diagnostics.vramUniqueWritten,
+		(unsigned long long) g.diagnostics.vramReads,
+		(unsigned long long) g.diagnostics.vramReadBeforeWrite,
+		g.diagnostics.vramUniqueReadBeforeWrite,
+		(unsigned long long) g.diagnostics.vramDisplayReads,
+		(unsigned long long) g.diagnostics.vramDisplayReadBeforeWrite,
+		g.diagnostics.vramUniqueDisplayReadBeforeWrite);
 	if (g.diagnostics.unsupportedOpcodes) {
 		fprintf(stderr, "unsupported opcode $%02X at $%04X (%llu total)\n",
 			g.diagnostics.lastUnsupportedOpcode, g.diagnostics.lastUnsupportedPc,
