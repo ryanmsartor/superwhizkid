@@ -156,7 +156,7 @@ static void incrementVram(struct Gamate* g) {
 }
 
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
-static bool setDiagnosticBit(uint8_t* bits, uint16_t offset) {
+static bool setDiagnosticBit(uint8_t* bits, size_t offset) {
 	uint8_t mask = (uint8_t) 1 << (offset & 7);
 	uint8_t* byte = &bits[offset >> 3];
 	bool newlySet = !(*byte & mask);
@@ -214,6 +214,28 @@ void gamateResetRamDiagnostics(struct Gamate* g) {
 	memset(g->diagnostics.ramWritten, 0, sizeof(g->diagnostics.ramWritten));
 	memset(g->diagnostics.ramReadBeforeWriteMap, 0,
 		sizeof(g->diagnostics.ramReadBeforeWriteMap));
+}
+
+void gamateResetRomDiagnostics(struct Gamate* g) {
+	g->diagnostics.romCoverageEnabled = true;
+	g->diagnostics.romTrackedReads = 0;
+	g->diagnostics.romUniqueRead = 0;
+	memset(g->diagnostics.romRead, 0, sizeof(g->diagnostics.romRead));
+}
+
+static void markRomRead(struct Gamate* g, uint16_t address, size_t offset) {
+	if (!g->diagnostics.romCoverageEnabled || g->diagnostics.diagnosticInstructionPc < 0xE000) return;
+	g->diagnostics.romTrackedReads++;
+	g->diagnostics.romUniqueRead += setDiagnosticBit(g->diagnostics.romRead, offset);
+	if (g->diagnostics.romReadCallback) {
+		g->diagnostics.romReadCallback(g->diagnostics.romReadContext, g, address, offset);
+	}
+}
+
+void gamateSetRomDiagnosticWatch(struct Gamate* g,
+		GamateRomReadCallback callback, void* context) {
+	g->diagnostics.romReadCallback = callback;
+	g->diagnostics.romReadContext = context;
 }
 
 void gamateSetRamDiagnosticWatch(struct Gamate* g, uint16_t address,
@@ -351,7 +373,13 @@ uint8_t gamateRead(struct Gamate* g, uint16_t address) {
 		goto done;
 	}
 	if (address >= 0x6000 && address < 0xE000) {
-		value = g->protectionPassed && g->rom ? g->rom[romOffset(g, address)] : protectionRead(g) << 1;
+		if (g->protectionPassed && g->rom) {
+			size_t offset = romOffset(g, address);
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+			markRomRead(g, address, offset);
+#endif
+			value = g->rom[offset];
+		} else value = protectionRead(g) << 1;
 		goto done;
 	}
 	if (address >= 0xE000) {

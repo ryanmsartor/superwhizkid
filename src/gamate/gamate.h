@@ -19,6 +19,8 @@ typedef void (*GamateLinkBitCallback)(void* context, bool bit);
 struct Gamate;
 typedef void (*GamateRamAccessCallback)(void* context, const struct Gamate* gamate,
 	bool write, uint16_t address, uint8_t previous, uint8_t value);
+typedef void (*GamateRomReadCallback)(void* context, const struct Gamate* gamate,
+	uint16_t address, size_t physicalOffset);
 #endif
 
 struct GamateCpu {
@@ -35,6 +37,7 @@ struct GamateDiagnostics {
 	uint64_t vramTrackedWrites, vramReads, vramReadBeforeWrite;
 	uint64_t vramDisplayReads, vramDisplayReadBeforeWrite;
 	uint64_t ramTrackedWrites[3], ramReads[3], ramReadBeforeWrite[3];
+	uint64_t romTrackedReads;
 #endif
 	uint64_t uartClocks, uartReceivedBits;
 	uint64_t ayRegisterWrites[16], ayActiveSamples[3];
@@ -54,9 +57,14 @@ struct GamateDiagnostics {
 	bool ramWatchEnabled;
 	GamateRamAccessCallback ramAccessCallback;
 	void* ramAccessContext;
+	GamateRomReadCallback romReadCallback;
+	void* romReadContext;
 	uint16_t ramUniqueWritten, ramUniqueReadBeforeWrite[3];
 	uint8_t ramWritten[0x400 / 8];
 	uint8_t ramReadBeforeWriteMap[3][0x400 / 8];
+	bool romCoverageEnabled;
+	uint32_t romUniqueRead;
+	uint8_t romRead[GAMATE_MAX_ROM_SIZE / 8];
 #endif
 };
 
@@ -134,8 +142,11 @@ void gamateRenderSnapshot(struct Gamate* gamate);
 // their storage do not exist in normal core builds.
 void gamateResetVramDiagnostics(struct Gamate* gamate);
 void gamateResetRamDiagnostics(struct Gamate* gamate);
+void gamateResetRomDiagnostics(struct Gamate* gamate);
 void gamateSetRamDiagnosticWatch(struct Gamate* gamate, uint16_t address,
 	GamateRamAccessCallback callback, void* context);
+void gamateSetRomDiagnosticWatch(struct Gamate* gamate,
+	GamateRomReadCallback callback, void* context);
 #endif
 void gamateSetAudio(struct Gamate* gamate, int16_t* output, size_t frameCapacity, unsigned sampleRate);
 void gamateCpuReset(struct Gamate* gamate);

@@ -854,6 +854,30 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Controlled `$F00F` limitation: the geometry and values are resolved, but the rectangle's software
   role is not. It is deliberately not called a screen, font, sprite, or workspace clear without
   cartridge-side evidence.
+- Authentic-call probe extension: `gamatebiosprobe occurrence=N` runs normal cartridge execution to
+  the selected real service-table entry, preserves its caller stack/RAM context, then applies named
+  perturbations and measures the matching return. This independently authored mode was added because
+  `$F018` requires a caller parameter block and does not return from arbitrary boot-entry RAM.
+- Diagnostic ROM-read method: access-only instrumentation compiled under
+  `GAMATE_ACCESS_DIAGNOSTICS` records physical cartridge offsets read by BIOS instructions. It stores
+  no ROM values, is absent from the production library/core, and is reset at the controlled service
+  boundary. A unit test verifies mapper-aware physical offsets, duplicate-read counts, unique coverage,
+  exclusion of cartridge-instruction reads, and the optional address callback. `gamatebiosprobe`
+  enables the callback only with `rom_trace` and prints a bounded, run-compressed temporal sequence.
+- `$F018` result: with IRQs masked, Tornado's first authentic call takes 231,396 master clocks and
+  writes 5,120 bytes across both VRAM planes. Coverage is byte columns 0-19 over rows 0-31 and 56-151.
+  Its authentic inputs produce an `$FF` first region and zero second region. Entry-register changes do
+  not affect the result; RAM `$000-$001` supplies a 77-byte control-stream pointer and `$006-$009`
+  control two eight-byte lookup spans whose perturbation changes the corresponding plane output.
+  The BIOS makes 5,275 cartridge reads from 94 unique offsets. The ordered trace shows two passes over
+  the same control stream, one per plane, with graphics fetched as eight-byte records in 20-record
+  bands. Used for the blitter inference in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
+- `$F018` comparison and limitation: masked first calls from Baseball, Enchanted Bricks, Galaxy
+  Invaders, Mighty Tank, Tornado, and Witty Apee range from 640 to 5,120 VRAM writes and 40,716 to
+  236,184 master clocks, establishing caller-defined size. Their ordered reads consistently interleave
+  a sequential control stream with eight-byte graphics records; complex callers select many
+  such records. This supports a command-stream-driven, two-plane eight-row graphics blitter, but does
+  not establish command encodings or compression. No cartridge bytes or decoded payload were retained.
 - Input-coverage method: `tools/gamate-bios-input-campaign.sh` applies independently authored,
   deterministic schedules for long Start, Select/Start plus A/B actions, and every individual control
   plus legal direction/button combinations. `tools/gamate-bios-call-coverage.py` compares derived

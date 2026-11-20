@@ -303,6 +303,57 @@ Both BIOS revisions produced identical register, RAM, VRAM, timing, and hardware
 rectangle's later software purpose is not yet established, so the contract names the measured VRAM
 operation without labeling it as a screen, font, sprite, or workspace clear.
 
+### Caller-context investigation: `$F018`
+
+Directly invoking `$F018` from cartridge-entry state does not supply the RAM parameter block it
+expects. `gamatebiosprobe` therefore supports `occurrence=N`: it runs the cartridge to the Nth
+authentic entry into the selected service, retains the real stack and caller RAM, applies any named
+perturbations, and measures the matching return. This mode turns Tornado's formerly non-returning
+synthetic probe into a balanced call.
+
+With IRQs masked to separate the service from callbacks, Tornado's first `$F018` call has these
+direct effects:
+
+- 231,396 master clocks;
+- 5,120 VRAM writes and 6,401 LCD-register writes;
+- both planes, byte columns 0-19, over rows 0-31 and 56-151;
+- `$FF` output over the first 32-row region and zero over the later 96-row region for its authentic
+  source inputs;
+- final VRAM address `$1313`, with plane 1 and row increment selected; and
+- no AY, mapper, UART, or interrupt effects in the masked probe.
+
+Entry A/X/Y perturbations do not change this result. Caller RAM supplies the real inputs. In Tornado,
+`$000-$001` points to a 77-byte cartridge control stream. `$006-$009` supply two pointer-like lookup
+bases: changing either low byte shifts one eight-byte cartridge-read span and changes the associated
+plane output; making the two bases equal makes the two plane results correspondingly equal.
+
+Diagnostic-only ROM coverage records physical offsets, never cartridge values. The authentic Tornado
+call performs 5,275 BIOS-initiated cartridge reads from only 94 unique offsets: the 77-byte stream,
+two eight-byte lookup spans, and one additional byte. The total is consistent with two passes over
+the control stream plus one lookup read per output byte.
+
+An opt-in `rom_trace` probe records the order of those physical offsets without values. Tornado's
+complete trace resolves the broad structure:
+
+- the same control stream is traversed twice, once per bitplane;
+- emitted graphics are fetched in eight-byte records;
+- each emitted eight-row band consists of 20 successive fetches of one such record, matching the
+  20 byte-wide VRAM coverage;
+- 16 emitted bands account exactly for the 128 written rows per plane; and
+- a longer control-only interval coincides with the untouched 24-row gap.
+
+Ordered traces from Baseball, Enchanted Bricks, Galaxy Invaders, Mighty Tank, and Witty Apee show the
+same general interleaving of a sequential control stream with eight-byte graphics records. Complex
+screens select many records rather than repeating one. The evidence therefore identifies `$F018` as
+a command-stream-driven, two-plane eight-row graphics blitter. It does **not** yet establish the
+individual command encodings or whether any commands implement compression, so the earlier generic
+“decompressor” label is intentionally withdrawn.
+
+The operation is not fixed-size across software. First authentic calls from six representative titles
+range from 640 to 5,120 VRAM writes and 40,716 to 236,184 master clocks. The next analysis step is an
+input/output perturbation matrix for the control records: vary one caller-owned control byte at a time,
+then classify changes in source selection, VRAM destination, emitted dimensions, and termination.
+
 ### Stage 3: extend reachable paths
 
 Apply repeatable Start, A, B, and directional schedules, including Tornado's known long Start press,
@@ -351,9 +402,10 @@ effects are functionally required by a clean-room resident replacement.
 The first implementation of this stage is `gamatebiosprobe`, described in the `$F000` contract above.
 Its option syntax permits controlled CPU-register, RAM, VRAM-fill, LCD, scroll, AY-selection, and
 mapper-state perturbations. Its diagnostic output reports VRAM write coverage as logical plane/address
-runs rather than interleaved storage offsets. Public documentation should retain only behavioral
-summaries needed to specify an ABI; local full-state hashes are comparison aids rather than
-distributable firmware data.
+runs rather than interleaved storage offsets and BIOS-initiated cartridge reads as physical ROM-offset
+runs. `occurrence=N` selects authentic caller context before applying perturbations. Public
+documentation should retain only behavioral summaries needed to specify an ABI; local full-state
+hashes are comparison aids rather than distributable firmware data.
 
 ### Parallel mapper audit
 

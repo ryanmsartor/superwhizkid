@@ -14,6 +14,22 @@ struct ChangeSummary {
 	uint16_t first, last;
 };
 
+enum { ROM_TRACE_LIMIT = 16384 };
+
+struct RomTrace {
+	size_t offsets[ROM_TRACE_LIMIT];
+	size_t count, total;
+};
+
+static void captureRomRead(void* context, const struct Gamate* g,
+		uint16_t address, size_t physicalOffset) {
+	struct RomTrace* trace = context;
+	(void) g;
+	(void) address;
+	if (trace->count < ROM_TRACE_LIMIT) trace->offsets[trace->count++] = physicalOffset;
+	trace->total++;
+}
+
 static uint8_t* readFile(const char* path, size_t* size) {
 	FILE* file = fopen(path, "rb");
 	if (!file) return NULL;
@@ -76,6 +92,42 @@ static void printVramCoverageRuns(const uint8_t* bits) {
 	putchar('\n');
 }
 
+static void printRomCoverageRuns(const struct Gamate* g) {
+	printf("# bios_rom_reads: total=%llu unique=%u runs=",
+		(unsigned long long) g->diagnostics.romTrackedReads, g->diagnostics.romUniqueRead);
+	for (size_t offset = 0; offset < g->romSize;) {
+		if (!coverageBit(g->diagnostics.romRead, (unsigned) offset)) {
+			offset++;
+			continue;
+		}
+		size_t first = offset;
+		do offset++;
+		while (offset < g->romSize && coverageBit(g->diagnostics.romRead, (unsigned) offset));
+		if (offset == first + 1) printf(" %05zX", first);
+		else printf(" %05zX-%05zX", first, offset - 1);
+	}
+	putchar('\n');
+}
+
+static void printRomTrace(const struct RomTrace* trace) {
+	printf("# bios_rom_trace: captured=%zu total=%zu runs=", trace->count, trace->total);
+	for (size_t i = 0; i < trace->count;) {
+		size_t length = 1;
+		while (i + length < trace->count &&
+				trace->offsets[i + length] == trace->offsets[i + length - 1] + 1) length++;
+		size_t repeats = 1;
+		while (i + (repeats + 1) * length <= trace->count &&
+				!memcmp(&trace->offsets[i], &trace->offsets[i + repeats * length],
+					length * sizeof(trace->offsets[0]))) repeats++;
+		if (length == 1) printf(" %05zX", trace->offsets[i]);
+		else printf(" %05zX-%05zX", trace->offsets[i], trace->offsets[i + length - 1]);
+		if (repeats > 1) printf("x%zu", repeats);
+		i += length * repeats;
+	}
+	if (trace->count < trace->total) printf(" ...");
+	putchar('\n');
+}
+
 static uint8_t lcdFlags(const struct Gamate* g) {
 	return (g->vramPlane ? 0x01 : 0) | (g->incrementRow ? 0x02 : 0) |
 		(g->window ? 0x04 : 0) | (g->swapPlanes ? 0x08 : 0) |
@@ -129,7 +181,8 @@ static bool applyOption(struct Gamate* g, const char* option) {
 
 int main(int argc, char** argv) {
 	if (argc < 4) {
-		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin SERVICE [NAME=HEX ...]\n",
+		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin SERVICE "
+			"[occurrence=HEX] [rom_trace] [NAME=HEX ...]\n",
 			argv[0]);
 		return 2;
 	}
@@ -138,6 +191,19 @@ int main(int argc, char** argv) {
 			(service - 0xF000) % 3) {
 		fprintf(stderr, "service must be a slot from F000 through F033\n");
 		return 2;
+	}
+	unsigned long occurrence = 0;
+	bool romTraceEnabled = false;
+	for (int i = 4; i < argc; i++) {
+		if (!strcmp(argv[i], "rom_trace")) {
+			romTraceEnabled = true;
+			continue;
+		}
+		if (strncmp(argv[i], "occurrence=", 11)) continue;
+		if (occurrence || !parseHex(argv[i] + 11, 0xFFFF, &occurrence) || !occurrence) {
+			fprintf(stderr, "occurrence must be a nonzero hexadecimal call number\n");
+			return 2;
+		}
 	}
 	size_t biosSize, romSize;
 	uint8_t* bios = readFile(argv[1], &biosSize);
@@ -169,7 +235,21 @@ int main(int argc, char** argv) {
 		gamateFree(&g);
 		return 1;
 	}
+	if (occurrence) {
+		unsigned long seen = 0;
+		for (uint64_t instruction = 0; instruction < 100000000; instruction++) {
+			unsigned cycles = gamateCpuStep(&g);
+			gamateRunClocks(&g, cycles * 2);
+			if (g.cpu.pc == service && ++seen == occurrence) break;
+		}
+		if (g.cpu.pc != service || seen != occurrence) {
+			fprintf(stderr, "cartridge did not reach service occurrence %lX\n", occurrence);
+			gamateFree(&g);
+			return 1;
+		}
+	}
 	for (int i = 4; i < argc; i++) {
+		if (!strncmp(argv[i], "occurrence=", 11) || !strcmp(argv[i], "rom_trace")) continue;
 		if (!applyOption(&g, argv[i])) {
 			fprintf(stderr, "invalid probe option: %s\n", argv[i]);
 			gamateFree(&g);
@@ -177,7 +257,8 @@ int main(int argc, char** argv) {
 		}
 	}
 	uint8_t entryA = g.cpu.a, entryX = g.cpu.x, entryY = g.cpu.y;
-	uint8_t entryS = g.cpu.s, entryP = g.cpu.p;
+	uint8_t returnS = occurrence ? (uint8_t) (g.cpu.s + 2) : g.cpu.s;
+	uint8_t entryS = returnS, entryP = g.cpu.p;
 	uint16_t entryVramAddress = g.vramAddress;
 	uint8_t entryScrollX = g.scrollX, entryScrollY = g.scrollY;
 	uint8_t entryLcdFlags = lcdFlags(&g), entryAyAddress = g.ayAddress;
@@ -193,20 +274,31 @@ int main(int argc, char** argv) {
 	uint64_t startBankWrites = g.diagnostics.bankWrites;
 	uint64_t startUartClocks = g.diagnostics.uartClocks;
 	uint64_t startIrqs = g.diagnostics.irqsTaken, startNmis = g.diagnostics.nmisTaken;
-	uint16_t returnAddress = 0x6020, stacked = returnAddress - 1;
-	g.ram[0x100 | entryS] = (uint8_t) (stacked >> 8);
-	g.ram[0x100 | (uint8_t) (entryS - 1)] = (uint8_t) stacked;
-	g.cpu.s = entryS - 2;
+	uint16_t returnAddress;
+	if (occurrence) {
+		uint16_t stacked = g.ram[0x100 | (uint8_t) (g.cpu.s + 1)] |
+			(uint16_t) g.ram[0x100 | (uint8_t) (g.cpu.s + 2)] << 8;
+		returnAddress = stacked + 1;
+	} else {
+		returnAddress = 0x6020;
+		uint16_t stacked = returnAddress - 1;
+		g.ram[0x100 | entryS] = (uint8_t) (stacked >> 8);
+		g.ram[0x100 | (uint8_t) (entryS - 1)] = (uint8_t) stacked;
+		g.cpu.s = entryS - 2;
+		g.cpu.pc = (uint16_t) service;
+	}
 	gamateResetRamDiagnostics(&g);
 	gamateResetVramDiagnostics(&g);
-	g.cpu.pc = (uint16_t) service;
+	gamateResetRomDiagnostics(&g);
+	struct RomTrace romTrace = { 0 };
+	if (romTraceEnabled) gamateSetRomDiagnosticWatch(&g, captureRomRead, &romTrace);
 	g.irqClocks = 0;
 	g.irq = false;
 	bool returned = false;
 	for (uint64_t instruction = 0; instruction < 10000000; instruction++) {
 		unsigned cycles = gamateCpuStep(&g);
 		gamateRunClocks(&g, cycles * 2);
-		if (g.cpu.pc == returnAddress && g.cpu.s == entryS) {
+		if (g.cpu.pc == returnAddress && g.cpu.s == returnS) {
 			returned = true;
 			break;
 		}
@@ -233,6 +325,8 @@ int main(int argc, char** argv) {
 	}
 	putchar('\n');
 	printVramCoverageRuns(g.diagnostics.vramWritten);
+	printRomCoverageRuns(&g);
+	if (romTraceEnabled) printRomTrace(&romTrace);
 	printf("slot\tin_a\tin_x\tin_y\tin_s\tin_p\tout_a\tout_x\tout_y\tout_s\tout_p\t"
 		"clocks\tram_changed\tram_first\tram_last\tram_hash\t"
 		"vram_changed\tvram_first\tvram_last\tvram_hash\tvram_unique_written\t"

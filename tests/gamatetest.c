@@ -19,6 +19,12 @@ struct RamAccessCapture {
 	uint8_t previous, value;
 };
 
+struct RomReadCapture {
+	unsigned count;
+	uint16_t address;
+	size_t physicalOffset;
+};
+
 static void captureRamAccess(void* context, const struct Gamate* g, bool write,
 		uint16_t address, uint8_t previous, uint8_t value) {
 	struct RamAccessCapture* capture = context;
@@ -28,6 +34,15 @@ static void captureRamAccess(void* context, const struct Gamate* g, bool write,
 	capture->address = address;
 	capture->previous = previous;
 	capture->value = value;
+}
+
+static void captureRomRead(void* context, const struct Gamate* g,
+		uint16_t address, size_t physicalOffset) {
+	struct RomReadCapture* capture = context;
+	assert(g);
+	capture->count++;
+	capture->address = address;
+	capture->physicalOffset = physicalOffset;
 }
 
 static void captureLinkBit(void* context, bool bit) {
@@ -91,6 +106,19 @@ static void testMemory(void) {
 	gamateWrite(&g, 0x8000, 2);
 	assert(gamateRead(&g, 0x6000) == 2);
 	assert(g.diagnostics.bankWrites == 2);
+	gamateResetRomDiagnostics(&g);
+	struct RomReadCapture romCapture = { 0 };
+	gamateSetRomDiagnosticWatch(&g, captureRomRead, &romCapture);
+	g.diagnostics.diagnosticInstructionPc = 0xE000;
+	assert(gamateRead(&g, 0x6000) == 2);
+	assert(gamateRead(&g, 0x6000) == 2);
+	g.diagnostics.diagnosticInstructionPc = 0x6000;
+	assert(gamateRead(&g, 0x6001) == 2);
+	assert(g.diagnostics.romTrackedReads == 2 && g.diagnostics.romUniqueRead == 1);
+	assert(g.diagnostics.romRead[0x8000 >> 3] & 1);
+	assert(romCapture.count == 2 && romCapture.address == 0x6000 &&
+		romCapture.physicalOffset == 0x8000);
+	gamateSetRomDiagnosticWatch(&g, NULL, NULL);
 
 	assert(gamateRead(&g, 0x4100) == 0x41); // write-only PSG: open bus
 	assert(gamateRead(&g, 0x5800) == 0x58);
