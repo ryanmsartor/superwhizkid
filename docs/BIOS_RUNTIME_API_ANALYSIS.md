@@ -225,20 +225,55 @@ authored image, or omit the drawing only after compatibility testing demonstrate
 depend on the pixels. The observed `$015` dependency and LCD/VRAM side effects remain part of the ABI
 even if the replacement artwork differs.
 
-### Next candidate: `$F033`
+### Third resolved contract: `$F033`
 
-`$F033` is observed only in Tornado in the current corpus. A first controlled matrix establishes a
-useful boundary without yet resolving its complete contract:
+`$F033` is observed only in Tornado in the current corpus. Controlled register, status, and output
+inspection under both BIOS revisions resolves it as a six-digit packed-BCD formatter when entered
+under the commercial calling convention with decimal mode clear.
 
-- it reads no inherited non-stack RAM and writes exactly `$0A1-$0A7`;
-- it preserves X, S, VRAM/LCD state, scroll, AY selection, and mapper state;
-- its output and timing vary with register input, so it is not a fixed-data writer;
-- both BIOS revisions produce identical derived results; and
-- Tornado immediately supplies the `$0A1` buffer to service `$F012` after calling `$F033`.
+| Property | Controlled contract |
+| --- | --- |
+| Input | A, X, and Y contain six packed-BCD digits in display order: A high/low, X high/low, then Y high/low. |
+| Output buffer | Writes `$06` at `$0A1`, followed by six character bytes at `$0A2-$0A7`. Valid BCD nibbles become ASCII digits. Leading zeroes become spaces, except that an all-zero value retains the final `0`. |
+| Return | A becomes `$06`; X and S are preserved; Y becomes the zero-based index of the first displayed digit, with `$05` returned for both a single final digit and the all-zero value. |
+| Status | Carry is set. N and Z describe returned A (`$06`). I and V are preserved; D remains clear. |
+| Timing | Depends on leading-space count: 222, 266, 310, 354, 398, or 422 master clocks for first displayed positions 0 through 5; all-zero input also takes 422. |
+| Inherited RAM | No non-stack RAM is read before write. The service writes exactly `$0A1-$0A7` outside its stack use. |
+| Hardware effects | None: VRAM/LCD state, scroll, AY selection/registers, mapper state, UART, IRQ, and NMI remain unchanged. |
 
-This call relationship is consistent with a value-to-display-buffer formatter, but that remains a
-hypothesis. The next probe should establish register width, byte order, buffer encoding, padding, and
-the meanings of returned A/Y before assigning a semantic name or writing replacement code.
+For example, packed input A/X/Y = `$12/$34/$56` produces a six-character `123456` field, while
+`$00/$00/$01` produces five spaces followed by `1`. Tornado immediately supplies the buffer at
+`$0A1` to service `$F012`, consistent with `$06` being the field length consumed by the downstream
+display helper.
+
+The contract is limited to valid packed-BCD input with D clear. Values containing nibbles `$A-$F`
+produced non-decimal character or suppression behavior, and setting D changed the routine's internal
+arithmetic. Neither condition was observed in commercial calls, so replacement firmware should not
+promise those undocumented behaviors. The output examples are derived interface behavior; no BIOS
+instruction listing or firmware data table was retained.
+
+### Fourth resolved contract: `$F024`
+
+`$F024` is a fixed strided-RAM initializer when entered under the commercial calling convention with
+decimal mode clear. It operates on two interleaved 16-byte address sequences:
+
+- `$023, $02B, ... $09B` (16 locations, stride 8); and
+- `$028, $030, ... $0A0` (16 locations, stride 8).
+
+| Property | Controlled contract with D clear |
+| --- | --- |
+| Input registers | Tested A/X/Y values are ignored. |
+| RAM effect | Reads and then writes all 32 listed locations, leaving every one as `$FF`; no other non-stack RAM is accessed. |
+| Return | A and Y become `$80`; X becomes `$00`; S is restored. |
+| Status | Z and V are set; N and C are clear; I is preserved. |
+| Timing | 824 master clocks (412 CPU cycles), independent of tested registers and initial target bytes. |
+| Hardware effects | None: VRAM/LCD state, scroll, AY selection/registers, mapper state, UART, IRQ, and NMI remain unchanged. |
+
+Both BIOS revisions produced identical results. The address shape is consistent with initializing two
+fields across sixteen eight-byte records, but the owning data structure and field meanings are not
+yet established, so the narrower name **strided RAM initializer** is retained. Setting D changes the
+loop arithmetic and result; no observed commercial call enters that mode, and D-set behavior is not
+part of the replacement contract.
 
 ### Stage 3: extend reachable paths
 

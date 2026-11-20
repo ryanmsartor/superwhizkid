@@ -816,12 +816,31 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   its pixels. No BIOS instructions, bitmap bytes, RAM contents, or VRAM contents are retained or
   published; hashes are local equality checks. Any replacement artwork must be independently authored,
   and omission of the drawing requires separate compatibility evidence.
-- Initial `$F033` probe: controlled register variation under both BIOS revisions found no inherited
-  non-stack RAM reads and exactly seven output locations at `$0A1-$0A7`, with register-dependent
-  timing and results but no peripheral effects. Independent static inspection of Tornado's cartridge
-  caller shows that it passes the `$0A1` buffer to `$F012` immediately afterward. Used to record a
-  formatter hypothesis and the remaining width/byte-order/encoding questions in
-  `docs/BIOS_RUNTIME_API_ANALYSIS.md`; no cartridge or BIOS instruction listing is retained.
+- Controlled `$F033` method: register/status matrices were run through the independently authored
+  service probe under both BIOS revisions. A debugger inspected only the seven post-return output
+  bytes at `$0A1-$0A7` at the probe's established boundary; no BIOS or cartridge bytes, instruction
+  listing, or source-like firmware reconstruction was retained. Independent inspection of Tornado's
+  cartridge caller establishes that it passes the `$0A1` buffer to `$F012` immediately afterward.
+- Controlled `$F033` result: the service treats A/X/Y as six display-ordered packed-BCD digits,
+  writes a `$06` length followed by six ASCII digit/space bytes, suppresses leading zeroes, and
+  retains one final `0` for an all-zero value. It returns A=`$06`, preserves X/S, returns the first
+  displayed character index in Y, sets carry, derives N/Z from A, and preserves tested I/V states.
+  Timing ranges from 222 to 422 master clocks according to the number of leading spaces. Both BIOS
+  revisions agreed exactly, no inherited non-stack RAM was read, and no peripheral state changed.
+  Used for the resolved `$F033` contract in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
+- Controlled `$F033` limitation: the published contract covers valid packed-BCD inputs with D clear.
+  Nibbles `$A-$F` and D-set entry are not used by the observed cartridge path and change output
+  behavior; both remain deliberately unspecified rather than becoming clean-room requirements.
+- Controlled `$F024` method and result: the independent service probe varied entry registers,
+  status, and selected target RAM bytes under both BIOS revisions. With decimal mode clear, entry
+  A/X/Y and prior target values do not affect the result: the service reads and writes two
+  16-location sequences at `$023+$08n` and `$028+$08n`, leaving all 32 bytes as `$FF`. It takes 824
+  master clocks, returns A/Y=`$80` and X=`$00`, restores S, sets Z/V, clears N/C, preserves I, and has
+  no peripheral effects. Used for the strided-RAM-initializer contract in
+  `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
+- Controlled `$F024` limitation: setting D changes its loop arithmetic. All observed commercial calls
+  use D clear, so D-set behavior is excluded from the clean-room contract. The two strided fields are
+  not assigned a sprite, object, or other semantic name until cartridge-side ownership is established.
 - Input-coverage method: `tools/gamate-bios-input-campaign.sh` applies independently authored,
   deterministic schedules for long Start, Select/Start plus A/B actions, and every individual control
   plus legal direction/button combinations. `tools/gamate-bios-call-coverage.py` compares derived
