@@ -29,6 +29,8 @@ static const char* skipIntroOption = "off";
 static bool optionUpdate, modernOptions, legacyOptions, supportModernOptions = true;
 static bool sawPaletteLight, frameIsGreyscale;
 static uint16_t firstVideoPixel;
+static bool reportVideoHash;
+static uint32_t videoHash = 2166136261U;
 static unsigned messageCount;
 static char lastMessage[128];
 static struct retro_netpacket_callback netpacket;
@@ -202,6 +204,10 @@ static void video(const void* data, unsigned width, unsigned height, size_t pitc
 		const uint16_t* row = (const uint16_t*) ((const uint8_t*) data + y * pitch);
 		for (unsigned x = 0; x < width; x++) videoVaries |= row[x] != first[0];
 		for (unsigned x = 0; x < width; x++) {
+			if (reportVideoHash) {
+				videoHash = (videoHash ^ (uint8_t) row[x]) * 16777619U;
+				videoHash = (videoHash ^ (row[x] >> 8)) * 16777619U;
+			}
 			sawPaletteLight |= row[x] == 0xFFFF;
 			frameIsGreyscale &= row[x] == 0xFFFF || row[x] == 0xAD55 ||
 				row[x] == 0x52AA || row[x] == 0x0000;
@@ -329,6 +335,7 @@ static void writeIntroFirmware(const char* name, uint8_t marker) {
 
 int main(int argc, char** argv) {
 	assert(argc == 2 && mkdtemp(systemDirectory));
+	reportVideoHash = getenv("GAMATECORETEST_VIDEO_HASH") != NULL;
 	writeTestFirmware("gamate_bios_umc.bin", 0x55);
 	writeTestFirmware("gamate_bios_bit.bin", 0xAA);
 	void* core = dlopen(argv[1], RTLD_NOW);
@@ -849,6 +856,7 @@ int main(int argc, char** argv) {
 	char umcFirmwarePath[sizeof(systemDirectory) + 24];
 	snprintf(umcFirmwarePath, sizeof(umcFirmwarePath), "%s/gamate_bios_umc.bin", systemDirectory);
 	assert(unlink(umcFirmwarePath) == 0 && unlink(bitFirmwarePath) == 0 && rmdir(systemDirectory) == 0);
+	if (reportVideoHash) printf("presentation video hash: %08X (%u frames)\n", videoHash, videoFrames);
 	puts("Gamate libretro integration test passed");
 	return 0;
 }

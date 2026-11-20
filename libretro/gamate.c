@@ -329,6 +329,7 @@ static void buildShades(void) {
 }
 
 static void readOptions(void) {
+	bool wasRawPresentation = !flickerReduction && lcdDarken == 256 && lcdFade == 256;
 	struct retro_variable var = { "superwhizkid_palette", NULL };
 	const char* palette = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ?
 		var.value : "original";
@@ -383,43 +384,70 @@ static void readOptions(void) {
 		(unsigned) (flickerValue[0] - '0') : 0;
 	if (reduceFlicker != flickerReduction) flickerSnap = true;
 	flickerReduction = reduceFlicker;
+	if (loaded && wasRawPresentation &&
+			(flickerReduction || lcdDarken != 256 || lcdFade != 256)) {
+		for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
+			uint8_t raw = gamate.frameBuffer[i] & 3;
+			flickerPixel[i] = raw;
+			flickerPendingFrames[i] = 0;
+			lcdLevel[i] = raw * 256;
+		}
+		lcdSnap = flickerSnap = false;
+	}
 }
 
 // Estimated physical-panel response; raw LCD-controller output remains available with rates at 256.
+static uint8_t reduceFlickerPixel(size_t i, uint8_t raw) {
+	if (flickerSnap) {
+		flickerPixel[i] = raw;
+		flickerPendingFrames[i] = 0;
+	} else if (raw >= flickerPixel[i]) {
+		flickerPixel[i] = raw;
+		flickerPendingFrames[i] = 0;
+	} else if (flickerPendingFrames[i] && flickerPending[i] == raw &&
+			++flickerPendingFrames[i] > flickerReduction) {
+		flickerPixel[i] = raw;
+		flickerPendingFrames[i] = 0;
+	} else if (!flickerPendingFrames[i] || flickerPending[i] != raw) {
+		flickerPending[i] = raw;
+		flickerPendingFrames[i] = 1;
+	}
+	return flickerPixel[i];
+}
+
 static void renderLcd(void) {
 	if (!flickerReduction && lcdDarken == 256 && lcdFade == 256) {
 		for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
 			uint8_t raw = gamate.frameBuffer[i] & 3;
-			flickerPixel[i] = raw;
-			lcdLevel[i] = raw * 256;
 			video[i] = activePalette[raw];
 		}
 		lcdSnap = flickerSnap = false;
 		return;
 	}
-	for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
-		uint8_t raw = gamate.frameBuffer[i] & 3;
-		if (flickerReduction) {
-			if (flickerSnap) {
-				flickerPixel[i] = raw;
-				flickerPendingFrames[i] = 0;
-			} else if (raw >= flickerPixel[i]) {
-				flickerPixel[i] = raw;
-				flickerPendingFrames[i] = 0;
-			} else if (flickerPendingFrames[i] && flickerPending[i] == raw &&
-					++flickerPendingFrames[i] > flickerReduction) {
-				flickerPixel[i] = raw;
-				flickerPendingFrames[i] = 0;
-			} else {
-				if (!flickerPendingFrames[i] || flickerPending[i] != raw) {
-					flickerPending[i] = raw;
-					flickerPendingFrames[i] = 1;
-				}
-			}
-		} else {
-			flickerPixel[i] = raw;
+	if (flickerReduction && lcdDarken == 256 && lcdFade == 256) {
+		for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
+			uint8_t pixel = reduceFlickerPixel(i, gamate.frameBuffer[i] & 3);
+			lcdLevel[i] = pixel * 256;
+			video[i] = activePalette[pixel];
 		}
-		int target = flickerPixel[i] * 256, level = lcdLevel[i];
+		lcdSnap = flickerSnap = false;
+		return;
+	}
+	if (!flickerReduction) {
+		for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
+			int target = (gamate.frameBuffer[i] & 3) * 256, level = lcdLevel[i];
+			int rate = target > level ? lcdDarken : lcdFade;
+			int step = (target - level) * rate / 256;
+			level = lcdSnap || !step ? target : level + step;
+			lcdLevel[i] = (uint16_t) level;
+			video[i] = shades[level];
+		}
+		lcdSnap = flickerSnap = false;
+		return;
+	}
+	for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
+		int target = reduceFlickerPixel(i, gamate.frameBuffer[i] & 3) * 256;
+		int level = lcdLevel[i];
 		int rate = target > level ? lcdDarken : lcdFade;
 		int step = (target - level) * rate / 256;
 		level = lcdSnap || !step ? target : level + step;

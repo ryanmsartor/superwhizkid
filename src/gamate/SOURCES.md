@@ -987,6 +987,15 @@ into the repository, build output, tests, or releases.
   signed left shift in the decimal-SBC wrap calculation; it was replaced with an explicit eight-bit
   conversion and the exhaustive decimal test's independent reference calculation was updated to
   express the same defined wrap. Normal and debug suites retain the same exhaustive results.
+- A frontend presentation pass used the purpose-written libretro integration workload, which cycles
+  raw output, every ghosting level, every redraw-flicker level, live option transitions, palettes,
+  and contrast states. The filtered renderer now has separate flicker-only and ghosting-only loops;
+  the raw path seeds filter history once when a filter is enabled instead of rewriting two history
+  buffers every frame. Two interleaved ten-run samples measured 14.678/14.628 seconds before and
+  14.527/14.585 seconds after on the development system, about a 0.7% improvement for the complete
+  mixed emulation-and-presentation test rather than a display-only claim. A conditional test hash
+  covered all 487 delivered frames and matched exactly at `6C6C28E5` before and after. No external
+  emulator implementation or source code informed these changes.
 
 ## Still needed
 
