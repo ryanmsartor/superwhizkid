@@ -26,6 +26,19 @@ static void testMemory(void) {
 	for (size_t i = 0; i < sizeof(bios); i++) bios[i] = (uint8_t) i;
 	for (size_t i = 0; i < sizeof(rom); i++) rom[i] = (uint8_t) (i >> 14);
 	assert(gamateLoad(&g, rom, sizeof(rom), bios, sizeof(bios)));
+	gamateResetRamDiagnostics(&g);
+	g.diagnostics.diagnosticInstructionPc = 0x6000;
+	gamateRead(&g, 0x000A);
+	gamateWrite(&g, 0x000B, 0x12);
+	gamateRead(&g, 0x000B);
+	g.diagnostics.diagnosticInstructionPc = 0xE000;
+	gamateRead(&g, 0x000C);
+	assert(g.diagnostics.ramTrackedWrites[0] == 1 && g.diagnostics.ramUniqueWritten == 1);
+	assert(g.diagnostics.ramReadBeforeWrite[0] == 1 &&
+		g.diagnostics.ramUniqueReadBeforeWrite[0] == 1);
+	assert(g.diagnostics.ramReadBeforeWrite[1] == 1 &&
+		g.diagnostics.ramUniqueReadBeforeWrite[1] == 1);
+	gamateResetRamDiagnostics(&g);
 
 	gamateWrite(&g, 0x0123, 0x42);
 	assert(gamateRead(&g, 0x0523) == 0x42);

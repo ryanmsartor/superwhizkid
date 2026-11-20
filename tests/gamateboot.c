@@ -97,12 +97,57 @@ static bool perturbEntryVram(struct Gamate* g) {
 	return true;
 }
 
+static bool perturbEntryRam(struct Gamate* g) {
+	const char* pattern = getenv("GAMATEBOOT_ENTRY_RAM");
+	if (!pattern || !*pattern || !strcmp(pattern, "authentic")) return true;
+	if (!strncmp(pattern, "zero-page", 9) && pattern[9] >= '0' && pattern[9] <= '3' && !pattern[10]) {
+		memset(g->ram + (pattern[9] - '0') * 0x100, 0x00, 0x100);
+		printf("entry RAM replaced with diagnostic pattern: %s\n", pattern);
+		return true;
+	}
+	uint8_t callback = g->ram[0x00C];
+	uint8_t checksum[4] = { g->ram[0x0E0], g->ram[0x0E1], g->ram[0x0E5], g->ram[0x0E6] };
+	uint8_t stack[0x100];
+	memcpy(stack, g->ram + 0x100, sizeof(stack));
+	if (!strcmp(pattern, "zero") || !strcmp(pattern, "known-zero") ||
+			!strcmp(pattern, "known-stack-zero")) {
+		memset(g->ram, 0x00, sizeof(g->ram));
+	} else if (!strcmp(pattern, "ones") || !strcmp(pattern, "known-ones")) {
+		memset(g->ram, 0xFF, sizeof(g->ram));
+	} else if (!strcmp(pattern, "address")) {
+		for (size_t i = 0; i < sizeof(g->ram); i++) g->ram[i] = (uint8_t) (i ^ i >> 3);
+	} else {
+		fprintf(stderr, "unknown GAMATEBOOT_ENTRY_RAM pattern: %s\n", pattern);
+		return false;
+	}
+	if (!strncmp(pattern, "known-", 6)) {
+		g->ram[0x00C] = callback;
+		g->ram[0x0E0] = checksum[0];
+		g->ram[0x0E1] = checksum[1];
+		g->ram[0x0E5] = checksum[2];
+		g->ram[0x0E6] = checksum[3];
+	}
+	if (!strcmp(pattern, "known-stack-zero")) memcpy(g->ram + 0x100, stack, sizeof(stack));
+	printf("entry RAM replaced with diagnostic pattern: %s\n", pattern);
+	return true;
+}
+
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+static void printRamAddressMap(const char* label, const uint8_t* bits) {
+	printf("RAM read-before-write addresses (%s):", label);
+	for (unsigned address = 0; address < 0x400; address++) {
+		if (bits[address >> 3] & ((uint8_t) 1 << (address & 7))) printf(" %03X", address);
+	}
+	putchar('\n');
+}
+#endif
+
 int main(int argc, char** argv) {
 	if (argc < 3 || argc > 4) {
 		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin [frames-after-entry]\n", argv[0]);
 		return 2;
 	}
-	unsigned framesWanted = argc == 4 ? (unsigned) strtoul(argv[3], NULL, 0) : 300;
+	unsigned framesWanted = argc == 4 ? (unsigned) strtoul(argv[3], NULL, 0) : 1000;
 	size_t biosSize, romSize;
 	uint8_t* bios = readFile(argv[1], &biosSize);
 	uint8_t* rom = readFile(argv[2], &romSize);
@@ -161,8 +206,15 @@ int main(int argc, char** argv) {
 		gamateFree(&g);
 		return 2;
 	}
+	if (!perturbEntryRam(&g)) {
+		gamateFree(&g);
+		return 2;
+	}
 	if (getenv("GAMATEBOOT_VRAM_COVERAGE") || getenv("GAMATEBOOT_ENTRY_VRAM")) {
 		gamateResetVramDiagnostics(&g);
+	}
+	if (getenv("GAMATEBOOT_RAM_COVERAGE") || getenv("GAMATEBOOT_ENTRY_RAM")) {
+		gamateResetRamDiagnostics(&g);
 	}
 	// Diagnostic experiment only: remove the oscillator/display phase inherited from the BIOS while
 	// preserving CPU, RAM, VRAM, registers, and cartridge state. Normal emulation never does this.
@@ -258,6 +310,23 @@ int main(int argc, char** argv) {
 		(unsigned long long) g.diagnostics.vramDisplayReads,
 		(unsigned long long) g.diagnostics.vramDisplayReadBeforeWrite,
 		g.diagnostics.vramUniqueDisplayReadBeforeWrite);
+	printf("RAM coverage: writes=%llu/%llu/%llu unique-written=%u "
+		"reads=%llu/%llu/%llu read-before-write=%llu/%u,%llu/%u,%llu/%u\n",
+		(unsigned long long) g.diagnostics.ramTrackedWrites[0],
+		(unsigned long long) g.diagnostics.ramTrackedWrites[1],
+		(unsigned long long) g.diagnostics.ramTrackedWrites[2], g.diagnostics.ramUniqueWritten,
+		(unsigned long long) g.diagnostics.ramReads[0],
+		(unsigned long long) g.diagnostics.ramReads[1],
+		(unsigned long long) g.diagnostics.ramReads[2],
+		(unsigned long long) g.diagnostics.ramReadBeforeWrite[0],
+		g.diagnostics.ramUniqueReadBeforeWrite[0],
+		(unsigned long long) g.diagnostics.ramReadBeforeWrite[1],
+		g.diagnostics.ramUniqueReadBeforeWrite[1],
+		(unsigned long long) g.diagnostics.ramReadBeforeWrite[2],
+		g.diagnostics.ramUniqueReadBeforeWrite[2]);
+	printRamAddressMap("cartridge", g.diagnostics.ramReadBeforeWriteMap[0]);
+	printRamAddressMap("BIOS", g.diagnostics.ramReadBeforeWriteMap[1]);
+	printRamAddressMap("other", g.diagnostics.ramReadBeforeWriteMap[2]);
 	if (g.diagnostics.unsupportedOpcodes) {
 		fprintf(stderr, "unsupported opcode $%02X at $%04X (%llu total)\n",
 			g.diagnostics.lastUnsupportedOpcode, g.diagnostics.lastUnsupportedPc,

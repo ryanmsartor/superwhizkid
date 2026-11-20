@@ -159,6 +159,46 @@ applies to the current catalog and exercised paths; later gameplay or unknown ca
 impose additional initialized-state requirements, but the exact authentic image is no longer a
 blocker for clean-room replacement work.
 
+## Entry-RAM perturbation result
+
+WRAM does not admit the same simple policy as VRAM. A second controlled experiment replaced entry
+RAM at `$6020` while preserving CPU and hardware state. It ran all 58 cartridges under both BIOS
+revisions for 1,000 frames and compared final video, audio, CPU, mapper, peripheral, VRAM, and
+activity state while excluding only the deliberately changed final RAM hash.
+
+| Entry-RAM policy | Cases | Changed executions | Changed final video | Changed final VRAM |
+| --- | ---: | ---: | ---: | ---: |
+| All zeroes | 116 | 106 | 30 | 37 |
+| All `$FF` | 116 | 102 | 32 | 31 |
+| Zeroes plus authentic callback/checksum fields | 116 | 104 | 16 | 23 |
+| `$FF` plus authentic callback/checksum fields | 116 | 102 | 32 | 31 |
+| Zeroes plus callback/checksum fields and authentic stack page | 116 | 104 | 16 | 23 |
+
+The known fields in these rows are `$000C`, `$00E0-$00E1`, and `$00E5-$00E6`. Retaining them is
+clearly insufficient. This does not mean every other authentic byte must be copied; it means the
+replacement still lacks a semantic description of additional BIOS-produced working state.
+
+Clearing one physical 256-byte page at a time localized the dependency:
+
+| Cleared physical RAM page | Changed executions | Changed final video | Changed final VRAM | Affected titles |
+| --- | ---: | ---: | ---: | ---: |
+| `$000-$0FF` | 106 | 24 | 29 | 53 under both BIOSes |
+| `$100-$1FF` (stack page) | 2 | 0 | 0 | Time Warrior under both BIOSes |
+| `$200-$2FF` | 36 | 8 | 12 | 18 under both BIOSes |
+| `$300-$3FF` | 10 | 0 | 0 | 5 under both BIOSes |
+
+Post-entry access tracking found at least one cartridge read-before-write in every case, and the
+union across the corpus covered all 1,024 physical RAM bytes. BIOS code read inherited bytes before
+their first post-entry write in 110 of 116 cases. Repeating authentic-state tracking with the broad
+automated-input schedule added no new union addresses and all 116 cases completed, although neither
+run proves exhaustive gameplay coverage.
+
+The current supported conclusion is therefore: **preserve authentic WRAM when using an authentic
+BIOS, and do not implement BIOS skipping with a blanket fill.** A clean-room replacement should
+derive and initialize named functional fields, then repeat these perturbations as those fields are
+understood. The experiment rules out the proposed minimal callback/checksum-only policy without
+turning the invariant authentic RAM image into a permissible replacement template.
+
 ## What should not be copied
 
 The sweep is useful as a behavioral oracle, not as replacement payload data. The project should not:
@@ -181,9 +221,10 @@ The following work remains necessary:
    identified in [`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md).
 2. Extend runtime coverage beyond the unattended 1,000-frame baseline with representative gameplay
    and link activity.
-3. Perturb invariant RAM fields individually or by functional group to determine which games read
-   them before overwriting them.
-4. Test a clean RAM policy while preserving only documented callback/checksum state.
+3. Continue decomposing the now-confirmed RAM dependencies into named functional groups; page-level
+   perturbation found broad zero-page use and title-specific dependencies in both upper pages.
+4. ~~Test a clean RAM policy while preserving only documented callback/checksum state.~~ Complete:
+   blanket fills and callback/checksum-only initialization are insufficient across the corpus.
 5. ~~Test clearing or independently drawing VRAM instead of inheriting authentic startup graphics.~~
    Complete: cleared VRAM matches authentic entry exactly across unattended and automated-input
    matrices; arbitrary nonzero contents are unsafe.

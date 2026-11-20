@@ -20,7 +20,7 @@ target_compile_options(superwhizkid PRIVATE -O3)
 # out of the normal library preserves the LCD hot path used by the libretro core.
 add_library(superwhizkid_diagnostics STATIC src/gamate/gamate.c src/gamate/cpu.c)
 target_include_directories(superwhizkid_diagnostics PUBLIC src)
-target_compile_definitions(superwhizkid_diagnostics PUBLIC GAMATE_VRAM_DIAGNOSTICS)
+target_compile_definitions(superwhizkid_diagnostics PUBLIC GAMATE_ACCESS_DIAGNOSTICS)
 target_compile_options(superwhizkid_diagnostics PRIVATE -O3)
 
 add_executable(gamatetest tests/gamatetest.c)

@@ -635,6 +635,40 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   unknown cartridges or later gameplay may have additional requirements. The experiment evaluates
   behavior in the current emulator, not power-on electrical VRAM state on physical hardware.
 
+### Cartridge-entry RAM perturbation and access sweep
+
+- Local origin: all 58 user-supplied cartridges were run for 1,000 post-entry frames under both
+  authentic BIOS revisions. The experiment compared authentic RAM with all-zero, all-`$FF`,
+  callback/checksum-preserving, stack-preserving, and individual 256-byte-page-clearing policies.
+  Authentic-state access tracking was repeated with the standard broad controller schedule. Reports
+  remain outside the repository and contain derived hashes, counters, and address sets, not ROM,
+  BIOS, or RAM payloads.
+- Method: independently authored, diagnostic-only hooks restart physical 1 KiB RAM coverage at
+  `$6020`, mark writes, and classify reads before the first post-entry write by the PC of the current
+  cartridge, BIOS, or other instruction. `gamateboot` applies entry perturbations after authentic
+  boot and reports owner-specific counts and address sets. The reusable
+  `tools/gamate-ram-perturbation-summary.py` compares final CPU, video, audio, VRAM, mapper,
+  peripheral, and activity observations while excluding only the expected final-RAM hash change.
+  Purpose-written unit tests cover owner classification and read/write accounting. The hooks share
+  the separate diagnostic library used by the VRAM experiment; the production `gamate.c` object
+  remained byte-identical to the pre-instrumentation release object.
+- Result: full zero and `$FF` replacement changed 106 and 102 of 116 executions respectively.
+  Preserving only `$000C`, `$00E0-$00E1`, and `$00E5-$00E6` still changed 104; additionally retaining
+  the authentic stack page did not reduce that count. Clearing pages `$000-$0FF`, `$100-$1FF`,
+  `$200-$2FF`, and `$300-$3FF` individually changed 106, 2, 36, and 10 cases respectively. Final
+  video changed in 24 zero-page cases and 8 page-2 cases. Every case performed cartridge
+  read-before-write activity, their union covered all 1,024 physical bytes, and BIOS reads occurred
+  in 110 cases. Automated input added no address to either union.
+- Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md`, rejection of blanket RAM initialization for BIOS
+  skipping, and prioritization of semantic zero-page and upper-work-buffer analysis. Authentic BIOS
+  execution continues to preserve its produced RAM unchanged.
+- Limitations: an instruction-start PC attributes interrupt-entry stack writes to the interrupted
+  instruction, although subsequent handler accesses are attributed to BIOS code; this does not
+  weaken the read-before-write evidence central to the experiment. A read-modify-write counts its
+  read before its write. Fixed 1,000-frame paths are not exhaustive, and a changed hash/counter does
+  not by itself identify a field's meaning. The findings do not authorize copying invariant
+  firmware-derived RAM bytes into replacement firmware.
+
 ### Post-entry BIOS runtime API trace
 
 - Local origin: all 58 user-supplied cartridges were executed under both authentic BIOS revisions

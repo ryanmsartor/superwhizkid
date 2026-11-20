@@ -257,6 +257,9 @@ static bool hasImpliedOpcodeFetch(uint8_t opcode) {
 
 unsigned gamateCpuStep(struct Gamate* g) {
 	struct GamateCpu* c = &g->cpu;
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+	g->diagnostics.diagnosticInstructionPc = c->pc;
+#endif
 	g->diagnostics.instructions++;
 	if (c->stopped) return 1;
 	if (g->nmi) {
