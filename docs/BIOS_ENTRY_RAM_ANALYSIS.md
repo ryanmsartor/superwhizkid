@@ -127,9 +127,10 @@ that already differed through `$000C` or `$0011`.
 
 ## IRQ counter trace and inverse policy
 
-Diagnostic-only access tracing establishes `$0010-$0011` as a 16-bit, big-endian-in-memory periodic
-IRQ counter. Both BIOS revisions increment `$0011` on every periodic IRQ and increment `$0010` when
-the low byte wraps. At cartridge entry the observed value is `$0394`; after 108 further IRQs the
+Diagnostic-only access tracing and inspection of the executed handler establish `$000E-$0011` as a
+32-bit, big-endian-in-memory periodic IRQ counter. Both BIOS revisions increment `$0011` on every
+periodic IRQ and propagate carry toward `$000E`. At cartridge entry the observed value is
+`$00000394`; after 108 further IRQs the
 trace records `$0011` wrapping from `$FF` to `$00`, followed by `$0010` changing from `$03` to `$04`.
 The BIT handler performs these read-modify-writes at `$FFBF/$FFC4`; the UMC handler uses
 `$FFA7/$FFAC`. Every traced access is inside IRQ context.
@@ -153,8 +154,9 @@ A cartridge-only 1,000-frame sweep found direct `$0011` access in fourteen title
 | Witty Apee | `$8401`, `$8F81` | Reads |
 | World Cup Soccer | `$A594` | Reads |
 
-This makes the counter part of the cartridge-visible BIOS ABI, not merely private firmware residue.
-The entry value is meaningful counter phase derived from elapsed IRQs during boot; clean-room code
+The later phase-control trace also finds Kill Shot reading `$0010` repeatedly at `$8DCA`. This makes
+the counter part of the cartridge-visible BIOS ABI, not merely private firmware residue. The entry
+value is meaningful counter phase derived from elapsed IRQs during boot; clean-room code
 may calculate or deliberately redefine its phase, but should not copy it as an unexplained byte.
 
 Inverse tests cleared all of `$000-$01F` and selectively restored authentic functional fields:
@@ -186,7 +188,7 @@ functional description:
 | `$006-$009` | Reset-fill sentinels | Neither BIOS writes them before entry, so they remain `$FF`. Myth of Asamia reads them before installing its own two word-like values; Fortune 'n Luck also initializes them later. |
 | `$00A` | Explicit `$FF` runtime sentinel | Both BIOSes write `$FF` immediately before enabling callbacks and jumping to `$6020`. Treasure Hunter reaches it through an indirect read on an input-driven IRQ-callback path. |
 | `$00C` | Cartridge-callback enable flag | Zero disables BIOS dispatch; any observed nonzero value enables it. Successful boot writes `$01`. |
-| `$010-$011` | 16-bit periodic-IRQ counter | `$011` increments each IRQ and carries into `$010`; fourteen titles directly access `$011`. |
+| `$00E-$011` | 32-bit periodic-IRQ counter | `$011` increments each IRQ and propagates carry toward `$00E`; fourteen titles directly access `$011`, and Kill Shot reads `$010` on an input-driven path. |
 | `$012-$013` | BIOS pseudorandom/LFSR state | Service `$F030` ensures a nonzero state, advances a 16-bit feedback shift register, preserves X/Y, and returns the new low byte in A. `$014` is overwritten scratch feedback and need not be inherited. |
 
 The authentic entry state leaves the LFSR at `$358A` (high byte `$013`, low byte `$012`) after the
@@ -202,7 +204,7 @@ counter phase, and initialize the BIOS random-generator state.
 ### Semantic-policy validation
 
 A final diagnostic policy cleared `$000-$01F` and constructed the named fields above directly:
-`$004=$47`, `$005-$00A=$FF`, `$00C=$01`, IRQ-counter phase `$0394`, and LFSR state `$358A`.
+`$004=$47`, `$005-$00A=$FF`, `$00C=$01`, IRQ-counter phase `$00000394`, and LFSR state `$358A`.
 It did not copy any entry-RAM block. All 58 cartridges under both BIOS revisions then matched the
 authentic-entry observations through 1,000 frames in both the unattended and broad automated-input
 matrices: 116 of 116 cases in each matrix had identical CPU, video, audio, VRAM, mapper, peripheral,
@@ -213,6 +215,39 @@ The exact counter and LFSR values in this equivalence test reproduce authentic p
 comparison. They are documented state variables, not a claim that replacement firmware must hardcode
 those constants: a clean implementation can derive the counter from its own elapsed IRQs and choose
 and document a nonzero random seed, with resulting phase differences tested separately.
+
+### Counter- and random-phase sensitivity
+
+The semantic policy was then rerun with independently varied counter and LFSR states. Every policy
+completed all 116 BIOS/cartridge cases without a boot or execution failure.
+
+| Entry-state variation | Unattended execution/video/VRAM differences | Input execution/video/VRAM differences | Interpretation |
+| --- | ---: | ---: | --- |
+| Counter `$00000000` | 102 / 4 / 5 | 100 / 14 / 16 | Changes the low-byte carry schedule and therefore BIOS IRQ-handler timing. |
+| Counter `$0000FFFF` | 102 / 8 / 9 | 100 / 18 / 20 | Immediately exercises carries into both `$010` and `$00F`, producing a larger phase shift. |
+| Counter `$0000FF94` | 98 / 0 / 0 | 98 / 2 / 2 | Preserves low-byte wrap times, but the first carry reaches `$00F` and lengthens that handler path. |
+| Counter `$00000494` | 0 / 0 / 0 | 2 / 0 / 0 | Preserves low-byte wrap timing and avoids a carry into `$00F` in the window; only Kill Shot's input path observes the changed `$010`. |
+| LFSR `$0001` | 4 / 2 / 2 | 4 / 4 / 4 | Changes deterministic random results only on exercised consumer paths. |
+| LFSR `$FFFF` | 4 / 2 / 2 | 4 / 4 / 4 | Same affected-case count as `$0001`, with different deterministic random state. |
+
+The LFSR differences pair across both BIOSes. Without input they occur in Hot Hero and Magic Jigsaw;
+with the broad input schedule they occur in Cosmic Fighter and Magic Jigsaw. Focused counter tracing
+shows Kill Shot repeatedly reading `$010` at cartridge PC `$8DCA` during its IRQ callback, explaining
+the two input-driven `$00000494` differences. The absence of a final-video or VRAM difference there does
+not make the high byte private; it establishes direct software visibility.
+
+Counter changes require special interpretation. `$011` increments on every periodic IRQ; when it
+wraps, the BIOS executes the additional `$010` increment path. A phase change therefore alters the
+number and placement of handler cycles even in software that never reads the counter. Wrapping
+`$010` introduces another distinct branch outcome. The widespread PC/audio/activity differences are
+thus expected deterministic timing consequences, not evidence that 51 games validate the literal
+entry number.
+
+For maximum authentic compatibility, replacement startup should reproduce the observed `$00000394`
+counter phase and `$358A` LFSR state, preferably as named, documented ABI initialization or as the
+derived result of its own boot behavior. Other nonzero LFSR seeds and non-wrapping counter phases
+remain operational in this test, but they are observably different and should not be described as
+equivalent to authentic startup.
 
 ## Interpretation
 
@@ -231,9 +266,9 @@ The earlier page sweep is now substantially narrower:
   experiment. A zero observed count remains coverage evidence, not proof that a block is irrelevant
   in all later gameplay.
 
-The next efficient step is testing alternate valid LFSR/counter phases, followed by static/runtime
-correlation for the `$0CC-$0DF` and page-2 title groups. Those later regions are cartridge work
-areas, not part of the common low-RAM BIOS contract established here.
+The next efficient step is static/runtime correlation for the `$0CC-$0DF` and page-2 title groups.
+Those later regions are cartridge work areas, not part of the common low-RAM BIOS contract
+established here.
 
 ## Reproduction and limits
 
@@ -242,6 +277,9 @@ areas, not part of the common low-RAM BIOS contract established here.
 from `00` through `3F`; `zero-byte-NNN` selects one physical byte, and `zero-quad-NN` selects an
 aligned four-byte group by index. `zero-low32` and its `keep-*` variants exercise inverse policies.
 `semantic-low32` constructs the documented low-RAM fields without copying an entry-RAM block.
+`GAMATEBOOT_ENTRY_IRQ_COUNTER` and `GAMATEBOOT_ENTRY_LFSR` optionally replace its hexadecimal
+32-bit counter and 16-bit random phases; the LFSR override rejects zero because the documented
+service requires nonzero state.
 `GAMATEBOOT_RAM_WATCH` selects a physical address for per-access tracing; the optional
 `GAMATEBOOT_RAM_WATCH_OWNER` filters `bios`, `cartridge`, `other`, or `all` execution owners.
 `tools/gamate-ram-perturbation-summary.py` compares aggregate reports against an authentic-entry

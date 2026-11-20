@@ -200,13 +200,14 @@ observed post-entry difference. Each parent's changed cases exactly equaled the 
 
 Byte-level refinement identifies `$000C`, the callback-enable flag, as accounting for the affected
 membership of `$000-$00F`: clearing it changes 106 cases across 53 titles. `$0011`, the low byte of
-the periodic-IRQ counter, independently accounts for all 102 cases affected by `$010-$01F`.
+the 32-bit periodic-IRQ counter at `$00E-$011`, independently accounts for all 102 cases affected by
+`$010-$01F`.
 Smaller dependencies occur at `$004-$009` and `$012-$013`. Four-byte refinement
 localizes the active `$0C0-$0DF` regions to `$0CC-$0CF`, `$0D0-$0D3`, `$0D8-$0DB`, and
 `$0DC-$0DF`; the intervening groups had no observed effect.
 
-Access tracing identifies `$0010-$0011` as the 16-bit periodic-IRQ counter and finds direct `$0011`
-access in fourteen titles. An inverse policy that clears `$000-$01F` while preserving
+Access tracing identifies `$000E-$0011` as the 32-bit periodic-IRQ counter and finds direct `$0011`
+access in fourteen titles, plus input-driven `$0010` access in Kill Shot. An inverse policy that clears `$000-$01F` while preserving
 `$0004-$000A`, `$000C`, and `$0010-$0013` matches authentic execution, final video, and final VRAM
 in all 116 unattended cases and all 116 broad-input cases. Follow-up last-writer and
 cartridge-consumer traces provide clean-room initialization rules for the formerly opaque regions:
@@ -217,9 +218,18 @@ This makes the tested low-RAM contract behaviorally reproducible without copying
 A diagnostic policy then constructed those named fields directly after clearing `$000-$01F`.
 It matched authentic entry in all 116 BIOS/cartridge cases for both unattended and broad-input
 1,000-frame matrices across every compared behavioral observation. Only the deliberately different
-whole-RAM hash remained unequal. The exact `$0394` counter phase and `$358A` LFSR state were used as
+whole-RAM hash remained unequal. The exact `$00000394` counter phase and `$358A` LFSR state were used as
 documented comparison inputs; replacement firmware can derive or deliberately define those phases
 rather than preserve unexplained bytes.
+
+Phase-variation sweeps refine that freedom. Counter values `$00000000`, `$0000FFFF`, and `$0000FF94` shift BIOS
+IRQ-handler timing by changing low- or high-byte carry outcomes, producing broad deterministic
+PC/audio differences and narrower sampled video/VRAM differences without failures. Changing only
+byte `$010` from `$03` to `$04` while retaining `$011=$94` and avoiding a carry into `$00F` was
+identical in every unattended case; automated input differed only in Kill Shot, which directly reads
+`$010`. LFSR seeds `$0001` and `$FFFF` also completed every case but changed only exercised random
+consumers. Accordingly, `$00000394/$358A` are the recommended compatibility phases even though they are
+named ABI state rather than an opaque copied block.
 
 Post-entry access tracking found at least one cartridge read-before-write in every case, and the
 union across the corpus covered all 1,024 physical RAM bytes. BIOS code read inherited bytes before
@@ -255,8 +265,8 @@ The following work remains necessary:
    identified in [`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md).
 2. Extend runtime coverage beyond the unattended 1,000-frame baseline with representative gameplay
    and link activity.
-3. Test deliberately different valid IRQ-counter and LFSR phases, and distinguish harmless phase
-   changes from software assumptions about their authentic entry values.
+3. ~~Test deliberately different valid IRQ-counter and LFSR phases.~~ Complete: alternative phases
+   boot, but carry-path timing and direct cartridge consumers make them observably nonequivalent.
 4. ~~Test a clean RAM policy while preserving only documented callback/checksum state.~~ Complete:
    blanket fills and callback/checksum-only initialization are insufficient across the corpus.
 5. ~~Test clearing or independently drawing VRAM instead of inheriting authentic startup graphics.~~

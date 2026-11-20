@@ -58,7 +58,7 @@ RAM[$004] := accepted cartridge-protection reply
 RAM[$005 through $009] := $FF reset-fill sentinels
 RAM[$00A] := $FF runtime sentinel
 RAM[$00C] := callbacks enabled
-RAM[$010 through $011] := periodic-IRQ counter phase
+RAM[$00E through $011] := 32-bit periodic-IRQ counter phase
 RAM[$012 through $013] := nonzero BIOS pseudorandom/LFSR state
 ```
 
@@ -70,7 +70,11 @@ does not need to be inherited at cartridge entry.
 Constructing only these fields after clearing `$000-$01F` matched authentic-entry behavior in all
 116 tested BIOS/cartridge combinations, both unattended and with broad automated input for 1,000
 frames. The equivalence test used the observed authentic counter and LFSR phases so that phase alone
-could not obscure the result; alternate valid phases remain a separate compatibility experiment.
+could not obscure the result. Follow-up variation showed that other phases still boot, but they are
+observable: the counter's carry branches alter IRQ-handler timing, Kill Shot reads its high byte on
+an input-driven path, and several titles consume the LFSR state. Authentic-compatible replacement
+startup should therefore reproduce `$00000394` and `$358A` as named state rather than opaque RAM
+residue.
 
 ## Cartridge-protection exchange
 
@@ -176,13 +180,15 @@ use link reception.
 
 ### Periodic IRQ counter
 
-The timing counter updated by both periodic IRQ wrappers is the 16-bit value at `$0010-$0011`, with
-the high byte at `$0010`. Each IRQ increments `$0011`; wrapping it from `$FF` to `$00` increments
-`$0010`. Both BIOS revisions expose `$0394` at cartridge entry in the controlled sweep, reflecting
-the IRQs elapsed during boot. Their handler addresses differ, but their counter behavior matches.
+The timing counter updated by both periodic IRQ wrappers is the 32-bit value at `$000E-$0011`, stored
+most-significant byte first. Each IRQ increments `$0011` and propagates carry through `$0010`,
+`$000F`, and `$000E`. Both BIOS revisions expose `$00000394` at cartridge entry in the controlled
+sweep, reflecting the IRQs elapsed during boot. Their handler addresses differ, but their counter
+behavior matches.
 
 Fourteen tested cartridges directly access `$0011` within 1,000 unattended frames, including games
-that poll it repeatedly. It is therefore cartridge-visible ABI state. See
+that poll it repeatedly. Input-driven tracing additionally finds Kill Shot polling `$0010`. It is
+therefore cartridge-visible ABI state. See
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md) for the access table and perturbation
 results. The exact entry phase is an observed authentic-boot contract; replacement firmware may
 derive a compatible counter from its own elapsed IRQs rather than reproduce opaque boot work.

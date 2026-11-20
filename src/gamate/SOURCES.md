@@ -680,16 +680,17 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   unions exactly matched all four parent sets. The summary tool's final-state normalization uses a
   word-boundary match for `RAM=` so final `VRAM=` remains part of the execution signature; separate
   final-video and final-VRAM columns provide narrower presentation/storage views.
-- `$0010-$0011` trace: a diagnostic-only address watch recorded physical address, instruction PC,
+- `$000E-$0011` trace: a diagnostic-only address watch recorded physical address, instruction PC,
   owner, access direction and values, nearby `$0010-$0013`, post-entry frame, master clocks,
   IRQ/NMI counts, and explicit IRQ/NMI/BRK context. Both BIOS revisions increment `$0011` on every
-  periodic IRQ and carry into `$0010`; a focused overflow trace observed `$0394` advance through the
-  `$03FF->$0400` boundary. A cartridge-owner-only full sweep found `$0011` accesses in fourteen
-  titles at matching sites under both BIOSes. Reports remain local and contain events, not firmware
-  or cartridge bytes.
+  periodic IRQ. Inspection of the locally executed handler shows the four-byte carry loop continuing
+  toward `$000E`; a focused overflow trace observed `$00000394` advance through the
+  `$000003FF->$00000400` boundary. A cartridge-owner-only full sweep found `$0011` accesses in
+  fourteen titles at matching sites under both BIOSes. Reports remain local and contain events, not
+  firmware or cartridge bytes.
 - Inverse low-RAM sweep: clearing `$000-$01F` changed 106 cases; preserving `$000C` reduced that to
   102, preserving `$0011` alone left 106, and preserving both reduced it to ten. Preserving
-  `$0004-$000A`, `$000C`, and `$0010-$0013` produced zero execution, final-video, or final-VRAM
+  `$0004-$000A`, `$000C`, and `$000E-$0013` produced zero execution, final-video, or final-VRAM
   differences across all 116 unattended and 116 broad-input cases. `$000A` was added after the
   input sweep isolated a two-BIOS Treasure Hunter difference to that byte. This establishes tested
   sufficiency; the following writer/consumer trace supplied the semantic interpretation.
@@ -710,6 +711,17 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   policy intentionally clears unrelated boot residue. This validates behavioral construction of
   the common low-RAM contract; it does not establish that authentic counter or random phase must be
   hardcoded by replacement firmware.
+- Counter/LFSR phase sweep: the same 116-case unattended and broad-input matrices tested counter
+  states `$00000000`, `$0000FFFF`, `$0000FF94`, and `$00000494`, plus nonzero LFSR states `$0001`
+  and `$FFFF`.
+  All cases completed. Low-byte and full-wrap counter changes broadly shifted deterministic timing
+  because the BIOS counter increment takes additional carry branches. `$00000494`, which preserves
+  the low-byte carry schedule and avoids a carry into `$00F` during the window, matched every unattended
+  case; input differed only for Kill Shot. A focused cartridge-owner trace found Kill Shot reading
+  `$010` at PC `$8DCA`. LFSR differences were confined to Hot Hero and Magic Jigsaw without input,
+  and Cosmic Fighter and Magic Jigsaw with input, paired across BIOS revisions. Used to recommend
+  authentic `$00000394/$358A` compatibility phases while distinguishing named state from copied residue.
+  Reports remain local and contain derived observations rather than firmware or cartridge payloads.
 - Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md`, the detailed block/title matrix in
   `docs/BIOS_ENTRY_RAM_ANALYSIS.md`, rejection of blanket RAM initialization for BIOS skipping, and
   prioritization of semantic zero-page and upper-work-buffer analysis. Authentic BIOS execution

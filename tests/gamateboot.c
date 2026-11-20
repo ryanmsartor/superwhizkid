@@ -101,15 +101,37 @@ static bool perturbEntryRam(struct Gamate* g) {
 	const char* pattern = getenv("GAMATEBOOT_ENTRY_RAM");
 	if (!pattern || !*pattern || !strcmp(pattern, "authentic")) return true;
 	if (!strcmp(pattern, "semantic-low32")) {
+		const char* counterText = getenv("GAMATEBOOT_ENTRY_IRQ_COUNTER");
+		const char* lfsrText = getenv("GAMATEBOOT_ENTRY_LFSR");
+		char* end;
+		unsigned long long counter = 0x00000394;
+		unsigned long long lfsr = 0x358A;
+		if (counterText && *counterText) {
+			counter = strtoull(counterText, &end, 16);
+			if (*end || counter > UINT32_MAX) {
+				fprintf(stderr, "invalid GAMATEBOOT_ENTRY_IRQ_COUNTER: %s\n", counterText);
+				return false;
+			}
+		}
+		if (lfsrText && *lfsrText) {
+			lfsr = strtoull(lfsrText, &end, 16);
+			if (*end || !lfsr || lfsr > 0xFFFF) {
+				fprintf(stderr, "invalid GAMATEBOOT_ENTRY_LFSR: %s\n", lfsrText);
+				return false;
+			}
+		}
 		memset(g->ram, 0x00, 0x20);
 		g->ram[0x004] = 0x47;             // Accepted protection reply.
 		memset(g->ram + 0x005, 0xFF, 6); // Modeled reset/runtime sentinels through $00A.
 		g->ram[0x00C] = 0x01;             // Cartridge callbacks enabled.
-		g->ram[0x010] = 0x03;             // Authentic periodic-IRQ counter phase $0394.
-		g->ram[0x011] = 0x94;
-		g->ram[0x012] = 0x8A;             // Authentic BIOS LFSR state $358A.
-		g->ram[0x013] = 0x35;
-		printf("entry RAM replaced with diagnostic pattern: %s\n", pattern);
+		g->ram[0x00E] = (uint8_t) (counter >> 24);
+		g->ram[0x00F] = (uint8_t) (counter >> 16);
+		g->ram[0x010] = (uint8_t) (counter >> 8);
+		g->ram[0x011] = (uint8_t) counter;
+		g->ram[0x012] = (uint8_t) lfsr;
+		g->ram[0x013] = (uint8_t) (lfsr >> 8);
+		printf("entry RAM replaced with diagnostic pattern: %s counter=%08llX lfsr=%04llX\n",
+			pattern, counter, lfsr);
 		return true;
 	}
 	if (!strncmp(pattern, "zero-low32", 10)) {
