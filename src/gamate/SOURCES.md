@@ -665,6 +665,13 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   18, 6, and 2 cases; the four page-3 blocks affected 2, 2, 7, and 4. All but one title-level result
   was paired across BIOSes. Dino Bibo differed only under UMC for `$380-$3BF`, limited to one active
   AY-A sample and its audio hash at the observation boundary.
+- Sixteen-byte extension: the four highest-priority blocks (`$000-$03F`, `$0C0-$0FF`,
+  `$200-$23F`, and `$240-$27F`) were divided into sixteen chunks and exercised in another 1,856
+  runs. All completed. `$000-$00F` affected 106 cases and `$010-$01F` affected 102; `$020-$02F`
+  and `$030-$03F` affected 8 and 4. `$0C0-$0CF` and `$0D0-$0DF` affected 18 and 22, while
+  `$0E0-$0FF` affected none. The page-2 chunks affected 2, 12, 12, 6, 4, 10, 4, and 0 cases in
+  ascending address order. For each parent block, the union of chunk-level changed cases exactly
+  matched the parent set, with no parent-only interaction case at this resolution.
 - Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md`, the detailed block/title matrix in
   `docs/BIOS_ENTRY_RAM_ANALYSIS.md`, rejection of blanket RAM initialization for BIOS skipping, and
   prioritization of semantic zero-page and upper-work-buffer analysis. Authentic BIOS execution

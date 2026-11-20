@@ -193,6 +193,11 @@ Only `$100-$13F` affected a stack-page case (Time Warrior); `$140-$1FF` had no o
 Pages 2 and 3 contain multiple title-specific regions. The complete block/title matrix is in
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md).
 
+A further sixteen-byte sweep split `$000-$03F`, `$0C0-$0FF`, `$200-$23F`, and `$240-$27F`.
+`$000-$00F` affected the same 106 cases as its 64-byte parent, while `$010-$01F` independently
+affected 102. `$0E0-$0FF`, including the inherited checksum copies, and `$270-$27F` produced no
+observed post-entry difference. Each parent's changed cases exactly equaled the union of its chunks.
+
 Post-entry access tracking found at least one cartridge read-before-write in every case, and the
 union across the corpus covered all 1,024 physical RAM bytes. BIOS code read inherited bytes before
 their first post-entry write in 110 of 116 cases. Repeating authentic-state tracking with the broad

@@ -40,6 +40,40 @@ audio hash in the UMC run. Its sampled PC, video, VRAM, and other compared obser
 is consistent with a phase-sensitive observation at the 1,000-frame boundary; it is not evidence
 that the BIOS revisions produce different entry RAM, which direct comparison has already ruled out.
 
+## Sixteen-byte refinement
+
+The four highest-priority 64-byte blocks were subdivided into sixteen-byte chunks and rerun through
+the same 116-case, 1,000-frame matrix. These 1,856 additional runs all completed. For every parent
+block, the union of its four changed-case sets exactly equals the parent's changed-case set: no title
+changed only when multiple chunks in the parent were cleared together.
+
+| Chunk | Physical range | Changed executions | Final-video changes | Final-VRAM changes | Affected titles |
+| --- | --- | ---: | ---: | ---: | --- |
+| `00` | `$000-$00F` | 106 | 20 | 25 | 53 titles; all except Bao Qing Tian, Basketball, Dinosaur Park, Riddle of the Ancient Tomb, and The Golden Pyramid |
+| `01` | `$010-$01F` | 102 | 4 | 5 | 51 titles; all except Bao Qing Tian, Basketball, Devil Castle, Dinosaur Park, Riddle of the Ancient Tomb, Robin Hood, and The Golden Pyramid |
+| `02` | `$020-$02F` | 8 | 2 | 2 | Galaxy Invaders; Magic Jigsaw; Mars Voyage; Time Warrior |
+| `03` | `$030-$03F` | 4 | 0 | 0 | Magic Jigsaw; Mars Voyage |
+| `0C` | `$0C0-$0CF` | 18 | 2 | 3 | Baseball; Devil Castle; Fantasy Travel; Flying Goblin; Fortune 'n Luck; Galaxy Invaders; Money Maze; Punk Boy; Snowman Legend |
+| `0D` | `$0D0-$0DF` | 22 | 0 | 0 | Boom; Dino Bibo; Kill Shot; Legend of Dragon Knight; Marauder; Money Maze; Myth of Asamia; Nightmare of Santa Claus; One Million Whys; Pipemania; Tennis |
+| `0E` | `$0E0-$0EF` | 0 | 0 | 0 | None observed |
+| `0F` | `$0F0-$0FF` | 0 | 0 | 0 | None observed |
+| `20` | `$200-$20F` | 2 | 0 | 0 | GP Race |
+| `21` | `$210-$21F` | 12 | 0 | 4 | Bomb Blaster and its alternate dump; Jewelriss; Mars Voyage; Witty Apee; World Cup Soccer |
+| `22` | `$220-$22F` | 12 | 0 | 0 | Bomb Blaster and its alternate dump; Famous 7; Fist of Thunder; Tornado; Tough Guy |
+| `23` | `$230-$23F` | 6 | 0 | 0 | Kill Shot; Tornado; Treasure Hunter |
+| `24` | `$240-$24F` | 4 | 0 | 0 | Famous 7; Pipemania |
+| `25` | `$250-$25F` | 10 | 2 | 2 | Bomb Blaster and its alternate dump; Flipuzzle; Mars Voyage; One Million Whys |
+| `26` | `$260-$26F` | 4 | 2 | 2 | Dino Ball; Tough Guy |
+| `27` | `$270-$27F` | 0 | 0 | 0 | None observed |
+
+The `$0E0-$0EF` result includes the duplicated cartridge-checksum fields at `$00E0-$00E1` and
+`$00E5-$00E6`. Clearing this chunk after the BIOS has already validated the cartridge produced no
+observed post-entry difference. This does not remove the checksum from the boot contract: it only
+shows that the inherited copies were not needed by these exercised post-entry paths. Conversely,
+`$000-$00F` includes the callback-enable byte at `$000C`, so its broad effect cannot yet be assigned
+to the other fifteen bytes. `$010-$01F` independently affects 51 titles and therefore contains at
+least one additional broadly consumed field or counter.
+
 ## Interpretation
 
 The earlier page sweep is now substantially narrower:
@@ -57,19 +91,18 @@ The earlier page sweep is now substantially narrower:
   experiment. A zero observed count remains coverage evidence, not proof that a block is irrelevant
   in all later gameplay.
 
-The next efficient refinement is 16-byte perturbation within the affected blocks. Block `00` should
-be first because it contains the shared BIOS callback flag and dominates the catalog. Blocks `03`,
-`08`, and `09` follow because they affect the most additional titles; the single-title upper blocks
-can be analyzed alongside their cartridge code rather than exhaustively subdividing every block at
-once. After candidate fields are identified, inverse tests must preserve only those fields while
-clearing their surrounding block to test sufficiency, not merely necessity.
+The next efficient refinement is individual-byte perturbation of `$000-$01F`, beginning with the
+known callback byte `$000C`, followed by 4-byte subdivisions of `$0C0-$0DF`. The page-2 chunks are
+already title-specific enough to pair with static cartridge-code analysis before subdividing them
+further. After candidate fields are identified, inverse tests must preserve only those fields while
+clearing their surrounding chunk to test sufficiency, not merely necessity.
 
 ## Reproduction and limits
 
 `GAMATEBOOT_ENTRY_RAM=zero-block-NN` selects hexadecimal block `00` through `0F` in the diagnostic
-`gamateboot` executable. `tools/gamate-ram-perturbation-summary.py` compares its aggregate reports
-against an authentic-entry report. Raw reports and user-supplied software remain outside the
-repository.
+`gamateboot` executable. `GAMATEBOOT_ENTRY_RAM=zero-chunk-NN` selects a sixteen-byte physical chunk
+from `00` through `3F`. `tools/gamate-ram-perturbation-summary.py` compares aggregate reports against
+an authentic-entry report. Raw reports and user-supplied software remain outside the repository.
 
 These are behavioral results from the current emulator and exercised paths, not physical hardware
 traces. Independent block clearing detects a dependency when removing one region changes an
