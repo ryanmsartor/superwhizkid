@@ -81,8 +81,14 @@ The former 300-frame sweep window would have missed `$F030` and `$F033`. `$F033`
 in Tornado during this baseline; `$F030` appeared in eight titles. This directly motivated changing
 the standard compatibility and BIOS-call sweep defaults to 1,000 frames.
 
-The table establishes entry use, not helper semantics. Names such as drawing, delay, formatting, or
-input must not be assigned until register, RAM, and hardware effects are measured independently.
+Subsequent RAM tracing identifies `$F030` as the BIOS pseudorandom service. It preserves X and Y,
+ensures that the 16-bit state at `$0012-$0013` is nonzero, advances a feedback shift register, and
+returns the new `$0012` low byte in A. `$0014` is scratch feedback overwritten by each call. This
+name is based on measured state transitions and cartridge use, not on another emulator's label.
+
+The table alone does not establish semantics for the other slots. Names such as drawing, delay,
+formatting, or input must not be assigned until register, RAM, and hardware effects are measured
+independently.
 
 ## Replacement-firmware implications
 

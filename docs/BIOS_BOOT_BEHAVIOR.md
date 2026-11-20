@@ -49,6 +49,29 @@ at cartridge address `$601D`; bytes `$601E-$601F` are not part of that compariso
 always transfers through `$6020`, whose commercial cartridge contents are an absolute jump to the
 game's real entry point.
 
+### Low-RAM entry contract
+
+Controlled perturbation and access tracing reduce the required low-RAM state to named behavior:
+
+```text
+RAM[$004] := accepted cartridge-protection reply
+RAM[$005 through $009] := $FF reset-fill sentinels
+RAM[$00A] := $FF runtime sentinel
+RAM[$00C] := callbacks enabled
+RAM[$010 through $011] := periodic-IRQ counter phase
+RAM[$012 through $013] := nonzero BIOS pseudorandom/LFSR state
+```
+
+The authentic entry values reflect the authentic boot path, but a clean-room implementation can
+derive the protection result and IRQ phase, deliberately initialize the sentinels, and choose a
+documented nonzero LFSR seed. `$014` is temporary LFSR feedback, overwritten by service `$F030`, and
+does not need to be inherited at cartridge entry.
+
+Constructing only these fields after clearing `$000-$01F` matched authentic-entry behavior in all
+116 tested BIOS/cartridge combinations, both unattended and with broad automated input for 1,000
+frames. The equivalence test used the observed authentic counter and LFSR phases so that phase alone
+could not obscure the result; alternate valid phases remain a separate compatibility experiment.
+
 ## Cartridge-protection exchange
 
 The protection check can be represented without reproducing its firmware implementation:

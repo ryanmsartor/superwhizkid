@@ -100,6 +100,18 @@ static bool perturbEntryVram(struct Gamate* g) {
 static bool perturbEntryRam(struct Gamate* g) {
 	const char* pattern = getenv("GAMATEBOOT_ENTRY_RAM");
 	if (!pattern || !*pattern || !strcmp(pattern, "authentic")) return true;
+	if (!strcmp(pattern, "semantic-low32")) {
+		memset(g->ram, 0x00, 0x20);
+		g->ram[0x004] = 0x47;             // Accepted protection reply.
+		memset(g->ram + 0x005, 0xFF, 6); // Modeled reset/runtime sentinels through $00A.
+		g->ram[0x00C] = 0x01;             // Cartridge callbacks enabled.
+		g->ram[0x010] = 0x03;             // Authentic periodic-IRQ counter phase $0394.
+		g->ram[0x011] = 0x94;
+		g->ram[0x012] = 0x8A;             // Authentic BIOS LFSR state $358A.
+		g->ram[0x013] = 0x35;
+		printf("entry RAM replaced with diagnostic pattern: %s\n", pattern);
+		return true;
+	}
 	if (!strncmp(pattern, "zero-low32", 10)) {
 		uint8_t low[0x20];
 		memcpy(low, g->ram, sizeof(low));
@@ -212,13 +224,35 @@ static void reportRamAccess(void* opaque, const struct Gamate* g, bool write,
 	if (context->ownerFilter && strcmp(context->ownerFilter, "all") &&
 			strcmp(context->ownerFilter, owner)) return;
 	printf("RAM watch: frame=%u access=%c address=%03X pc=%04X owner=%s interrupt=%s "
-		"previous=%02X value=%02X nearby=%02X%02X%02X%02X master=%llu irqs=%llu nmis=%llu\n",
+		"bank=%u/%u previous=%02X value=%02X nearby=%02X%02X%02X%02X "
+		"master=%llu irqs=%llu nmis=%llu\n",
 		context->frame, write ? 'W' : 'R', address, pc, owner,
-		interruptName(g->diagnostics.diagnosticInterrupt), previous, value,
+		interruptName(g->diagnostics.diagnosticInterrupt), g->firstBank, g->bank, previous, value,
 		g->ram[0x010], g->ram[0x011], g->ram[0x012], g->ram[0x013],
 		(unsigned long long) g->masterClocks,
 		(unsigned long long) g->diagnostics.irqsTaken,
 		(unsigned long long) g->diagnostics.nmisTaken);
+}
+
+static bool configureRamWatch(struct Gamate* g, struct RamWatchContext* context,
+		const char* addressText, const char* label) {
+	if (!addressText || !*addressText) return true;
+	char* end;
+	unsigned address = (unsigned) strtoul(addressText, &end, 16);
+	if (*end || address >= 0x400) {
+		fprintf(stderr, "invalid %s address: %s\n", label, addressText);
+		return false;
+	}
+	if (context->ownerFilter && strcmp(context->ownerFilter, "all") &&
+			strcmp(context->ownerFilter, "bios") &&
+			strcmp(context->ownerFilter, "cartridge") &&
+			strcmp(context->ownerFilter, "other")) {
+		fprintf(stderr, "invalid GAMATEBOOT_RAM_WATCH_OWNER: %s\n", context->ownerFilter);
+		return false;
+	}
+	gamateSetRamDiagnosticWatch(g, (uint16_t) address, reportRamAccess, context);
+	printf("%s enabled: address=%03X\n", label, address);
+	return true;
 }
 
 static void printRamAddressMap(const char* label, const uint8_t* bits) {
@@ -253,6 +287,12 @@ int main(int argc, char** argv) {
 	}
 	free(bios); free(rom);
 	printf("reset PC=$%04X, cartridge=%zu bytes, mapper=%d\n", g.cpu.pc, g.romSize, g.mapper);
+	struct RamWatchContext preEntryWatch = { .ownerFilter = getenv("GAMATEBOOT_RAM_WATCH_OWNER") };
+	if (!configureRamWatch(&g, &preEntryWatch, getenv("GAMATEBOOT_RAM_WATCH_PREENTRY"),
+			"GAMATEBOOT_RAM_WATCH_PREENTRY")) {
+		gamateFree(&g);
+		return 2;
+	}
 
 	bool reportedSequence = false, reportedUnlock = false;
 	uint64_t instructions;
@@ -285,6 +325,7 @@ int main(int argc, char** argv) {
 		gamateFree(&g);
 		return 1;
 	}
+	gamateSetRamDiagnosticWatch(&g, 0, NULL, NULL);
 	printf("entry state: master=%llu frame=%u irq=%u lcd=%u/%u RAM=%08X VRAM=%08X "
 		"scroll=%u/%u lcdcon=%u%u%u%u%u\n",
 		(unsigned long long) g.masterClocks, g.frameClocks, g.irqClocks, g.lcdRowEvent, g.lcdClock,
@@ -305,25 +346,10 @@ int main(int argc, char** argv) {
 		gamateResetRamDiagnostics(&g);
 	}
 	struct RamWatchContext ramWatch = { .ownerFilter = getenv("GAMATEBOOT_RAM_WATCH_OWNER") };
-	const char* ramWatchText = getenv("GAMATEBOOT_RAM_WATCH");
-	if (ramWatchText && *ramWatchText) {
-		char* end;
-		unsigned address = (unsigned) strtoul(ramWatchText, &end, 16);
-		if (*end || address >= 0x400) {
-			fprintf(stderr, "invalid GAMATEBOOT_RAM_WATCH address: %s\n", ramWatchText);
-			gamateFree(&g);
-			return 2;
-		}
-		if (ramWatch.ownerFilter && strcmp(ramWatch.ownerFilter, "all") &&
-				strcmp(ramWatch.ownerFilter, "bios") &&
-				strcmp(ramWatch.ownerFilter, "cartridge") &&
-				strcmp(ramWatch.ownerFilter, "other")) {
-			fprintf(stderr, "invalid GAMATEBOOT_RAM_WATCH_OWNER: %s\n", ramWatch.ownerFilter);
-			gamateFree(&g);
-			return 2;
-		}
-		gamateSetRamDiagnosticWatch(&g, (uint16_t) address, reportRamAccess, &ramWatch);
-		printf("RAM watch enabled: address=%03X\n", address);
+	if (!configureRamWatch(&g, &ramWatch, getenv("GAMATEBOOT_RAM_WATCH"),
+			"GAMATEBOOT_RAM_WATCH")) {
+		gamateFree(&g);
+		return 2;
 	}
 	// Diagnostic experiment only: remove the oscillator/display phase inherited from the BIOS while
 	// preserving CPU, RAM, VRAM, registers, and cartridge state. Normal emulation never does this.

@@ -199,18 +199,27 @@ affected 102. `$0E0-$0FF`, including the inherited checksum copies, and `$270-$2
 observed post-entry difference. Each parent's changed cases exactly equaled the union of its chunks.
 
 Byte-level refinement identifies `$000C`, the callback-enable flag, as accounting for the affected
-membership of `$000-$00F`: clearing it changes 106 cases across 53 titles. `$0011` independently
-accounts for all 102 cases affected by `$010-$01F`, although its semantics remain under
-investigation. Smaller dependencies occur at `$004-$009` and `$012-$013`. Four-byte refinement
+membership of `$000-$00F`: clearing it changes 106 cases across 53 titles. `$0011`, the low byte of
+the periodic-IRQ counter, independently accounts for all 102 cases affected by `$010-$01F`.
+Smaller dependencies occur at `$004-$009` and `$012-$013`. Four-byte refinement
 localizes the active `$0C0-$0DF` regions to `$0CC-$0CF`, `$0D0-$0D3`, `$0D8-$0DB`, and
 `$0DC-$0DF`; the intervening groups had no observed effect.
 
 Access tracing identifies `$0010-$0011` as the 16-bit periodic-IRQ counter and finds direct `$0011`
 access in fourteen titles. An inverse policy that clears `$000-$01F` while preserving
 `$0004-$000A`, `$000C`, and `$0010-$0013` matches authentic execution, final video, and final VRAM
-in all 116 unattended cases and all 116 broad-input cases. These are sufficient behavioral regions,
-not all semantically understood fields: `$0004-$000A` and `$0012-$0013` still require clean-room
-initialization rules.
+in all 116 unattended cases and all 116 broad-input cases. Follow-up last-writer and
+cartridge-consumer traces provide clean-room initialization rules for the formerly opaque regions:
+`$004` is the accepted protection reply, `$005-$009` are `$FF` reset-fill sentinels, `$00A` is an
+explicit `$FF` runtime sentinel, and `$012-$013` are the state of BIOS pseudorandom service `$F030`.
+This makes the tested low-RAM contract behaviorally reproducible without copying a RAM image.
+
+A diagnostic policy then constructed those named fields directly after clearing `$000-$01F`.
+It matched authentic entry in all 116 BIOS/cartridge cases for both unattended and broad-input
+1,000-frame matrices across every compared behavioral observation. Only the deliberately different
+whole-RAM hash remained unequal. The exact `$0394` counter phase and `$358A` LFSR state were used as
+documented comparison inputs; replacement firmware can derive or deliberately define those phases
+rather than preserve unexplained bytes.
 
 Post-entry access tracking found at least one cartridge read-before-write in every case, and the
 union across the corpus covered all 1,024 physical RAM bytes. BIOS code read inherited bytes before
@@ -219,10 +228,10 @@ automated-input schedule added no new union addresses and all 116 cases complete
 run proves exhaustive gameplay coverage.
 
 The current supported conclusion is therefore: **preserve authentic WRAM when using an authentic
-BIOS, and do not implement BIOS skipping with a blanket fill.** A clean-room replacement should
-derive and initialize named functional fields, then repeat these perturbations as those fields are
-understood. The experiment rules out the proposed minimal callback/checksum-only policy without
-turning the invariant authentic RAM image into a permissible replacement template.
+BIOS, and do not implement BIOS skipping with a blanket fill.** For the common low-RAM boot contract,
+a clean-room replacement can now initialize named functional fields instead of retaining an opaque
+RAM template. This does not yet make BIOS skipping complete: post-entry service calls, CPU/register
+entry state, peripheral state, and phase policy still require validation.
 
 ## What should not be copied
 
@@ -246,8 +255,8 @@ The following work remains necessary:
    identified in [`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md).
 2. Extend runtime coverage beyond the unattended 1,000-frame baseline with representative gameplay
    and link activity.
-3. Continue decomposing the now-confirmed RAM dependencies into named functional groups; page-level
-   perturbation found broad zero-page use and title-specific dependencies in both upper pages.
+3. Test deliberately different valid IRQ-counter and LFSR phases, and distinguish harmless phase
+   changes from software assumptions about their authentic entry values.
 4. ~~Test a clean RAM policy while preserving only documented callback/checksum state.~~ Complete:
    blanket fills and callback/checksum-only initialization are insufficient across the corpus.
 5. ~~Test clearing or independently drawing VRAM instead of inheriting authentic startup graphics.~~

@@ -106,8 +106,8 @@ All affected byte-level cases paired across both BIOS revisions. `$000C` is the 
 callback-enable flag. Clearing it alone accounts for the broad membership of the first chunk's
 result, consistent with disabling BIOS dispatch to cartridge callbacks; other bytes in that chunk
 still produce narrower title-specific changes. `$0011` similarly accounts for the second chunk's
-affected membership, but its precise meaning remains to be established. Its broad reach makes a
-BIOS-maintained timing or interrupt field plausible, not proven.
+affected membership. The IRQ trace below identifies it as the low byte of the BIOS-maintained
+periodic-IRQ counter.
 
 | Four-byte group | Changed executions | Final-video changes | Final-VRAM changes | Affected titles |
 | --- | ---: | ---: | ---: | --- |
@@ -174,10 +174,45 @@ preserving it as part of `$0004-$000A` removed that final two-BIOS difference. T
 policy matches authentic entry across all 116 unattended cases and all 116 broad-input cases for
 execution, final video, and final VRAM while clearing every other byte in `$000-$01F`.
 
-This is a behavioral sufficiency result for the tested window, not yet a semantic license to embed
-the field values. `$000C` and `$0010-$0011` are understood ABI state. `$0004-$000A` and
-`$0012-$0013` still require names or independently derived initialization rules before replacement
-firmware can use them cleanly.
+### Semantics of the preserved fields
+
+Pre-entry last-writer traces and focused cartridge access traces give the preserved regions a
+functional description:
+
+| RAM | Entry role | Evidence |
+| --- | --- | --- |
+| `$004` | Cartridge-protection reply accumulator | The BIOS shifts the eight returned protection bits into this byte and accepts the resulting `$47`; both revisions use the same behavior. |
+| `$005` | Reset-fill byte paired with `$004` by software | Neither BIOS writes it before entry. Hannibal reads `$004-$005` through an indirect cartridge access; Fortune 'n Luck uses both extensively as runtime scratch. |
+| `$006-$009` | Reset-fill sentinels | Neither BIOS writes them before entry, so they remain `$FF`. Myth of Asamia reads them before installing its own two word-like values; Fortune 'n Luck also initializes them later. |
+| `$00A` | Explicit `$FF` runtime sentinel | Both BIOSes write `$FF` immediately before enabling callbacks and jumping to `$6020`. Treasure Hunter reaches it through an indirect read on an input-driven IRQ-callback path. |
+| `$00C` | Cartridge-callback enable flag | Zero disables BIOS dispatch; any observed nonzero value enables it. Successful boot writes `$01`. |
+| `$010-$011` | 16-bit periodic-IRQ counter | `$011` increments each IRQ and carries into `$010`; fourteen titles directly access `$011`. |
+| `$012-$013` | BIOS pseudorandom/LFSR state | Service `$F030` ensures a nonzero state, advances a 16-bit feedback shift register, preserves X/Y, and returns the new low byte in A. `$014` is overwritten scratch feedback and need not be inherited. |
+
+The authentic entry state leaves the LFSR at `$358A` (high byte `$013`, low byte `$012`) after the
+startup sequence. That exact seed is useful for authentic phase comparison, but replacement firmware
+can initialize a documented nonzero seed and advance it according to its own independently authored
+startup behavior. Similarly, `$005-$009` are not meaningful firmware output bytes; their observed
+`$FF` values are a reset initialization policy that commercial software happens to consume.
+
+The resulting field set is therefore expressible as behavior rather than an opaque RAM template:
+validate protection into `$004`, initialize defined sentinels, enable callbacks, establish the IRQ
+counter phase, and initialize the BIOS random-generator state.
+
+### Semantic-policy validation
+
+A final diagnostic policy cleared `$000-$01F` and constructed the named fields above directly:
+`$004=$47`, `$005-$00A=$FF`, `$00C=$01`, IRQ-counter phase `$0394`, and LFSR state `$358A`.
+It did not copy any entry-RAM block. All 58 cartridges under both BIOS revisions then matched the
+authentic-entry observations through 1,000 frames in both the unattended and broad automated-input
+matrices: 116 of 116 cases in each matrix had identical CPU, video, audio, VRAM, mapper, peripheral,
+controller, and activity results. The whole-RAM hashes intentionally differed because unrelated
+boot residue remained cleared.
+
+The exact counter and LFSR values in this equivalence test reproduce authentic phase for controlled
+comparison. They are documented state variables, not a claim that replacement firmware must hardcode
+those constants: a clean implementation can derive the counter from its own elapsed IRQs and choose
+and document a nonzero random seed, with resulting phase differences tested separately.
 
 ## Interpretation
 
@@ -196,10 +231,9 @@ The earlier page sweep is now substantially narrower:
   experiment. A zero observed count remains coverage evidence, not proof that a block is irrelevant
   in all later gameplay.
 
-The next efficient step is semantic analysis of `$0004-$000A` and `$0012-$0013`, including the
-input-gated `$000A` use in Treasure Hunter, followed by static/runtime correlation of the
-`$0CC-$0DF` and page-2 title groups. Once those fields are named, inverse tests should initialize
-them from derived semantics rather than preserve authentic bytes.
+The next efficient step is testing alternate valid LFSR/counter phases, followed by static/runtime
+correlation for the `$0CC-$0DF` and page-2 title groups. Those later regions are cartridge work
+areas, not part of the common low-RAM BIOS contract established here.
 
 ## Reproduction and limits
 
@@ -207,6 +241,7 @@ them from derived semantics rather than preserve authentic bytes.
 `gamateboot` executable. `GAMATEBOOT_ENTRY_RAM=zero-chunk-NN` selects a sixteen-byte physical chunk
 from `00` through `3F`; `zero-byte-NNN` selects one physical byte, and `zero-quad-NN` selects an
 aligned four-byte group by index. `zero-low32` and its `keep-*` variants exercise inverse policies.
+`semantic-low32` constructs the documented low-RAM fields without copying an entry-RAM block.
 `GAMATEBOOT_RAM_WATCH` selects a physical address for per-access tracing; the optional
 `GAMATEBOOT_RAM_WATCH_OWNER` filters `bios`, `cartridge`, `other`, or `all` execution owners.
 `tools/gamate-ram-perturbation-summary.py` compares aggregate reports against an authentic-entry

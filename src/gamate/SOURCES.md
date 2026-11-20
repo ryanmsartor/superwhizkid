@@ -692,7 +692,24 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   `$0004-$000A`, `$000C`, and `$0010-$0013` produced zero execution, final-video, or final-VRAM
   differences across all 116 unattended and 116 broad-input cases. `$000A` was added after the
   input sweep isolated a two-BIOS Treasure Hunter difference to that byte. This establishes tested
-  sufficiency, not the still-unknown meanings of `$0004-$000A` and `$0012-$0013`.
+  sufficiency; the following writer/consumer trace supplied the semantic interpretation.
+- Pre-entry writer and focused consumer traces: a diagnostic watch enabled before `$6020` recorded
+  final BIOS writers for `$004-$00A` and `$012-$013` under both revisions. `$004` is the shift
+  accumulator for the accepted `$47` protection reply; `$005-$009` receive no BIOS writes and retain
+  `$FF` reset fill; `$00A` receives an explicit final `$FF` write. `$012-$013` are repeatedly advanced
+  together by the routine behind service `$F030`; static instruction/transition analysis identifies
+  a nonzero-seeded 16-bit feedback shift register that returns its low byte. Focused cartridge traces
+  linked the preserved fields to Hannibal, Fortune 'n Luck, Myth of Asamia, Treasure Hunter, Hot
+  Hero, and Magic Jigsaw access sites. Used for the named low-RAM contract in
+  `docs/BIOS_BOOT_BEHAVIOR.md`, the `$F030` description in `docs/BIOS_RUNTIME_API_ANALYSIS.md`, and
+  the clean-room initialization conclusions in `docs/BIOS_ENTRY_RAM_ANALYSIS.md`.
+- Semantic low-RAM validation: a diagnostic policy cleared `$000-$01F` and initialized only the
+  named protection, sentinel, callback, IRQ-counter, and LFSR fields. It matched authentic-entry
+  CPU, video, audio, VRAM, mapper, peripheral, controller, and activity observations in all 116
+  unattended and all 116 broad-input 1,000-frame cases. Whole-RAM hashes were excluded because the
+  policy intentionally clears unrelated boot residue. This validates behavioral construction of
+  the common low-RAM contract; it does not establish that authentic counter or random phase must be
+  hardcoded by replacement firmware.
 - Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md`, the detailed block/title matrix in
   `docs/BIOS_ENTRY_RAM_ANALYSIS.md`, rejection of blanket RAM initialization for BIOS skipping, and
   prioritization of semantic zero-page and upper-work-buffer analysis. Authentic BIOS execution
