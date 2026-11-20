@@ -22,8 +22,10 @@ struct Event {
 
 struct CallContext {
 	uint16_t source, target, expectedReturn;
+	uint16_t vramAddress;
 	uint8_t opcode, bank, firstBank;
 	uint8_t a, x, y, s, p;
+	uint8_t scrollX, scrollY, lcdFlags, ayAddress;
 	uint8_t ram[0x400], vram[0x4000], ayRegisters[16];
 	uint64_t startClocks, startIrqs, startNmis;
 	uint64_t startAyWrites, startLcdWrites, startVramWrites;
@@ -129,6 +131,12 @@ static uint16_t changedMask(const uint8_t* before, const uint8_t* after, size_t 
 	return mask;
 }
 
+static uint8_t lcdFlags(const struct Gamate* g) {
+	return (g->vramPlane ? 0x01 : 0) | (g->incrementRow ? 0x02 : 0) |
+		(g->window ? 0x04 : 0) | (g->swapPlanes ? 0x08 : 0) |
+		(g->displayBlank ? 0x10 : 0) | (g->displayStopped ? 0x20 : 0);
+}
+
 static void beginCall(struct CallContext* call, const struct Gamate* g, uint16_t source,
 		uint16_t target, uint16_t expectedReturn, uint8_t opcode, uint8_t bank,
 		uint8_t firstBank, uint8_t a, uint8_t x, uint8_t y, uint8_t s, uint8_t p,
@@ -137,6 +145,8 @@ static void beginCall(struct CallContext* call, const struct Gamate* g, uint16_t
 		.source = source, .target = target, .expectedReturn = expectedReturn,
 		.opcode = opcode, .bank = bank, .firstBank = firstBank,
 		.a = a, .x = x, .y = y, .s = s, .p = p,
+		.vramAddress = g->vramAddress, .scrollX = g->scrollX, .scrollY = g->scrollY,
+		.lcdFlags = lcdFlags(g), .ayAddress = g->ayAddress,
 		.startClocks = startClocks,
 		.startIrqs = g->diagnostics.irqsTaken, .startNmis = g->diagnostics.nmisTaken,
 		.startAyWrites = g->diagnostics.ayWrites, .startLcdWrites = g->diagnostics.lcdWrites,
@@ -158,12 +168,18 @@ static void finishCall(FILE* file, const struct CallContext* call, const struct 
 	fprintf(file,
 		"%04X\t%04X\t%04X\t%02X\t%02X\t%02X\t%u\t%u\t"
 		"%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t"
+		"%04X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t"
+		"%04X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t"
 		"%llu\t%u\t%04X\t%04X\t%u\t%04X\t%04X\t%04X\t"
 		"%llu\t%llu\t%llu\t%llu\t%llu\t%llu\t%llu\n",
 		call->source, call->target, call->expectedReturn, call->opcode,
 		call->bank, call->firstBank, call->frame, returnFrame,
 		call->a, call->x, call->y, call->s, call->p,
 		g->cpu.a, g->cpu.x, g->cpu.y, g->cpu.s, g->cpu.p,
+		call->vramAddress, call->scrollX, call->scrollY, call->lcdFlags,
+		call->ayAddress, call->bank, call->firstBank,
+		g->vramAddress, g->scrollX, g->scrollY, lcdFlags(g),
+		g->ayAddress, g->bank, g->firstBank,
 		(unsigned long long) (g->masterClocks - call->startClocks),
 		ram.count, ram.first, ram.last, vram.count, vram.first, vram.last, ayMask,
 		(unsigned long long) (g->diagnostics.ayWrites - call->startAyWrites),
@@ -235,7 +251,10 @@ int main(int argc, char** argv) {
 		}
 		fprintf(callFile, "source\ttarget\texpected_return\topcode\tbank\tfirst_bank\t"
 			"entry_frame\treturn_frame\tin_a\tin_x\tin_y\tin_s\tin_p\t"
-			"out_a\tout_x\tout_y\tout_s\tout_p\tclocks\t"
+			"out_a\tout_x\tout_y\tout_s\tout_p\t"
+			"in_vram_address\tin_scroll_x\tin_scroll_y\tin_lcd_flags\tin_ay_address\t"
+			"in_bank\tin_first_bank\tout_vram_address\tout_scroll_x\tout_scroll_y\t"
+			"out_lcd_flags\tout_ay_address\tout_bank\tout_first_bank\tclocks\t"
 			"ram_changed\tram_first\tram_last\tvram_changed\tvram_first\tvram_last\t"
 			"ay_changed_mask\tay_writes\tlcd_writes\tvram_writes\tbank_writes\t"
 			"uart_clocks\tirqs\tnmis\n");

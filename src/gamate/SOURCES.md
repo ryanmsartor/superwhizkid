@@ -771,6 +771,21 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   timing and summarized effects could differ when the 58-master-clock entry-phase offset changed
   whether an interrupt fell inside a call. `tools/gamate-bios-call-summary.py` reproduces aggregate
   counts and effect categories from the local derived report.
+- Hardware-state clustering extension: completed-call records now include entry/exit VRAM address,
+  scroll, LCD mode flags, AY address, and mapper banks. These are emulator state observations, not
+  copied firmware or cartridge bytes. A repeated 58-cartridge/two-BIOS/1,000-frame sweep completed
+  116/116 cases. The summary tool reports register and status preservation, input-A timing groups,
+  and frequent hardware-state transitions for a selected slot.
+- `$F030` contract use: 362 paired calls across both BIOSes established exact X/Y/S and I/D/V
+  preservation, N/Z derived from returned A, 174-master-clock uninterrupted timing, and no hardware
+  state effects. Existing RAM transition analysis supplies the `$012-$014` LFSR state/scratch role.
+  Carry is intentionally left unresolved because it was not preserved consistently and has not yet
+  been isolated with a controlled state probe. Used for the first resolved service table in
+  `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
+- `$F000` prioritization: sixteen uninterrupted calls each took 3,278 master clocks, issued 64 VRAM
+  writes, ended at VRAM address `$128B`, preserved scroll/AY-selection/mapper state, and returned
+  A/X/Y as `$38/$40/$20`. This evidence is used only to select it as the next narrow probe target;
+  no visual or drawing semantic is assigned yet.
 - Input-coverage method: `tools/gamate-bios-input-campaign.sh` applies independently authored,
   deterministic schedules for long Start, Select/Start plus A/B actions, and every individual control
   plus legal direction/button combinations. `tools/gamate-bios-call-coverage.py` compares derived

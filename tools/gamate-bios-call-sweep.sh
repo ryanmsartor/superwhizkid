@@ -40,7 +40,7 @@ temporary_completed=$(mktemp /tmp/superwhizkid-bios-call-completed-XXXXXX)
 trap 'rm -f "$temporary" "$temporary_completed"' EXIT
 printf 'bios\tcartridge\tdirection\tkind\tsource\ttarget\topcode\tbank\tfirst_bank\tcount\tfirst_frame\n' > "$report" || exit 2
 if [[ -n $completed_report ]]; then
-	printf 'bios\tcartridge\tsource\ttarget\texpected_return\topcode\tbank\tfirst_bank\tentry_frame\treturn_frame\tin_a\tin_x\tin_y\tin_s\tin_p\tout_a\tout_x\tout_y\tout_s\tout_p\tclocks\tram_changed\tram_first\tram_last\tvram_changed\tvram_first\tvram_last\tay_changed_mask\tay_writes\tlcd_writes\tvram_writes\tbank_writes\tuart_clocks\tirqs\tnmis\n' > "$completed_report" || exit 2
+	printf 'bios\tcartridge\tsource\ttarget\texpected_return\topcode\tbank\tfirst_bank\tentry_frame\treturn_frame\tin_a\tin_x\tin_y\tin_s\tin_p\tout_a\tout_x\tout_y\tout_s\tout_p\tin_vram_address\tin_scroll_x\tin_scroll_y\tin_lcd_flags\tin_ay_address\tin_bank\tin_first_bank\tout_vram_address\tout_scroll_x\tout_scroll_y\tout_lcd_flags\tout_ay_address\tout_bank\tout_first_bank\tclocks\tram_changed\tram_first\tram_last\tvram_changed\tvram_first\tvram_last\tay_changed_mask\tay_writes\tlcd_writes\tvram_writes\tbank_writes\tuart_clocks\tirqs\tnmis\n' > "$completed_report" || exit 2
 fi
 
 passes=0

@@ -123,6 +123,7 @@ derived behavioral metadata:
 - elapsed master clocks and entry/return frames;
 - changed-byte counts and address extents for RAM and VRAM, without retaining byte contents;
 - changed AY-register mask and AY, LCD, VRAM, mapper, UART, IRQ, and NMI counter deltas.
+- entry and exit VRAM address, scroll, LCD mode flags, AY address, and mapper-bank state.
 
 The detailed completed-call report remains local and separate from the compact boundary-event report.
 This is now implemented as the optional final output argument to `gamatebioscalls` and
@@ -165,6 +166,40 @@ Group completed calls by service slot, input/output register tuple, memory-chang
 effects, and timing range. Begin with `$F02D`, `$F015`, and `$F012`, which together dominate the
 observed call volume, then cover `$F02A`, `$F003`, `$F006`, and `$F027`. Treat clusters as candidate
 calling conventions, not semantic names, until targeted perturbations confirm them.
+
+This stage is now in progress. The completed-call report and summary tool retain hardware-state
+transitions in addition to write counters, allowing a helper that changes LCD configuration to be
+distinguished from one whose writes merely occur while the prior configuration remains active.
+Selected-slot summaries also report register preservation, status-bit behavior, timing grouped by
+input A, and the most frequent hardware-state transitions.
+
+### First resolved contract: `$F030`
+
+The pseudorandom service is the first slot with a sufficiently narrow observed contract. The table
+combines 362 completed calls across both BIOS revisions; the two revisions have identical results.
+
+| Property | Observed contract |
+| --- | --- |
+| State | Advances the nonzero 16-bit feedback state at `$012-$013`; `$014` is scratch feedback. |
+| Return | A receives the new `$012` value. |
+| Preserved registers | X, Y, and S in 362/362 calls. |
+| Status | I, D, and V preserved in 362/362 calls; N and Z describe returned A in 362/362 calls. Carry behavior remains unresolved. |
+| Uninterrupted timing | 174 master clocks (87 CPU cycles). |
+| Hardware effects | None in the 360 uninterrupted calls: no VRAM, LCD, AY, mapper, UART, scroll, or hardware-address-state change. |
+| Interrupt interaction | Two calls included a periodic IRQ, took 910 master clocks, and include callback-attributed effects. |
+
+Observed input A values cover much of the byte range and do not correlate with the returned value,
+but this is not yet a controlled proof that A is ignored. Likewise, carry matched its entry value in
+only 224 of 362 calls; its relationship to feedback state needs a purpose-written state probe before
+replacement code can promise a carry result. Replacement tests should initially require the resolved
+properties above and leave carry unspecified.
+
+`$F000` is the next narrow candidate rather than one of the high-volume slots. Its sixteen observed
+calls are uninterrupted and identical in duration at 3,278 master clocks. Each issues 64 VRAM writes,
+ends at VRAM address `$128B`, and leaves scroll, AY selection, and mapper bank unchanged. It also
+forces A/X/Y to `$38/$40/$20`. It sets the diagnostic plane/increment flags while retaining an
+already-set window flag. This is consistent with a fixed drawing helper, but its visual purpose and
+input contract remain unnamed pending controlled probes.
 
 ### Stage 3: extend reachable paths
 
