@@ -264,11 +264,17 @@ unsigned gamateCpuStep(struct Gamate* g) {
 	if (c->stopped) return 1;
 	if (g->nmi) {
 		g->nmi = false;
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+		g->diagnostics.diagnosticInterrupt = 2;
+#endif
 		unsigned cycles = interrupt(g, 0xFFFA, false);
 		c->cycles += cycles;
 		return cycles;
 	}
 	if (g->irq && !c->irqMask) {
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+		g->diagnostics.diagnosticInterrupt = 1;
+#endif
 		unsigned cycles = interrupt(g, 0xFFFE, false);
 		c->cycles += cycles;
 		return cycles;
@@ -282,7 +288,11 @@ unsigned gamateCpuStep(struct Gamate* g) {
 	else if ((opcode & 3) == 2 && opcode != 0x8A && opcode != 0x9A && opcode != 0xAA &&
 			opcode != 0xBA && opcode != 0xCA && opcode != 0xEA) cycles = group2(g, opcode);
 	else switch (opcode) {
-	case 0x00: read8(g, c->pc++); cycles = interrupt(g, 0xFFFE, true); break;
+	case 0x00:
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+		g->diagnostics.diagnosticInterrupt = 3;
+#endif
+		read8(g, c->pc++); cycles = interrupt(g, 0xFFFE, true); break;
 	case 0x08: read8(g, c->pc); push(g, c->p | B | U); cycles = 3; break;
 	case 0x10: cycles = branch(g, !(c->p & N)); break;
 	case 0x18: c->p &= ~C; break;
@@ -294,7 +304,11 @@ unsigned gamateCpuStep(struct Gamate* g) {
 	case 0x30: cycles = branch(g, c->p & N); break;
 	case 0x38: c->p |= C; break;
 	case 0x40: read8(g, c->pc); read8(g, 0x100 | c->s); c->p = (pull(g) | U) & ~B;
-		{ uint8_t lo = pull(g); c->pc = lo | (uint16_t) pull(g) << 8; } cycles = 6; break;
+		{ uint8_t lo = pull(g); c->pc = lo | (uint16_t) pull(g) << 8; } cycles = 6;
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+		g->diagnostics.diagnosticInterrupt = 0;
+#endif
+		break;
 	case 0x48: read8(g, c->pc); push(g, c->a); cycles = 3; break;
 	case 0x4C: c->pc = fetch16(g); cycles = 3; break;
 	case 0x50: cycles = branch(g, !(c->p & V)); break;

@@ -15,6 +15,12 @@ enum GamateMapper { GAMATE_MAPPER_PLAIN, GAMATE_MAPPER_BANKED, GAMATE_MAPPER_4IN
 
 typedef void (*GamateLinkBitCallback)(void* context, bool bit);
 
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+struct Gamate;
+typedef void (*GamateRamAccessCallback)(void* context, const struct Gamate* gamate,
+	bool write, uint16_t address, uint8_t previous, uint8_t value);
+#endif
+
 struct GamateCpu {
 	uint16_t pc;
 	uint8_t a, x, y, s, p;
@@ -43,6 +49,11 @@ struct GamateDiagnostics {
 	uint8_t vramDisplayReadBeforeWriteMap[0x4000 / 8];
 	bool ramCoverageEnabled;
 	uint16_t diagnosticInstructionPc;
+	uint16_t ramWatchAddress;
+	uint8_t diagnosticInterrupt;
+	bool ramWatchEnabled;
+	GamateRamAccessCallback ramAccessCallback;
+	void* ramAccessContext;
 	uint16_t ramUniqueWritten, ramUniqueReadBeforeWrite[3];
 	uint8_t ramWritten[0x400 / 8];
 	uint8_t ramReadBeforeWriteMap[3][0x400 / 8];
@@ -123,6 +134,8 @@ void gamateRenderSnapshot(struct Gamate* gamate);
 // their storage do not exist in normal core builds.
 void gamateResetVramDiagnostics(struct Gamate* gamate);
 void gamateResetRamDiagnostics(struct Gamate* gamate);
+void gamateSetRamDiagnosticWatch(struct Gamate* gamate, uint16_t address,
+	GamateRamAccessCallback callback, void* context);
 #endif
 void gamateSetAudio(struct Gamate* gamate, int16_t* output, size_t frameCapacity, unsigned sampleRate);
 void gamateCpuReset(struct Gamate* gamate);

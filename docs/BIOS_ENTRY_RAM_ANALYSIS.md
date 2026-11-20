@@ -121,8 +121,63 @@ BIOS-maintained timing or interrupt field plausible, not proven.
 | `$0DC-$0DF` | 4 | 0 | 0 | One Million Whys; Pipemania |
 
 For chunks `$000-$00F`, `$010-$01F`, `$0C0-$0CF`, and `$0D0-$0DF`, the union of the child-level
-affected cases exactly equals the parent's set. No parent-only dependency requiring multiple child
-regions to be cleared together was observed at this resolution.
+affected cases exactly equals the parent's set. This set equality does not prove that the children
+are independently sufficient: inverse testing below found a low-RAM interaction hidden by titles
+that already differed through `$000C` or `$0011`.
+
+## IRQ counter trace and inverse policy
+
+Diagnostic-only access tracing establishes `$0010-$0011` as a 16-bit, big-endian-in-memory periodic
+IRQ counter. Both BIOS revisions increment `$0011` on every periodic IRQ and increment `$0010` when
+the low byte wraps. At cartridge entry the observed value is `$0394`; after 108 further IRQs the
+trace records `$0011` wrapping from `$FF` to `$00`, followed by `$0010` changing from `$03` to `$04`.
+The BIT handler performs these read-modify-writes at `$FFBF/$FFC4`; the UMC handler uses
+`$FFA7/$FFAC`. Every traced access is inside IRQ context.
+
+A cartridge-only 1,000-frame sweep found direct `$0011` access in fourteen titles under both BIOSes:
+
+| Cartridge | Executing locations | Observed access |
+| --- | --- | --- |
+| Bao Qing Tian | `$6335` | One startup write |
+| Basketball | `$63D1`, `$6451` | Startup read/write, then sustained polling |
+| Devil Castle | `$8F50` | One write |
+| Dino Ball | `$8C41` | Reads |
+| Dino Bibo | `$A8E4` | Reads |
+| Dinosaur Park | `$68C4` | Startup read/write |
+| Fortune 'n Luck | `$636F` | One read |
+| Kill Shot | `$8DC6`, `$9E8E` | Repeated reads |
+| Magic Jigsaw | `$9B44`, `$D5AB`, `$D5C1` | Reads |
+| Riddle of the Ancient Tomb | `$6377` | One write |
+| Robin Hood | `$68AC` | Startup read/write |
+| The Golden Pyramid | `$64A8` | One write |
+| Witty Apee | `$8401`, `$8F81` | Reads |
+| World Cup Soccer | `$A594` | Reads |
+
+This makes the counter part of the cartridge-visible BIOS ABI, not merely private firmware residue.
+The entry value is meaningful counter phase derived from elapsed IRQs during boot; clean-room code
+may calculate or deliberately redefine its phase, but should not copy it as an unexplained byte.
+
+Inverse tests cleared all of `$000-$01F` and selectively restored authentic functional fields:
+
+| Preserved entry fields | Changed executions | Final-video changes | Final-VRAM changes |
+| --- | ---: | ---: | ---: |
+| None | 106 | 24 | 29 |
+| `$000C` | 102 | 4 | 7 |
+| `$0011` | 106 | 22 | 27 |
+| `$000C`, `$0011` | 10 | 2 | 4 |
+| `$0004-$000A`, `$000C`, `$0010-$0013` | 0 | 0 | 0 |
+
+The ten residual cases after preserving `$000C/$0011` were Fortune 'n Luck, Hannibal, Hot Hero,
+Magic Jigsaw, and Myth of Asamia under both BIOSes. Restoring the independently localized smaller
+fields removed all unattended differences. Automated input then exposed `$000A` in Treasure Hunter;
+preserving it as part of `$0004-$000A` removed that final two-BIOS difference. The final candidate
+policy matches authentic entry across all 116 unattended cases and all 116 broad-input cases for
+execution, final video, and final VRAM while clearing every other byte in `$000-$01F`.
+
+This is a behavioral sufficiency result for the tested window, not yet a semantic license to embed
+the field values. `$000C` and `$0010-$0011` are understood ABI state. `$0004-$000A` and
+`$0012-$0013` still require names or independently derived initialization rules before replacement
+firmware can use them cleanly.
 
 ## Interpretation
 
@@ -141,21 +196,21 @@ The earlier page sweep is now substantially narrower:
   experiment. A zero observed count remains coverage evidence, not proof that a block is irrelevant
   in all later gameplay.
 
-The next efficient step is semantic analysis of `$0011` using BIOS access traces and cartridge
-callback behavior, followed by inverse tests that preserve `$000C` and `$0011` while clearing their
-surrounding chunks. The smaller `$004-$009`, `$012-$013`, and `$0CC-$0DF` title groups should be
-paired with static cartridge reads before further subdivision. The page-2 chunks are already
-title-specific enough for the same approach. Inverse tests are necessary to establish sufficiency,
-not merely the necessity demonstrated by independent clearing.
+The next efficient step is semantic analysis of `$0004-$000A` and `$0012-$0013`, including the
+input-gated `$000A` use in Treasure Hunter, followed by static/runtime correlation of the
+`$0CC-$0DF` and page-2 title groups. Once those fields are named, inverse tests should initialize
+them from derived semantics rather than preserve authentic bytes.
 
 ## Reproduction and limits
 
 `GAMATEBOOT_ENTRY_RAM=zero-block-NN` selects hexadecimal block `00` through `0F` in the diagnostic
 `gamateboot` executable. `GAMATEBOOT_ENTRY_RAM=zero-chunk-NN` selects a sixteen-byte physical chunk
 from `00` through `3F`; `zero-byte-NNN` selects one physical byte, and `zero-quad-NN` selects an
-aligned four-byte group by index. `tools/gamate-ram-perturbation-summary.py` compares aggregate
-reports against an authentic-entry report. Raw reports and user-supplied software remain outside
-the repository.
+aligned four-byte group by index. `zero-low32` and its `keep-*` variants exercise inverse policies.
+`GAMATEBOOT_RAM_WATCH` selects a physical address for per-access tracing; the optional
+`GAMATEBOOT_RAM_WATCH_OWNER` filters `bios`, `cartridge`, `other`, or `all` execution owners.
+`tools/gamate-ram-perturbation-summary.py` compares aggregate reports against an authentic-entry
+report. Raw reports and user-supplied software remain outside the repository.
 
 These are behavioral results from the current emulator and exercised paths, not physical hardware
 traces. Independent block clearing detects a dependency when removing one region changes an

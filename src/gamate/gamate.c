@@ -216,6 +216,14 @@ void gamateResetRamDiagnostics(struct Gamate* g) {
 		sizeof(g->diagnostics.ramReadBeforeWriteMap));
 }
 
+void gamateSetRamDiagnosticWatch(struct Gamate* g, uint16_t address,
+		GamateRamAccessCallback callback, void* context) {
+	g->diagnostics.ramWatchAddress = address & 0x3FF;
+	g->diagnostics.ramWatchEnabled = callback != NULL;
+	g->diagnostics.ramAccessCallback = callback;
+	g->diagnostics.ramAccessContext = context;
+}
+
 static unsigned ramDiagnosticOwner(const struct Gamate* g) {
 	uint16_t pc = g->diagnostics.diagnosticInstructionPc;
 	return pc >= 0x6000 && pc < 0xE000 ? 0 : pc >= 0xE000 ? 1 : 2;
@@ -300,6 +308,11 @@ uint8_t gamateRead(struct Gamate* g, uint16_t address) {
 		uint16_t offset = address & 0x3FF;
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
 		markRamRead(g, offset);
+		if (g->diagnostics.ramWatchEnabled && offset == g->diagnostics.ramWatchAddress) {
+			uint8_t value = g->ram[offset];
+			g->diagnostics.ramAccessCallback(g->diagnostics.ramAccessContext,
+				g, false, offset, value, value);
+		}
 #endif
 		value = g->ram[offset];
 		goto done;
@@ -354,9 +367,16 @@ done:
 void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
 	if (address < 0x2000) {
 		uint16_t offset = address & 0x3FF;
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+		uint8_t previous = g->ram[offset];
+#endif
 		g->ram[offset] = value;
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
 		markRamWrite(g, offset);
+		if (g->diagnostics.ramWatchEnabled && offset == g->diagnostics.ramWatchAddress) {
+			g->diagnostics.ramAccessCallback(g->diagnostics.ramAccessContext,
+				g, true, offset, previous, value);
+		}
 #endif
 		return;
 	}

@@ -151,6 +151,19 @@ The cartridge callback returns to the BIOS wrapper as a subroutine; the wrapper 
 interrupt return. Commercial cartridges may make `$6023` an immediate no-op return when they do not
 use link reception.
 
+### Periodic IRQ counter
+
+The timing counter updated by both periodic IRQ wrappers is the 16-bit value at `$0010-$0011`, with
+the high byte at `$0010`. Each IRQ increments `$0011`; wrapping it from `$FF` to `$00` increments
+`$0010`. Both BIOS revisions expose `$0394` at cartridge entry in the controlled sweep, reflecting
+the IRQs elapsed during boot. Their handler addresses differ, but their counter behavior matches.
+
+Fourteen tested cartridges directly access `$0011` within 1,000 unattended frames, including games
+that poll it repeatedly. It is therefore cartridge-visible ABI state. See
+[`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md) for the access table and perturbation
+results. The exact entry phase is an observed authentic-boot contract; replacement firmware may
+derive a compatible counter from its own elapsed IRQs rather than reproduce opaque boot work.
+
 ### Cartridge control of the callback flag
 
 The wrapper condition is the BIOS-owned RAM byte at `$000C`:

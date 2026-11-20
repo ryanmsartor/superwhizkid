@@ -100,6 +100,30 @@ static bool perturbEntryVram(struct Gamate* g) {
 static bool perturbEntryRam(struct Gamate* g) {
 	const char* pattern = getenv("GAMATEBOOT_ENTRY_RAM");
 	if (!pattern || !*pattern || !strcmp(pattern, "authentic")) return true;
+	if (!strncmp(pattern, "zero-low32", 10)) {
+		uint8_t low[0x20];
+		memcpy(low, g->ram, sizeof(low));
+		bool keepCallback = strstr(pattern + 10, "00c") != NULL;
+		bool keepCounter = strstr(pattern + 10, "011") != NULL;
+		bool keepKnown = !strcmp(pattern, "zero-low32-keep-known");
+		if (strcmp(pattern, "zero-low32") &&
+				strcmp(pattern, "zero-low32-keep-00c") &&
+				strcmp(pattern, "zero-low32-keep-011") &&
+				strcmp(pattern, "zero-low32-keep-00c-011") && !keepKnown) {
+			fprintf(stderr, "unknown GAMATEBOOT_ENTRY_RAM pattern: %s\n", pattern);
+			return false;
+		}
+		memset(g->ram, 0x00, 0x20);
+		if (keepCallback || keepKnown) g->ram[0x00C] = low[0x00C];
+		if (keepCounter || keepKnown) g->ram[0x011] = low[0x011];
+		if (keepKnown) {
+			memcpy(g->ram + 0x004, low + 0x004, 6);
+			g->ram[0x00A] = low[0x00A];
+			memcpy(g->ram + 0x010, low + 0x010, 4);
+		}
+		printf("entry RAM replaced with diagnostic pattern: %s\n", pattern);
+		return true;
+	}
 	if (!strncmp(pattern, "zero-page", 9) && pattern[9] >= '0' && pattern[9] <= '3' && !pattern[10]) {
 		memset(g->ram + (pattern[9] - '0') * 0x100, 0x00, 0x100);
 		printf("entry RAM replaced with diagnostic pattern: %s\n", pattern);
@@ -169,6 +193,34 @@ static bool perturbEntryRam(struct Gamate* g) {
 }
 
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
+struct RamWatchContext { unsigned frame; const char* ownerFilter; };
+
+static const char* interruptName(uint8_t interrupt) {
+	switch (interrupt) {
+	case 1: return "irq";
+	case 2: return "nmi";
+	case 3: return "brk";
+	default: return "none";
+	}
+}
+
+static void reportRamAccess(void* opaque, const struct Gamate* g, bool write,
+		uint16_t address, uint8_t previous, uint8_t value) {
+	const struct RamWatchContext* context = opaque;
+	uint16_t pc = g->diagnostics.diagnosticInstructionPc;
+	const char* owner = pc >= 0x6000 && pc < 0xE000 ? "cartridge" : pc >= 0xE000 ? "bios" : "other";
+	if (context->ownerFilter && strcmp(context->ownerFilter, "all") &&
+			strcmp(context->ownerFilter, owner)) return;
+	printf("RAM watch: frame=%u access=%c address=%03X pc=%04X owner=%s interrupt=%s "
+		"previous=%02X value=%02X nearby=%02X%02X%02X%02X master=%llu irqs=%llu nmis=%llu\n",
+		context->frame, write ? 'W' : 'R', address, pc, owner,
+		interruptName(g->diagnostics.diagnosticInterrupt), previous, value,
+		g->ram[0x010], g->ram[0x011], g->ram[0x012], g->ram[0x013],
+		(unsigned long long) g->masterClocks,
+		(unsigned long long) g->diagnostics.irqsTaken,
+		(unsigned long long) g->diagnostics.nmisTaken);
+}
+
 static void printRamAddressMap(const char* label, const uint8_t* bits) {
 	printf("RAM read-before-write addresses (%s):", label);
 	for (unsigned address = 0; address < 0x400; address++) {
@@ -252,6 +304,27 @@ int main(int argc, char** argv) {
 	if (getenv("GAMATEBOOT_RAM_COVERAGE") || getenv("GAMATEBOOT_ENTRY_RAM")) {
 		gamateResetRamDiagnostics(&g);
 	}
+	struct RamWatchContext ramWatch = { .ownerFilter = getenv("GAMATEBOOT_RAM_WATCH_OWNER") };
+	const char* ramWatchText = getenv("GAMATEBOOT_RAM_WATCH");
+	if (ramWatchText && *ramWatchText) {
+		char* end;
+		unsigned address = (unsigned) strtoul(ramWatchText, &end, 16);
+		if (*end || address >= 0x400) {
+			fprintf(stderr, "invalid GAMATEBOOT_RAM_WATCH address: %s\n", ramWatchText);
+			gamateFree(&g);
+			return 2;
+		}
+		if (ramWatch.ownerFilter && strcmp(ramWatch.ownerFilter, "all") &&
+				strcmp(ramWatch.ownerFilter, "bios") &&
+				strcmp(ramWatch.ownerFilter, "cartridge") &&
+				strcmp(ramWatch.ownerFilter, "other")) {
+			fprintf(stderr, "invalid GAMATEBOOT_RAM_WATCH_OWNER: %s\n", ramWatch.ownerFilter);
+			gamateFree(&g);
+			return 2;
+		}
+		gamateSetRamDiagnosticWatch(&g, (uint16_t) address, reportRamAccess, &ramWatch);
+		printf("RAM watch enabled: address=%03X\n", address);
+	}
 	// Diagnostic experiment only: remove the oscillator/display phase inherited from the BIOS while
 	// preserving CPU, RAM, VRAM, registers, and cartridge state. Normal emulation never does this.
 	if (getenv("GAMATEBOOT_NORMALIZE_ENTRY_PHASE")) {
@@ -276,6 +349,7 @@ int main(int argc, char** argv) {
 	uint64_t longestSamePc = 0, samePc = 0;
 	uint16_t previousPc = 0xFFFF;
 	for (unsigned frame = 1; frame <= framesWanted; frame++) {
+		ramWatch.frame = frame;
 		g.buttons = buttonsForFrame(frame);
 		uint64_t controllerReadsBefore = g.diagnostics.controllerReads;
 		uint64_t pressedReadsBefore = g.diagnostics.pressedControllerReads;

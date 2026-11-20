@@ -205,6 +205,13 @@ investigation. Smaller dependencies occur at `$004-$009` and `$012-$013`. Four-b
 localizes the active `$0C0-$0DF` regions to `$0CC-$0CF`, `$0D0-$0D3`, `$0D8-$0DB`, and
 `$0DC-$0DF`; the intervening groups had no observed effect.
 
+Access tracing identifies `$0010-$0011` as the 16-bit periodic-IRQ counter and finds direct `$0011`
+access in fourteen titles. An inverse policy that clears `$000-$01F` while preserving
+`$0004-$000A`, `$000C`, and `$0010-$0013` matches authentic execution, final video, and final VRAM
+in all 116 unattended cases and all 116 broad-input cases. These are sufficient behavioral regions,
+not all semantically understood fields: `$0004-$000A` and `$0012-$0013` still require clean-room
+initialization rules.
+
 Post-entry access tracking found at least one cartridge read-before-write in every case, and the
 union across the corpus covered all 1,024 physical RAM bytes. BIOS code read inherited bytes before
 their first post-entry write in 110 of 116 cases. Repeating authentic-state tracking with the broad

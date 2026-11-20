@@ -12,6 +12,24 @@ struct LinkCapture {
 	uint8_t bits, count;
 };
 
+struct RamAccessCapture {
+	unsigned count;
+	bool write;
+	uint16_t address;
+	uint8_t previous, value;
+};
+
+static void captureRamAccess(void* context, const struct Gamate* g, bool write,
+		uint16_t address, uint8_t previous, uint8_t value) {
+	struct RamAccessCapture* capture = context;
+	assert(g);
+	capture->count++;
+	capture->write = write;
+	capture->address = address;
+	capture->previous = previous;
+	capture->value = value;
+}
+
 static void captureLinkBit(void* context, bool bit) {
 	struct LinkCapture* capture = context;
 	capture->bits = (uint8_t) (capture->bits << 1 | bit);
@@ -39,6 +57,15 @@ static void testMemory(void) {
 	assert(g.diagnostics.ramReadBeforeWrite[1] == 1 &&
 		g.diagnostics.ramUniqueReadBeforeWrite[1] == 1);
 	gamateResetRamDiagnostics(&g);
+	struct RamAccessCapture capture = { 0 };
+	g.ram[0x123] = 0;
+	gamateSetRamDiagnosticWatch(&g, 0x123, captureRamAccess, &capture);
+	gamateWrite(&g, 0x0123, 0x42);
+	assert(capture.count == 1 && capture.write && capture.address == 0x123);
+	assert(capture.previous == 0 && capture.value == 0x42);
+	assert(gamateRead(&g, 0x0523) == 0x42);
+	assert(capture.count == 2 && !capture.write && capture.previous == 0x42 && capture.value == 0x42);
+	gamateSetRamDiagnosticWatch(&g, 0, NULL, NULL);
 
 	gamateWrite(&g, 0x0123, 0x42);
 	assert(gamateRead(&g, 0x0523) == 0x42);
@@ -126,6 +153,7 @@ static void testUart(void) {
 	g.cpu.irqMask = true;
 	assert(gamateCpuStep(&g) == 7 && g.cpu.pc == 0xE200);
 	assert(!g.nmi && g.irq && g.irqClocks == 1234);
+	assert(g.diagnostics.diagnosticInterrupt == 2);
 	assert(g.diagnostics.nmisTaken == 1 && g.diagnostics.irqsTaken == 0);
 	assert((g.ram[0x1FB] & 0x30) == 0x20);
 
@@ -358,6 +386,7 @@ static void testIrq(void) {
 	g.cpu.irqMask = false; // direct test setup bypasses execution of CLI
 	cycles = gamateCpuStep(&g);
 	assert(cycles == 7 && g.cpu.pc == 0xE100 && !g.irq && g.irqClocks == 0);
+	assert(g.diagnostics.diagnosticInterrupt == 1);
 	assert(g.diagnostics.irqsTaken == 1 && g.cpu.s == 0xFA);
 	assert(g.ram[0x1FD] == 0xE0 && g.ram[0x1FC] == 0x01);
 	assert((g.ram[0x1FB] & 0x30) == 0x20); // hardware IRQ stacks U set and B clear
