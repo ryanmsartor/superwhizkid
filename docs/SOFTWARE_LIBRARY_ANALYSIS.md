@@ -33,7 +33,8 @@ disassembly or data-format analysis classifies the shared regions.
 
 ## Strong initial reuse candidates
 
-The table below records the strongest non-identical cross-title pairs from the 58-image corpus.
+The table below records the strongest non-identical cross-title pairs from the original 58-image
+corpus.
 Bomb Blaster and its alternate dump are omitted from this summary because they are variants of the
 same title; the 4-in-1/Cube Up relationship is already documented as a modified embedded component.
 
@@ -78,6 +79,43 @@ same title; the 4-in-1/Cube Up relationship is already documented as a modified 
 The table includes every distinct-title pair with at least 500 selectively shared windows. The tool
 also reports the two expected same-lineage cases above this threshold: the two Bomb Blaster dumps,
 and the modified Cube Up component in the 4-in-1.
+
+## Complete-corpus extension
+
+The comparison was rerun after Mighty Boxer, Kiki Inland, Fortress of Fierceness, and Incantational
+Couple completed the 62-image catalogued corpus. No new pair crossed the original table's threshold
+of 500 selectively shared windows, but several lower-scoring matches identify useful classification
+targets.
+
+| New title | Strongest candidate | Shared windows | Exact unique spans | Exact-span bytes | Longest span | Longest offsets A/B |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| Mighty Boxer | QuizFighter | 141 | 7 | 834 | 288 | `$3DB9` / `$3DA9` |
+| Kiki Inland | Box Forum | 411 | 2 | 479 | 257 | `$0031` / `$0031` |
+| Fortress of Fierceness | Boom | 219 | 7 | 359 | 81 | `$04C7` / `$03EF` |
+| Incantational Couple | Dino Bibo | 26 | 0 | 0 | 0 | — |
+
+Mighty Boxer shares the same 288-byte late-fixed-bank block with QuizFighter, Bao Qing Tian, Insect
+War, Mars Voyage, Hot Hero, and Robin Hood. Across those comparisons the block appears near
+`$3DA9-$3DB9`; Mighty Boxer/QuizFighter has the strongest aggregate match at 834 exact bytes across
+seven spans. This extends the established large-ROM shared-library network to Mighty Boxer, but does
+not by itself establish a shared game engine. The consistently placed block is more cautiously
+classified as a candidate common runtime, SDK component, or data package pending disassembly.
+
+Kiki Inland and Box Forum share a 257-byte span at the same `$0031` offset, immediately after the
+fixed cartridge header and callback table. Smaller Kiki Inland matches with Punk Boy and One Million
+Whys also touch early fixed-bank material. The position favors a shared startup or low-level library
+shell over an engine relationship, although executable-code classification is still required.
+
+Fortress of Fierceness has smaller, fragmented matches with Boom, Punk Boy, Box Forum, and Kiki
+Inland. Its strongest candidate contains only 359 exact bytes across seven spans, with an 81-byte
+longest span, so the current evidence does not justify naming an engine family. Incantational Couple
+is effectively isolated under this method: its only reported new-title pair has no span unique in
+both fixed banks.
+
+None of the four additions shares a complete start/NMI/IRQ callback tuple with another catalogued
+image. The highest-priority classification targets from this extension are Mighty Boxer's late-bank
+288-byte block, the Box Forum/Kiki Inland `$0031` span, and the scattered Boom/Fortress of Fierceness
+matches.
 
 ## Initial family hypotheses
 

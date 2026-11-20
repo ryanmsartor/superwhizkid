@@ -512,6 +512,18 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   their role.
 - Full findings and limitations:
   [`../../docs/SOFTWARE_LIBRARY_ANALYSIS.md`](../../docs/SOFTWARE_LIBRARY_ANALYSIS.md).
+- Complete-corpus extension: the same independently authored fixed-bank comparison was rerun after
+  four locally dumped, MAME-hash-matched cartridges completed the 62-image catalogue. No new pair
+  reached the original 500-window summary threshold. Mighty Boxer shares a consistently placed
+  288-byte block with members of the existing later-game library network; Kiki Inland's strongest
+  match is a 257-byte same-offset post-header span with Box Forum; Fortress of Fierceness has only
+  smaller fragmented candidates; and Incantational Couple has no unique exact span under this
+  method. Used to add the bounded extension analysis and next classification targets to
+  `docs/SOFTWARE_LIBRARY_ANALYSIS.md`.
+- Extension limitations: selectively shared-window counts depend on the complete owner set and are
+  similarity scores rather than byte totals. Exact spans may be code or data. Header-adjacent or
+  consistently placed matches suggest a shared startup/library package but do not establish an
+  engine family until disassembly and dynamic reachability confirm their role.
 
 ### ROM graphics exploration tool
 
