@@ -701,7 +701,12 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   LCD-control effects from `$015`, and a distinct sparse write pattern when bit 6 is set. Four
   paired whole-RAM hashes differed despite matching checked access sets and all other reported
   outputs; their cause is unresolved. The probe streamed VRAM values into aggregate counters and
-  retained no payload. Exact scopes and limits are in
+  retained no payload. A Baseball matrix of combined `$015` values `$00`, `$3F`, `$40`, `$41`,
+  `$50`, `$60`, `$C0`, `$7F`, and `$FF` showed additive LCD-flag contributions from bits 0, 4, 5,
+  and 7; bit 6 independently selects the same 231-address-per-plane `$20` stride. The `$41`,
+  `$50`, `$60`, `$C0`, `$7F`, and `$FF` sparse patterns were verified to have identical coverage
+  under both BIOSes. The stride's hardware meaning and untested control combinations remain open.
+  Exact scopes and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - `$F01B` follow-up: the 1,000-frame inventory records 18 calls per BIOS across 13 titles; the
   paired balanced-call corpus contains 34 calls, 17 per BIOS across 12 titles, with 32 calls
