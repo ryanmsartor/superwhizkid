@@ -554,31 +554,52 @@ Excluding 394 interrupt-spanning calls leaves 9,020 uninterrupted calls. An adde
 reports zero mismatches for timing, register/status behavior, and unrelated AY/bank/UART activity.
 The only measured ROM read is the stacked cartridge `RTS` dummy address, not a semantic data read.
 
-### Pointer-controlled tile/text blitter: `$F027`
+### Caller-dependent blitter: `$F027`
 
 The validated completed-call report contains 7,026 `$F027` calls, evenly split between BIOS revisions.
 Of those, 2,366 do not span an IRQ or NMI. A controlled first occurrence in Baseball resolves the
-caller pointer roles but not yet a complete text, character, or stream grammar.
+caller pointer effects but not a title-independent ABI.
 
-RAM `$006-$007` supplies the first graphics base and RAM `$008-$009` supplies the second graphics
-base. Low-byte XOR at `$006` shifts the first graphics read span by one cartridge byte; low-byte XOR
-at `$008` shifts the second span without changing the geometry. High-byte XOR at `$007` and `$009`
-selects the corresponding other 256-byte page. Entry A, X, and Y are preserved in the controlled
-call; X and Y also remain unchanged across pointer perturbations. The call writes both VRAM planes
-and preserves scroll, AY, mapper, and UART state in the masked comparison.
+The controlled comparison covers first authentic occurrences in four titles and both BIOS revisions:
+Baseball, Fortune 'n Luck, Nightmare of Santa Claus, and Time Warrior. The first three each perform
+32 VRAM writes and 106 LCD writes, but take 14,202, 14,026, and 16,490 clocks respectively. Time
+Warrior performs 160 VRAM writes and 515 LCD writes in 47,024 clocks. Six further titles were tested
+at their first VRAM-writing occurrence (the second service occurrence): Money Maze, Pipemania, Mars
+Voyage, Witty Apee, Devil Castle, and Kill Shot. Across the ten selected productive calls, VRAM
+writes range from 32 to 1,488 and LCD writes from 106 to 2,930. A, X, Y, and S are preserved in all
+ten; status changes vary. The ordered ROM reads and perturbation effects differ by caller.
 
-The Baseball occurrence uses 32 VRAM writes, 106 LCD writes, and 14,202 master clocks; it reads two
-eight-byte graphics runs, an additional cartridge byte, and a large caller RAM region. Replacing
-candidate control bytes at `$023`, `$028`, or `$030` with non-`$FF` values changes the operation:
-`$023` produces 128 VRAM writes, 409 LCD writes, and 37,774-38,670 clocks depending on its value;
-`$028` or `$030` produces 176 VRAM writes, 281 LCD writes, and 23,286 clocks in this call. A baseline
-`$FF` in all three positions preserves the compact 32-write shape. Both BIOS revisions produced the
-same pointer spans, write counts, and cycle counts.
+In Baseball, low-byte XOR at `$006` shifts one eight-byte cartridge read span by one byte, while XOR
+at `$008` shifts a different eight-byte span. XOR at `$007` and `$009` moves the corresponding
+observed spans to another 256-byte page. These effects support address inputs in Baseball's call context. They do not generalize as fixed
+one-span pointers: XOR of `$006` shifts one address span in Baseball and Nightmare, shifts both spans
+in Fortune 'n Luck, and changes several read spans in the other tested callers. XOR of `$008` shifts
+one span in Baseball and Nightmare, while in Time Warrior it adds a read and two clocks. The exact
+shared roles of `$006-$009` therefore remain unresolved.
 
-These observations establish a pointer-controlled, RAM-buffer-driven two-plane blitter and two
-graphics bases. They do not yet establish an exact character encoding, run format, terminator grammar,
-or timing equation. The control-byte labels `$023`, `$028`, and `$030` are therefore retained as
-measured addresses, not semantic names.
+The table gives VRAM/LCD write counts for baseline and selected RAM perturbations. Each perturbation
+was applied independently; the `$023/$028/$030` columns show setting that byte to zero.
+
+| Caller | Baseline | `$023=0` | `$028=0` | `$030=0` |
+| --- | ---: | ---: | ---: | ---: |
+| Baseball | 32/106 | 128/409 | 176/281 | 176/281 |
+| Fortune 'n Luck | 32/106 | 128/409 | 176/281 | 176/281 |
+| Nightmare of Santa Claus | 32/106 | 128/409 | 176/281 | 176/281 |
+| Time Warrior | 160/515 | 160/515 | 304/690 | 304/690 |
+| Money Maze | 256/848 | 352/1,151 | 400/1,023 | 400/1,023 |
+| Pipemania | 96/187 | 192/490 | 240/362 | 240/362 |
+| Mars Voyage | 480/1,515 | 480/1,515 | 624/1,690 | 624/1,690 |
+| Witty Apee | 960/1,912 | 960/1,912 | 960/1,912 | 960/1,912 |
+| Devil Castle | 96/303 | 96/303 | 240/478 | 240/478 |
+| Kill Shot | 1,488/2,930 | 1,584/3,233 | 1,632/3,105 | 1,632/3,105 |
+
+Thus these RAM bytes affect the operation in caller-dependent ways, not as a recovered title-independent
+geometry format. Both BIOS revisions matched for every measured title/perturbation pair.
+
+Entry A, X, Y, and S are preserved in these ten selected baseline calls. The ten-title evidence
+supports a caller-RAM-driven blitter family, not a single recovered text or graphics format. Exact
+pointer roles, control-field meanings, encoding, terminator grammar, and timing remain open. The
+addresses `$023`, `$028`, and `$030` are empirical perturbation sites, not semantic field names.
 ### Rectangle-fill contract: `$F02D`
 
 The combined 1,000-frame completed-call corpus contains 209,088 balanced `$F02D` calls split evenly

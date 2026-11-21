@@ -966,22 +966,27 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   256 iterations under the controlled 256×256 probe, producing 65,536 VRAM writes.
 - `$F02A` corpus method: `tools/gamate-bios-f02a-summary.py` derives dimensions from LCD/VRAM write
   counts and validates timing, registers, status, and unrelated AY/bank/UART effects. In the
-  validated report it found zero mismatches across 9,020 non-interrupted calls; 394 calls spanning
-  IRQ/NMI were excluded from direct timing comparison. Both BIOS revisions agreed in controlled
-  timing and write coverage.
-- `$F027` pointer and control-byte study: a masked first authentic Baseball call was captured under
-  both BIOS revisions. Private-copy low-byte and high-byte XOR perturbations established that RAM
-  `$006-$007` selects the first graphics base and `$008-$009` selects the second graphics base;
-  low bytes shift only the corresponding eight-byte read span and high bytes select the 256-byte page.
-  Entry A/X/Y remained unchanged in the probe. Address-only ROM tracing, VRAM coverage, LCD/VRAM write
-  counts, clocks, and RAM watches were recorded; no ROM or RAM payload was retained.
-- `$F027` result and limitation: the measured Baseball call performs 32 VRAM writes across both planes,
-  106 LCD writes, and 14,202 master clocks. RAM control bytes `$023`, `$028`, and `$030` act as
-  active control fields: replacing the baseline `$FF` with non-`$FF` values expands the call to
-  128 writes/409 LCD writes for `$023`, or 176 writes/281 LCD writes for `$028` or `$030`. Exact
-  character or stream semantics and an exact timing formula remain unresolved. Both BIOS revisions
-  gave identical controlled read spans and write counts. No source, firmware, ROM, or RAM payload
-  was copied or published.
+  validated report it found zero mismatches across 9,020 non-interrupted calls from 18 titles; 394
+  calls spanning IRQ/NMI were excluded from direct timing comparison. Both BIOS revisions agreed in
+  controlled timing and write coverage. The authentic Baseball perturbation is title-specific; corpus
+  validation independently checks the derived write and timing behavior across those calls.
+- `$F027` cross-title method: first authentic calls in Baseball, Fortune 'n Luck, Nightmare of Santa
+  Claus, and Time Warrior, plus first VRAM-writing calls in Money Maze, Pipemania, Mars Voyage, Witty
+  Apee, Devil Castle, and Kill Shot, were compared under both BIOS revisions. Private-copy XOR/set
+  perturbations targeted RAM `$006/$008` in all ten titles, `$007/$009` in the first four, and
+  `$023/$028/$030` in all ten. The diagnostic probe retained only address-only cartridge-read traces,
+  VRAM coverage, aggregate write counts, clocks, and summarized register/state effects; it did not
+  print or retain cartridge, firmware, or caller-RAM payloads. This covers all ten titles with
+  uninterrupted `$F027` corpus calls, but only one selected productive call context per title.
+- `$F027` result and limitation: low-byte changes at `$006/$008` affect ROM-read addresses in all ten
+  selected contexts, but not with a fixed one-byte-span mapping; the number and relation of affected
+  spans vary by caller. The selected calls range from 32 to 1,488 VRAM writes and 106 to 2,930 LCD
+  writes. RAM `$023/$028/$030` zeroing produces different write-count responses across the ten titles.
+  A/X/Y/S were preserved in all ten selected baseline calls; status behavior varies. Both BIOS
+  revisions agree for every tested title/perturbation pair. The evidence supports caller-dependent
+  blitter behavior, not a title-independent pointer or text-format contract. Exact shared pointer
+  roles, control-field meanings, encoding, stream grammar, and timing remain open. No source,
+  firmware, ROM, or RAM payload was copied or published.
 - `$F02D` corpus method: the validated 1,000-frame completed-call report and the adjacent four-title
   report were combined for 209,088 balanced calls, evenly divided between BIOS revisions. Calls
   spanning IRQ/NMI were separated before direct timing analysis. The independently authored
