@@ -10,6 +10,9 @@ focused tests and the Klaus Dormann functional
 test. Hardware research, comparison sources, and known uncertainties are recorded in
 [`src/gamate/SOURCES.md`](src/gamate/SOURCES.md).
 
+Hold R2 to fast-forward in frontends that support libretro's fast-forward override. Fast-forward is
+disabled while a link session is active.
+
 ## Build
 
 ```sh

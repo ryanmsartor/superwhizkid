@@ -19,6 +19,7 @@ static bool loaded;
 static uint16_t video[GAMATE_WIDTH * GAMATE_HEIGHT];
 static int16_t audio[2048 * 2];
 static bool tapLatch, skipIntro;
+static bool fastForwardRequested;
 static unsigned audioOutput;
 static int32_t speakerBass, speakerTreble[2];
 static unsigned flickerReduction;
@@ -54,6 +55,18 @@ static bool linkClockSynchronized;
 
 enum { INTRO_SKIP_CLOCK_LIMIT = 4433000 * 12, LINK_PACKET_HEADER = 13 };
 enum { AUDIO_STEREO, AUDIO_MONO, AUDIO_SPEAKER };
+
+static void setFastForwardOverride(bool enabled) {
+	if (fastForwardRequested == enabled) return;
+	struct retro_fastforwarding_override override = {
+		.ratio = -1.0f,
+		.fastforward = enabled,
+		.notification = enabled,
+		.inhibit_toggle = false
+	};
+	environCb(RETRO_ENVIRONMENT_SET_FASTFORWARDING_OVERRIDE, &override);
+	fastForwardRequested = enabled;
+}
 
 static void resetAudioPresentation(void) {
 	speakerBass = speakerTreble[0] = speakerTreble[1] = 0;
@@ -486,6 +499,7 @@ void retro_init(void) {
 		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT, "Select" },
 		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3, "Contrast Down" },
 		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3, "Contrast Up" },
+		{ 0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2, "Fast Forward (hold)" },
 		{ 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT,
 			RETRO_DEVICE_ID_ANALOG_X, "Left Stick X" },
 		{ 0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT,
@@ -500,7 +514,11 @@ void retro_init(void) {
 	environCb(RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE, (void*) &netpacket);
 }
 
-void retro_deinit(void) { linkStop(); gamateFree(&gamate); }
+void retro_deinit(void) {
+	setFastForwardOverride(false);
+	linkStop();
+	gamateFree(&gamate);
+}
 unsigned retro_api_version(void) { return RETRO_API_VERSION; }
 
 void retro_get_system_info(struct retro_system_info* info) {
@@ -558,6 +576,8 @@ void retro_reset(void) {
 
 static void readInput(void) {
 	inputPollCb();
+	setFastForwardOverride(!linkActive &&
+		inputStateCb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2));
 	uint8_t shortcuts = 0;
 	shortcuts |= inputStateCb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L3) ? 1 : 0;
 	shortcuts |= inputStateCb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R3) ? 2 : 0;
@@ -690,6 +710,7 @@ bool retro_load_game_special(unsigned type, const struct retro_game_info* info, 
 }
 
 void retro_unload_game(void) {
+	setFastForwardOverride(false);
 	pendingPresses = 0;
 	contrastShortcutButtons = 0;
 	linkBitCount = 0;

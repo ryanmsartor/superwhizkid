@@ -28,6 +28,9 @@ static const char* biosOption = "umc";
 static const char* skipIntroOption = "off";
 static bool optionUpdate, modernOptions, legacyOptions, supportModernOptions = true;
 static bool sawPaletteLight, frameIsGreyscale;
+static bool fastForwardEnabled, supportFastForwardOverride = true;
+static unsigned fastForwardOverrideCalls;
+static struct retro_fastforwarding_override fastForwardOverride;
 static uint16_t firstVideoPixel;
 static bool reportVideoHash;
 static uint32_t videoHash = 2166136261U;
@@ -189,6 +192,12 @@ static bool environment(unsigned command, void* data) {
 	case RETRO_ENVIRONMENT_SET_MESSAGE:
 		messageCount++;
 		snprintf(lastMessage, sizeof(lastMessage), "%s", ((const struct retro_message*) data)->msg);
+		return true;
+	case RETRO_ENVIRONMENT_SET_FASTFORWARDING_OVERRIDE:
+		fastForwardOverrideCalls++;
+		if (!supportFastForwardOverride) return false;
+		fastForwardOverride = *(const struct retro_fastforwarding_override*) data;
+		fastForwardEnabled = fastForwardOverride.fastforward;
 		return true;
 	default:
 		return false;
@@ -397,10 +406,15 @@ int main(int argc, char** argv) {
 	assert(p_retro_serialize_size() == stateSizeBeforeLoad);
 	uint8_t* ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
 	assert(ram);
+	activeButton = RETRO_DEVICE_ID_JOYPAD_R2;
+	p_retro_run();
+	assert(fastForwardEnabled);
 	// Netpacket transports each locally clocked UART bit reliably and accepts only one peer.
 	netpacket.start(0, netpacketSend, NULL);
 	assert(netpacket.connected(7));
 	assert(!netpacket.connected(8));
+	p_retro_run();
+	assert(!fastForwardEnabled); // accelerated execution is disabled while link transport is active
 	ram[5] = 1;
 	ram[6] = 0xA5;
 	p_retro_run();
@@ -437,6 +451,7 @@ int main(int argc, char** argv) {
 	netpacket.disconnected(7);
 	assert(netpacket.connected(8));
 	netpacket.disconnected(8);
+	netpacket.stop();
 	ram[2] = 1;
 	// All defaults: UMC BIOS, original palette, raw LCD output, no tap latch, no intro skip.
 	activeButton = ~0u;
@@ -471,6 +486,26 @@ int main(int argc, char** argv) {
 	p_retro_run();
 	assert(ram[0] == 0xFF); // ordinary stick drift remains inside the dead zone
 	activeAnalogX = 0;
+	unsigned fastForwardCalls = fastForwardOverrideCalls;
+	activeButton = RETRO_DEVICE_ID_JOYPAD_R2;
+	p_retro_run();
+	assert(fastForwardEnabled && fastForwardOverride.ratio == -1.0f &&
+		fastForwardOverride.notification && !fastForwardOverride.inhibit_toggle);
+	assert(ram[0] == 0xFF && fastForwardOverrideCalls == fastForwardCalls + 1);
+	p_retro_run();
+	assert(fastForwardOverrideCalls == fastForwardCalls + 1);
+	activeButton = ~0u;
+	p_retro_run();
+	assert(!fastForwardEnabled && !fastForwardOverride.notification);
+	supportFastForwardOverride = false;
+	activeButton = RETRO_DEVICE_ID_JOYPAD_R2;
+	p_retro_run();
+	assert(!fastForwardEnabled);
+	activeButton = ~0u;
+	p_retro_run();
+	assert(!fastForwardEnabled);
+	supportFastForwardOverride = true;
+
 	// Mono is a presentation-layer 1:1 downmix and takes effect without reloading content.
 	audioOutputOption = "mono";
 	optionUpdate = true;
@@ -756,7 +791,11 @@ int main(int argc, char** argv) {
 	assert(ram[0] == 0xFF && ram[1] == 0xFF);
 	p_retro_run();
 	assert(ram[0] == 0xEF);
+	activeButton = RETRO_DEVICE_ID_JOYPAD_R2;
+	p_retro_run();
+	assert(fastForwardEnabled);
 	p_retro_unload_game();
+	assert(!fastForwardEnabled);
 
 	// BIOS preference selects the requested file and falls back to the other valid BIOS if missing.
 	biosOption = "bit";
