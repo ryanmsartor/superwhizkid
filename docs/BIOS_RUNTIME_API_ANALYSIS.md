@@ -455,12 +455,38 @@ call corpus observed using both `$F01B` and `$F021`. I-masked probes show that e
 control tests show that both are affected by `$015`; these common behaviors do not establish an
 alias.
 
+#### Exhaustive `$015` mapping in Baseball
+
+The first authentic Baseball occurrence was probed with I set for every `$015` value from `$00`
+through `$FF`, under both BIOS revisions (512 probes total). The final LCD flags follow:
+
+`out_lcd = (bit 0 ? $20 : 0) | (bit 4 ? $08 : 0) | (bit 5 ? $04 : 0) | (bit 6 ? $02 : 0) | (bit 7 ? $10 : 0)`.
+
+Within the checked return, timing, ROM-read, and VRAM observables, bits 1-3 have no effect. Bits 0,
+4, 5, and 7 change only the final LCD flags; bit 6 additionally selects the sparse VRAM coverage
+already observed in the representative-value tests. Across all values, the service took 44,080
+master clocks, issued 1,241 VRAM writes and 1,336 LCD writes, and read the same 492 cartridge
+addresses. The ordinary mode covered 800 unique plane-0 addresses from `$1CC0-$1FDF` and ended at
+`$1FB4`. Bit-6 mode covered 56 addresses at `$20` intervals across `$0000-$03A0` and
+`$1CC0-$1FE0`, ending at `$0220`. Returned registers and status had the same values for all 256
+inputs, and both BIOS revisions agreed on the checked outputs, timing, ROM-read map, write
+coverage, and final pointer for every value.
+
+The direct cross-BIOS comparison does not use whole-RAM hashes: the unperturbed Baseball probes
+have different whole-RAM hashes, and their cause was not localized. This exhaustive mapping is
+specific to Baseball's first authentic call; it does not establish that every caller uses `$015`
+identically or explain the physical meaning of the sparse mode.
+
 Controlled status tests in Witty Apee and all 34 completed-call summaries follow
 `P_out = (P_in & $0C) | $23`: N and V clear, Z and C set, and I and D preserved. This describes
 observed calls, not the physical significance of the CPU's unused status bits. The exact
 `$000-$001` format, ROM-source mapping, return-Y rule, and data-dependent timing remain unresolved.
 ROM traces retained addresses only; no BIOS/ROM or VRAM payload was retained. These are emulator
-observations, not physical-hardware measurements.
+observations, not physical-hardware measurements. The complete `$015` value-to-flags and
+addressing-mode mapping is established only for the controlled Baseball call described above.
+Selected single-byte XORs in a private ROM copy produced a mixture of no output change, localized
+and broad output changes, and expanded work; they did not resolve a source-data format. No ROM
+bytes or graphics payload were retained.
 
 ### Caller-supplied two-plane graphics service: `$F01E`
 

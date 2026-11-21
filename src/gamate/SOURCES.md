@@ -720,7 +720,20 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   and Brick Blaster under both BIOSes. The observed status relation is
   `P_out = (P_in & $0C) | $23`; `$000-$001` format, ROM-source mapping, return-Y rule, and timing
   model remain unresolved. ROM traces retained addresses only; no values or payload were retained.
-  Exact results, call scopes, status tests, and limits are in
+  A 256-value `$015` matrix at Baseball's first authentic call, run under both BIOSes with I set,
+  completed 512 probes with zero mismatches. It established the mapping
+  `(bit 0->$20, bit 4->$08, bit 5->$04, bit 6->$02, bit 7->$10)` to final LCD flags; bits 1-3
+  had no effect on the checked register, timing, read-map, or VRAM outputs. Only bit 6 changed
+  VRAM coverage and final pointer, selecting 56 `$20`-spaced addresses instead of the ordinary
+  800-byte span. VRAM output hashes were stable within each addressing mode; timing, write counts,
+  and the ROM read map were constant across the matrix. Selected single-byte XORs in a private
+  copy of the ROM under the Bit BIOS yielded no
+  output change at some tested offsets and localized or broad changes at others, sometimes with
+  expanded writes and timing. This did not resolve the source format; no source or graphics bytes
+  were retained. The unperturbed direct probes had differing whole-RAM hashes between BIOS
+  revisions; their cause was not investigated and those hashes were excluded from the cross-BIOS
+  contract comparison. These are local emulator experiments, not physical measurements, and the
+  complete `$015` map applies only to this call context. The detailed result and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - `$F01E` follow-up: the paired balanced-call corpus contains 216 calls across 18 titles. First-call
   probes in Famous 7, Time Warrior, Volcano Panic, and Robin Hood were compared under both BIOSes
