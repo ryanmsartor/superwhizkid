@@ -410,6 +410,58 @@ and runs, sum horizontal spans, identify repeated stream/base triples, and flag 
 selectors. That can distinguish the ordinary contract from caller-specific edge cases before a
 clean-room replacement is designed.
 
+### ROM-driven plane-0 graphics writer: `$F01B`
+
+The 1,000-frame inventory records 18 `$F01B` calls per BIOS across 13 titles. The paired
+balanced-call corpus contains 34 calls, 17 per BIOS across 12 titles; 32 calls span IRQs. Every
+paired report field matches across revisions. All 34 calls return A=`$FE`, X=`$00`, and preserve S;
+Y varies. The IRQ-spanning corpus is useful for the register signature, but its timing and memory
+summaries include callback work.
+
+IRQ-masked first-call probes in Baseball, Brick Blaster, Magic Jigsaw, and Witty Apee, plus later
+calls in Devil Castle and Witty Apee, were compared under both BIOS revisions. Each tested call
+writes only plane 0 and covers exactly 800 unique addresses, `$1CC0-$1FDF`. The calls issue
+1,020-1,600 VRAM writes and take 27,134-57,484 clocks across these contexts; the range includes
+repeated writes to the same addresses and does not define a timing formula. The first-call probes
+had no AY, mapper, UART, IRQ, or NMI effects. In Baseball, changing entry A, X, or Y individually,
+the VRAM pointer, or LCD flags leaves the measured output and ROM-read profile unchanged; scroll
+values are preserved. These results establish a ROM-driven graphics writer, but not its data grammar.
+
+RAM `$000-$001` and `$015` are read in the controlled Baseball and Brick Blaster calls. In Baseball,
+`$001` is also rewritten; that write is not consistent across the other tested call contexts.
+Bit-0 XOR perturbations to either `$000` or `$001` in Baseball expand the output to the full plane-0
+address space and produce more than 300,000 clocks. This shows sensitivity to the caller-supplied
+pair, but is not a clean format probe and does not establish whether the pair is a pointer or a
+control structure.
+
+`$015` affects final LCD flags. The following values were tested in Baseball; values `$01` and
+`$40` were also confirmed in Brick Blaster under both BIOS revisions:
+
+| RAM `$015` | Final LCD flags | Plane-0 write coverage |
+| --- | --- | --- |
+| `$00` | `$00` | `$1CC0-$1FDF` |
+| `$01` | `$20` | `$1CC0-$1FDF` |
+| `$02`, `$04`, `$08` | `$00` | `$1CC0-$1FDF` |
+| `$10` | `$08` | `$1CC0-$1FDF` |
+| `$20` | `$04` | `$1CC0-$1FDF` |
+| `$40` | `$02` | 56 addresses: `$0000-$03A0` and `$1CC0-$1FE0`, each at `$20` intervals |
+| `$80` | `$10` | `$1CC0-$1FDF` |
+| `$3F` | `$2C` | `$1CC0-$1FDF` |
+
+With `$015=$40`, the final VRAM pointer is `$0220` in Baseball and `$0160` in Brick Blaster.
+The addressing-mode meaning is not established. Devil Castle is the only title in the completed
+call corpus observed using both `$F01B` and `$F021`. I-masked probes show that each writes the same
+800-byte plane-0 region, while their ROM read ranges, write counts, and timings differ. Separate
+control tests show that both are affected by `$015`; these common behaviors do not establish an
+alias.
+
+Controlled status tests in Witty Apee and all 34 completed-call summaries follow
+`P_out = (P_in & $0C) | $23`: N and V clear, Z and C set, and I and D preserved. This describes
+observed calls, not the physical significance of the CPU's unused status bits. The exact
+`$000-$001` format, ROM-source mapping, return-Y rule, and data-dependent timing remain unresolved.
+ROM traces retained addresses only; no BIOS/ROM or VRAM payload was retained. These are emulator
+observations, not physical-hardware measurements.
+
 ### Caller-supplied two-plane graphics service: `$F01E`
 
 The 1,000-frame slot inventory records 110 `$F01E` entries per BIOS across 19 titles. The paired

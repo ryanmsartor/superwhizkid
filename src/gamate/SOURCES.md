@@ -671,12 +671,12 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md): `$F000`
   fixed bitmap writer; `$F003`, `$F006`, and `$F009` IRQ waits; `$F00C` two-plane VRAM zero-writer
   with an LCD-control input; `$F00F` plane-0 rectangle clear; `$F012` selector-driven eight-row tile
-  writer; `$F015` two-plane rectangle copy; `$F018` tile-row blitter; `$F024` strided RAM
-  initializer; `$F01E` partially bounded two-plane graphics service; `$F021` partially bounded
-  ROM-backed plane-0 graphics service; `$F02A` plane-0 fill; `$F02D` plane-1 fill; `$F030`
-  pseudorandom service; and `$F033` packed-BCD formatter. `$F027` remains caller-dependent;
-  `$F00C`'s bit-6 addressing mode, `$F01E`'s stream format, and `$F021`'s source-data format remain
-  unresolved; `$F01B` remains unassigned.
+  writer; `$F015` two-plane rectangle copy; `$F018` tile-row blitter; `$F01B` partially bounded
+  ROM-driven plane-0 graphics writer; `$F01E` partially bounded two-plane graphics service; `$F021`
+  partially bounded ROM-backed plane-0 graphics service; `$F024` strided RAM initializer; `$F02A`
+  plane-0 fill; `$F02D` plane-1 fill; `$F030` pseudorandom service; and `$F033` packed-BCD formatter.
+  `$F027` remains caller-dependent; `$F00C`'s bit-6 addressing mode, `$F01B`'s source-data format,
+  `$F01E`'s stream format, and `$F021`'s source-data format remain unresolved.
 - Used for: the replacement-ABI contracts, the 1,000-frame sweep default, and the conclusion that
   replacement firmware needs resident service and interrupt code, not just an entry-state jump.
   The linked analysis owns per-service matrices, exact behavior, and probe-specific caveats.
@@ -702,6 +702,18 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   paired whole-RAM hashes differed despite matching checked access sets and all other reported
   outputs; their cause is unresolved. The probe streamed VRAM values into aggregate counters and
   retained no payload. Exact scopes and limits are in
+  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+- `$F01B` follow-up: the 1,000-frame inventory records 18 calls per BIOS across 13 titles; the
+  paired balanced-call corpus contains 34 calls, 17 per BIOS across 12 titles, with 32 calls
+  spanning IRQs. Every pair of report rows matches across BIOS revisions; all calls return A=`$FE`,
+  X=`$00`, and preserve S. I-masked probes in Baseball, Brick Blaster, Magic Jigsaw, Witty Apee,
+  and later Devil Castle/Witty Apee calls covered input-register, RAM, `$015`, VRAM-pointer, LCD,
+  and scroll perturbations. Tested ordinary-mode calls write plane 0 at `$1CC0-$1FDF`; controlled
+  `$015` values affect LCD flags, and bit 6 selects the same 56-address sparse pattern in Baseball
+  and Brick Blaster under both BIOSes. The observed status relation is
+  `P_out = (P_in & $0C) | $23`; `$000-$001` format, ROM-source mapping, return-Y rule, and timing
+  model remain unresolved. ROM traces retained addresses only; no values or payload were retained.
+  Exact results, call scopes, status tests, and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - `$F01E` follow-up: the paired balanced-call corpus contains 216 calls across 18 titles. First-call
   probes in Famous 7, Time Warrior, Volcano Panic, and Robin Hood were compared under both BIOSes
