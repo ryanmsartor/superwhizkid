@@ -125,6 +125,24 @@ static void printRomCoverageRuns(const struct Gamate* g) {
 	putchar('\n');
 }
 
+static void printRomSequence(const struct RomTrace* trace) {
+	printf("# bios_rom_sequence: captured=%zu total=%zu offsets=", trace->count, trace->total);
+	for (size_t i = 0; i < trace->count; i++) printf(" %05zX", trace->offsets[i]);
+	if (trace->count < trace->total) printf(" ...");
+	putchar('\n');
+}
+
+static void printVramBytes(const struct Gamate* g) {
+	for (unsigned address = 0; address < 0x2000; address++) {
+		for (unsigned plane = 0; plane < 2; plane++) {
+			unsigned offset = (address << 1) | plane;
+			if (!coverageBit(g->diagnostics.vramWritten, offset)) continue;
+			printf("# vram_byte: plane=%u address=%04X value=%02X\n",
+				plane, address, g->vram[offset]);
+		}
+	}
+}
+
 static void printRomTrace(const struct RomTrace* trace) {
 	printf("# bios_rom_trace: captured=%zu total=%zu runs=", trace->count, trace->total);
 	for (size_t i = 0; i < trace->count;) {
@@ -216,7 +234,8 @@ static bool applyOption(struct Gamate* g, const char* option) {
 int main(int argc, char** argv) {
 	if (argc < 4) {
 		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin SERVICE "
-			"[occurrence=HEX] [rom_trace] [ram_watch=HEX] [NAME=HEX ...]\n",
+			"[occurrence=HEX] [rom_trace] [rom_sequence] [vram_bytes] [ram_watch=HEX] "
+			"[NAME=HEX ...]\n",
 			argv[0]);
 		return 2;
 	}
@@ -229,10 +248,20 @@ int main(int argc, char** argv) {
 	unsigned long occurrence = 0;
 	unsigned long ramWatchAddress = 0;
 	bool romTraceEnabled = false;
+	bool romSequenceEnabled = false;
+	bool vramBytesEnabled = false;
 	bool ramWatchEnabled = false;
 	for (int i = 4; i < argc; i++) {
 		if (!strcmp(argv[i], "rom_trace")) {
 			romTraceEnabled = true;
+			continue;
+		}
+		if (!strcmp(argv[i], "rom_sequence")) {
+			romTraceEnabled = romSequenceEnabled = true;
+			continue;
+		}
+		if (!strcmp(argv[i], "vram_bytes")) {
+			vramBytesEnabled = true;
 			continue;
 		}
 		if (!strncmp(argv[i], "ram_watch=", 10)) {
@@ -294,6 +323,7 @@ int main(int argc, char** argv) {
 	}
 	for (int i = 4; i < argc; i++) {
 		if (!strncmp(argv[i], "occurrence=", 11) || !strcmp(argv[i], "rom_trace") ||
+				!strcmp(argv[i], "rom_sequence") || !strcmp(argv[i], "vram_bytes") ||
 				!strncmp(argv[i], "ram_watch=", 10)) continue;
 		if (!applyOption(&g, argv[i])) {
 			fprintf(stderr, "invalid probe option: %s\n", argv[i]);
@@ -375,6 +405,8 @@ int main(int argc, char** argv) {
 	printVramCoverageRuns(g.diagnostics.vramWritten);
 	printRomCoverageRuns(&g);
 	if (romTraceEnabled) printRomTrace(&romTrace);
+	if (romSequenceEnabled) printRomSequence(&romTrace);
+	if (vramBytesEnabled) printVramBytes(&g);
 	if (ramWatchEnabled) {
 		printf("# ram_watch: address=%03lX reads=%u writes=%u final=%02X\n",
 			ramWatchAddress, ramTrace.reads, ramTrace.writes, ramTrace.lastValue);

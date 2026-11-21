@@ -431,12 +431,12 @@ bytes, while `$FF` and `$5A` fills were replaced. There is no transparent-row pa
 | Observable | Contract |
 | --- | --- |
 | Descriptor | One width byte followed by `width` tile selectors. |
-| Graphics lookup | Each selector deterministically chooses the eight output row bytes; the exact cartridge address transformation remains unresolved. |
+| Graphics lookup | Each selector reads one run of eight cartridge bytes; identical selectors read identical runs. Output row `r` is a fixed single-byte function of graphics byte `r`. The selector-to-address transform remains unresolved. |
 | VRAM writes | `8 * width`. |
 | LCD writes | `11 * width`. |
 | Registers | A and Y return the tile width; X returns the final selector multiplied by eight; S is restored. |
 | Status | N clears and Z sets; I and D are preserved. Carry and V depend on intermediate address arithmetic. |
-| Scratch | `$018-$01B` are service scratch. |
+| Scratch | `$018-$01B` are service scratch. Stack bytes `$1F9-$1FB` are also written during the call. |
 | Other hardware | Scroll, AY, mapper, and UART state are preserved. |
 
 Width perturbation expands both the selector stream and destination coverage exactly one column at a
@@ -445,10 +445,27 @@ X perturbation moves the byte column at each eight-pixel boundary, Y perturbatio
 and A perturbation has no effect. Both BIOS revisions produced identical ordered ROM coverage,
 timing, VRAM coverage, output, registers, and LCD activity in the controlled comparison.
 
-Observed authentic widths range from 1 through 18 tiles. Timing varies within a width according to
-the selector-controlled lookup path. An exact timing formula and the selector-to-graphics-address
-transformation remain open; neither is needed to validate the resolved drawing and calling convention
-above.
+Observed authentic widths range from 1 through 18 tiles.
+
+Controlled mapping study (one authentic Mighty Boxer call, width 15, 6,714 cycles, both BIOS
+revisions): address-only tracing shows the width byte, then one selector read per tile, with each tile
+then reading a contiguous run of eight cartridge bytes. Tiles that share a selector read the same run
+and produce identical output. For eight-read tiles, output row `r` is a consistent single-byte function
+of graphics byte `r`: 96 rows covering 16 distinct graphics values had no conflicting outputs. The
+mapping is not a copy or bit reversal, and it is not reproduced here. Two tile forms issue extra
+reads. In 16-read tiles, each row reads a dummy address (the data address minus `$100`) before the data
+read. The wrap row of a 9-read tile reads `$00` before `$100`. Perturbing the dummy reads changed neither
+VRAM nor cycles. Interpreting them as 6502 page-crossing dummy accesses is an inference.
+
+Timing follows the descriptor, not graphics content. In this call, the only perturbations that changed
+the cycle count were descriptor bytes: the width byte produced a +100,036-cycle delta, and selector
+bytes produced deltas between −30 and +16 cycles. Changing any of the 130 unique graphics or dummy-read bytes left the
+cycle count unchanged. The VRAM maps and cycle deltas were identical for both BIOS revisions.
+
+Open questions are the selector-to-address transform (a simple linear offset does not fit the observed
+selector/run pairs), the origin of the 16-entry mapping, and an exact cycle formula. Per-selector cycle
+cost has not been isolated. None of these is needed to validate the resolved drawing and calling
+convention above.
 
 `tools/gamate-bios-f012-summary.py` derives width from LCD/VRAM write counts and validates the write
 shape, return registers, status invariants, stack balance, and unrelated hardware effects. It reports

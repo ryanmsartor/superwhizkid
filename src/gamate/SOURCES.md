@@ -920,8 +920,22 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   unchanged, and carry/V reflect intermediate arithmetic. Authentic widths are 1-18 tiles. Both BIOS
   revisions agreed in controlled tests.
 - `$F012` limitation: the exact cycle formula and selector-to-graphics-address transformation remain
-  unresolved. Timing is measurably affected by the lookup path. These are retained as explicit
-  follow-up questions rather than inferred from firmware implementation details.
+  unresolved. Timing is not affected by graphics or dummy-read contents in the controlled call, so the
+  descriptor and selector path is the timing driver. These are retained as explicit follow-up questions
+  rather than inferred from firmware implementation details.
+- `$F012` mapping study (Mighty Boxer occurrence 1, both BIOS revisions): private-copy
+  `romxor` perturbation of each of the 130 unique cartridge offsets read by the call, recording changed
+  VRAM bytes and cycle deltas; ordered ROM-read and VRAM-write address traces via the probe's
+  `rom_sequence` and `vram_bytes` diagnostics. Method: `tests/gamatebiosprobe.c`, with analysis scripts
+  kept in `/tmp` only. Result: descriptor reads are followed by one contiguous eight-byte graphics run
+  per tile; identical selectors share runs and outputs; per-row output is a consistent single-byte
+  function over the observed graphics values (96 rows, 16 values, no conflicts). Dummy reads in 16-read
+  tiles and at a wrap row produced no VRAM or cycle change. The two BIOS revisions gave identical
+  perturbation maps and cycle deltas. The RAM hash differed between BIOS revisions only because of
+  pre-call stack byte `$1F8`, which the call reads but never writes. Limitation: the mapping table was
+  not reproduced or published, the selector-to-address transform and cycle formula remain open, and
+  the page-crossing interpretation of dummy reads is inferred. Legal boundary: the local BIOS and ROM
+  files were read-only inputs, and no ROM or BIOS bytes, derived tables, or traces were committed.
 - `$F015` corpus method: the validated 1,000-frame report and adjacent four-title report provide
   41,824 balanced calls, evenly divided between BIOS revisions. The independently authored
   `tools/gamate-bios-f015-summary.py` excludes interrupt-spanning summaries, derives dimensions from
