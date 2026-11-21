@@ -81,6 +81,7 @@ static bool environment(unsigned command, void* data) {
 		const struct retro_core_option_definition* options = data;
 		unsigned mask = 0;
 		bool defaults = true, audioValues = false, paletteLabels = false;
+		bool yellowPaletteValues = false;
 		bool contrastValues = false, flickerValues = false;
 		for (; options && options->key; options++) {
 			mask |= optionMask(options->key);
@@ -94,6 +95,11 @@ static bool environment(unsigned command, void* data) {
 			if (!strcmp(options->key, "superwhizkid_palette")) {
 				paletteLabels = options->values[1].label &&
 					!strcmp(options->values[1].label, "Gamate LCD");
+				yellowPaletteValues = options->values[3].value &&
+					!strcmp(options->values[3].value, "yellow_rgb") &&
+					options->values[3].label &&
+					!strcmp(options->values[3].label, "RGB") &&
+					!options->values[4].value;
 			}
 			if (!strcmp(options->key, "superwhizkid_contrast")) {
 				contrastValues = true;
@@ -117,14 +123,21 @@ static bool environment(unsigned command, void* data) {
 			defaults &= options->default_value && !strcmp(options->default_value, expected);
 		}
 		modernOptions = mask == 0xFF && defaults && audioValues && paletteLabels &&
-			contrastValues && flickerValues;
+			yellowPaletteValues && contrastValues && flickerValues;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_VARIABLES: {
 		const struct retro_variable* variables = data;
 		unsigned mask = 0;
-		for (; variables && variables->key; variables++) mask |= optionMask(variables->key);
-		legacyOptions = mask == 0xFF;
+		bool yellowPaletteValues = false;
+		for (; variables && variables->key; variables++) {
+			mask |= optionMask(variables->key);
+			if (!strcmp(variables->key, "superwhizkid_palette")) {
+				yellowPaletteValues = variables->value &&
+					strstr(variables->value, "yellow_rgb") != NULL;
+			}
+		}
+		legacyOptions = mask == 0xFF && yellowPaletteValues;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE:
@@ -541,6 +554,38 @@ int main(int argc, char** argv) {
 	p_retro_run();
 	assert(sawPaletteLight && frameIsGreyscale);
 	assert(firstVideoPixel == 0xAD55);
+	paletteOption = "yellow_rgb";
+	optionUpdate = true;
+	ram[4] = 0x80;
+	ram[9] = 0;
+	p_retro_run();
+	assert(firstVideoPixel == 0xEBF1);
+	ram[4] = 0;
+	ram[9] = 0x80;
+	p_retro_run();
+	assert(firstVideoPixel == 0x2B47);
+	ram[4] = 0x80;
+	ram[9] = 0x80;
+	p_retro_run();
+	assert(firstVideoPixel == 0x5C19);
+	ram[4] = 0;
+	ram[9] = 0;
+	p_retro_run();
+	assert(firstVideoPixel == 0xD654);
+	ram[4] = 0x80;
+	ram[9] = 0;
+	contrastOption = "15";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0x28A3);
+	contrastOption = "16";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0x0000);
+	contrastOption = "8";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0xEBF1);
 	paletteOption = "invalid";
 	optionUpdate = true;
 	p_retro_run();

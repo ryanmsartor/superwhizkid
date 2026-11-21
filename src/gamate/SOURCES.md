@@ -95,8 +95,7 @@ hardware measurements take precedence where they conflict with an emulator.
 - Ashens, “Gamate Review”: <https://www.youtube.com/watch?v=aIsKG-pewM0>
 - Museum of Obsolete Media, “Bit Corporation Gamate (1990–1995)”:
   <https://obsoletemedia.org/gamate/>
-- Used for: choosing a representative olive-green profile for the optional `Gamate LCD` palette and
-  confirming that neutral greyscale is not representative of the original non-backlit panel.
+- Used for: choosing a representative olive-green profile for the optional `Gamate LCD` palette.
 - Method and limitations: the Nintendo Life/Neo Fuji game images show software on physical Gamate
   screens, but several were made by scanning a paused LCD and have severe green-channel clipping.
   The Ashens video thumbnail provides a less saturated view of an unlit physical screen under room
@@ -107,14 +106,11 @@ hardware measurements take precedence where they conflict with an emulator.
 - Local visual feedback: the user requested a murkier transparent/background shade because the
   existing Gamate LCD palette appeared too yellow. This is a subjective presentation preference, not
   a new hardware measurement.
-- Implementation impact: the libretro frontend offers `Original`, `Gamate LCD`, and `Greyscale`.
-  `Original` preserves the core's initial uncited visual approximation exactly. `Gamate LCD` uses
-  RGB565 `8C6A/6348/3208/1906`; its background is a darker, more yellow-olive panel tone, while
-  progressively driven shades shift toward a slightly lighter navy ink. The background's blue
-  channel was raised by one RGB565 step in response to the visual feedback above. This remains a
-  visual interpretation of the same uncalibrated hardware references, not a new measurement; the
-  legacy internal option value remains `accurate` so existing frontend configurations continue to
-  work. `Greyscale` uses neutral 255/170/85/0 levels. Palette selection only
+- Implementation impact: the optional `Gamate LCD` palette uses RGB565 `8C6A/6348/3208/1906`; its
+  background is a darker, more yellow-olive panel tone, while progressively driven shades shift
+  toward a slightly lighter navy ink. The background's blue channel was raised by one RGB565 step in
+  response to the visual feedback above. Additional palettes beyond `Gamate LCD` are presentation
+  options included for fun, not representations of the handheld's display. Palette selection only
   maps completed two-bit pixels to output colors and does not change emulated LCD state or timing.
 
 ### Contrast presentation control
@@ -122,12 +118,14 @@ hardware measurements take precedence where they conflict with an emulator.
 - Physical context: the real-hardware appearance references above show that screen contrast varies
   with the handheld's contrast wheel, viewing conditions, panel type, and age, but they do not provide
   calibrated shade measurements across wheel positions.
-- Implementation impact: the frontend exposes 16 contrast levels from 0 through 15, defaulting to 8.
-  Level 8 reproduces each selected palette exactly. Level 0 collapses all three driven shades into
-  the palette's unchanged background; levels above 8 extend each RGB565 channel's distance from that
-  background with channel clipping at the format limits. The background entry itself is copied
-  byte-for-byte at every level. L3 and R3 adjust one level per press and request that the frontend
-  update the visible core-option value.
+- Implementation impact: the frontend exposes 16 contrast levels from 1 through 16, defaulting to
+  8. Level 1 retains one eighth of each ink's distance from the background, and level 8 reproduces
+  each selected palette exactly. Levels above 8 move the ink channels toward the selected dark
+  endpoint with channel clipping at the format limits. The remaining ink weights for levels 9-16
+  are 14/16, 12/16, 10/16, 8/16, 6/16, 4/16, 3/16, and 0, leaving level 15 more visible before
+  level 16 reaches the endpoint. The background entry itself is copied byte-for-byte at every level.
+  L3 and R3 adjust one level per press and request that the frontend update the visible core-option
+  value.
 - Limitations: these steps are a useful presentation model, not measurements of the physical wheel's
   electrical or optical response. Contrast affects only frontend color mapping and is excluded from
   machine save states. The D-pad remains available, while the left analog stick maps through a dead

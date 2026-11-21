@@ -32,7 +32,8 @@ static const uint16_t* activePalette = contrastPalette;
 static const uint16_t originalPalette[4] = { 0xCE93, 0x8CEB, 0x5327, 0x1102 };
 static const uint16_t gamateLcdPalette[4] = { 0x8C6A, 0x6348, 0x3208, 0x1906 };
 static const uint16_t greyscalePalette[4] = { 0xFFFF, 0xAD55, 0x52AA, 0x0000 };
-static const uint16_t maximumContrastInk[3] = { 0x0040, 0x0848, 0x0000 };
+static const uint16_t yellowRgbPalette[4] = { 0xD654, 0xEBF1, 0x2B47, 0x5C19 };
+static const uint16_t maximumContrastInk[4] = { 0x0040, 0x0848, 0x0000, 0x0000 };
 static unsigned selectedPaletteIndex;
 static uint16_t shades[3 * 256 + 1];
 static uint16_t lcdLevel[GAMATE_WIDTH * GAMATE_HEIGHT];
@@ -250,11 +251,12 @@ void retro_set_environment(retro_environment_t cb) {
 	static const struct retro_core_option_definition options[] = {
 		{
 			"superwhizkid_palette", "Palette",
-			"Selects the colors used for the Gamate's four LCD shades. Gamate LCD is a perceptual simulation based on real-hardware references; Original preserves the core's initial palette.",
+			"Selects colors for the four LCD shades. Gamate LCD is an uncalibrated interpretation of real-panel references; Original preserves the core's initial palette.",
 			{
 				{ "original", "Original" },
 				{ "accurate", "Gamate LCD" },
 				{ "greyscale", "Greyscale" },
+				{ "yellow_rgb", "RGB" },
 				{ NULL, NULL }
 			},
 			"original"
@@ -282,7 +284,7 @@ void retro_set_environment(retro_environment_t cb) {
 		{ NULL, NULL, NULL, { { NULL, NULL } }, NULL }
 	};
 	static const struct retro_variable variables[] = {
-		{ "superwhizkid_palette", "Palette; original|accurate|greyscale" },
+		{ "superwhizkid_palette", "Palette; original|accurate|greyscale|yellow_rgb" },
 		{ "superwhizkid_contrast", "Contrast; 8|1|2|3|4|5|6|7|9|10|11|12|13|14|15|16" },
 		{ "superwhizkid_audio_output", "Audio Output; stereo|mono|speaker" },
 		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
@@ -309,10 +311,15 @@ static uint16_t blend565(uint16_t a, uint16_t b, unsigned t) {
 
 static unsigned contrastChannel(unsigned background, unsigned ink, unsigned endpoint,
 		unsigned maximum) {
-	int value = contrastLevel <= 8 ?
-		(int) background + ((int) ink - (int) background) * (int) contrastLevel / 8 :
-		((int) ink * (int) (16 - contrastLevel) +
-			(int) endpoint * (int) (contrastLevel - 8)) / 8;
+	int value;
+	if (contrastLevel <= 8) {
+		value = (int) background +
+			((int) ink - (int) background) * (int) contrastLevel / 8;
+	} else {
+		unsigned inkWeight = 2 * (16 - contrastLevel);
+		if (contrastLevel == 15) inkWeight++;
+		value = (int) (ink * inkWeight + endpoint * (16 - inkWeight)) / 16;
+	}
 	if (value < 0) return 0;
 	return (unsigned) value > maximum ? maximum : (unsigned) value;
 }
@@ -347,9 +354,11 @@ static void readOptions(void) {
 	const char* palette = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ?
 		var.value : "original";
 	selectedPaletteIndex = !strcmp(palette, "accurate") ? 1 :
-		!strcmp(palette, "greyscale") ? 2 : 0;
+		!strcmp(palette, "greyscale") ? 2 :
+		!strcmp(palette, "yellow_rgb") ? 3 : 0;
 	selectedPalette = selectedPaletteIndex == 1 ? gamateLcdPalette :
-		selectedPaletteIndex == 2 ? greyscalePalette : originalPalette;
+		selectedPaletteIndex == 2 ? greyscalePalette :
+		selectedPaletteIndex == 3 ? yellowRgbPalette : originalPalette;
 
 	var.key = "superwhizkid_contrast";
 	var.value = NULL;
