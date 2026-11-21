@@ -410,6 +410,57 @@ and runs, sum horizontal spans, identify repeated stream/base triples, and flag 
 selectors. That can distinguish the ordinary contract from caller-specific edge cases before a
 clean-room replacement is designed.
 
+### Rectangle-fill contract: `$F02D`
+
+The combined 1,000-frame completed-call corpus contains 209,088 balanced `$F02D` calls split evenly
+between BIOS revisions. Of those, 207,504 do not span an IRQ or NMI. Every non-interrupted call fits
+the same register, write-count, and timing contract; the remaining 1,584 are excluded from direct
+timing classification because their summaries include interrupt callback work.
+
+Controlled authentic and synthetic-caller probes resolve these inputs:
+
+| Input | Meaning |
+| --- | --- |
+| A | Byte value written to every destination. |
+| X | Starting horizontal pixel coordinate; the starting VRAM byte column is `X >> 3`. |
+| Y | Starting VRAM row. |
+| RAM `$015` | Cached raw LCD-control value. The service retains its blank/window/plane-swap/stop bits and forces row increment. |
+| RAM `$01C` | Horizontal pixel extent. The byte-column count is `$01C >> 3`. |
+| RAM `$01D` | Vertical row count. |
+
+The routine is column-major. It writes the cached LCD control once, forcing row increment. For each
+byte column it programs plane 1, that column, and starting row Y, then writes A for `$01D` successive
+rows. It advances its raw low-address byte to the next column and repeats. Ordinary callers use
+nonzero dimensions, but both loops are 8-bit decrement loops: a derived column count of zero or row
+count of zero executes 256 iterations. This also preserves raw register overflow behavior for invalid
+or unusually large dimensions rather than clipping to the 160×150 viewport.
+
+For `columns = $01C >> 3` and `rows = $01D`, interpreted with zero as 256 for their respective loops:
+
+| Observable | Contract |
+| --- | --- |
+| VRAM writes | `columns * rows`, normally all to plane 1. |
+| LCD writes | `1 + columns * (2 + rows)`: one control write, two address writes per column, then the data writes. |
+| Master clocks | `120 + columns * (58 + 18 * rows)`. |
+| Registers | A and S preserved; X and Y return zero. |
+| Status | C and N clear, Z set; I, D, and V preserved. |
+| Scratch | `$018` is the raw plane/column byte and finishes one column past the last start; `$019` caches Y, `$01A` caches A, and `$0A8` receives the plane-1 selector. |
+| Other hardware | Scroll, AY, mapper, and UART state are preserved. |
+
+The most common observed shape is 1×1 byte (205,796 clean calls), but the corpus includes widths up
+to 21 byte columns and heights up to 200 rows. Mighty Boxer's first authentic call demonstrates a
+20×48-byte fill. Both BIOS revisions produce identical controlled timing, VRAM coverage, output,
+registers, scratch, and LCD state.
+
+The diagnostic ROM coverage reports one cartridge read per call. Its address is the stacked return
+address and it occurs during the BIOS `RTS`; this is the NMOS RTS dummy bus read already modeled by
+the CPU, not a semantic cartridge parameter. `$F02D` therefore has no observed cartridge-data input.
+
+`tools/gamate-bios-f02d-summary.py` validates this contract against one or more local completed-call
+reports. It derives dimensions independently from LCD/VRAM write counts, checks the timing equation,
+register/status behavior, and unrelated hardware effects, and emits no memory or firmware contents.
+It reports zero mismatches across all 207,504 currently available non-interrupted calls.
+
 ### Stage 3: extend reachable paths
 
 Apply repeatable Start, A, B, and directional schedules, including Tornado's known long Start press,

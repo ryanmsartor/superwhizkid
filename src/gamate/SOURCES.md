@@ -902,6 +902,25 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   VRAM writes, coverage, and output unchanged in all 11 callers. Access coverage shows `$002-$003`
   are overwritten by every call, while `$004-$005` are neither read nor written. They are classified
   as service scratch/output and caller-preserved unused bytes respectively, not required inputs.
+- `$F02D` corpus method: the validated 1,000-frame completed-call report and the adjacent four-title
+  report were combined for 209,088 balanced calls, evenly divided between BIOS revisions. Calls
+  spanning IRQ/NMI were separated before direct timing analysis. The independently authored
+  `tools/gamate-bios-f02d-summary.py` derives rectangle dimensions from LCD/VRAM write counts and
+  verifies timing, registers, status, and unrelated peripheral effects without retaining memory or
+  firmware bytes.
+- `$F02D` controlled method: authentic caller capture plus synthetic entry-state probes varied A/X/Y,
+  cached LCD control `$015`, horizontal extent `$01C`, vertical count `$01D`, incoming LCD state, and
+  status flags. Diagnostic RAM watches at `$018-$01A/$0A8` retained only access counts and final scratch
+  values. Both authentic BIOS revisions were tested. No BIOS or cartridge payload was retained.
+- `$F02D` result: A is the fill byte, X selects starting byte column `X >> 3`, Y selects starting row,
+  `$01C >> 3` is the byte-column count, and `$01D` is the row count. The column-major service selects
+  plane 1, preserves cached LCD mode bits while forcing row increment, and performs
+  `columns * rows` VRAM writes, `1 + columns * (2 + rows)` LCD writes, and
+  `120 + columns * (58 + 18 * rows)` master clocks. Zero loop counts execute 256 iterations. A/S are
+  preserved; X/Y return zero; C/N clear, Z sets, and I/D/V are preserved. All 207,504 non-interrupted
+  corpus calls match this contract. The single reported cartridge read is the emulated NMOS `RTS`
+  dummy read at the stacked return address, not a firmware data dependency. Used for the replacement
+  contract in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
 - Input-coverage method: `tools/gamate-bios-input-campaign.sh` applies independently authored,
   deterministic schedules for long Start, Select/Start plus A/B actions, and every individual control
   plus legal direction/button combinations. `tools/gamate-bios-call-coverage.py` compares derived

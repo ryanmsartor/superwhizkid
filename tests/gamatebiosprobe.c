@@ -21,6 +21,11 @@ struct RomTrace {
 	size_t count, total;
 };
 
+struct RamTrace {
+	unsigned reads, writes;
+	uint8_t lastValue;
+};
+
 static void captureRomRead(void* context, const struct Gamate* g,
 		uint16_t address, size_t physicalOffset) {
 	struct RomTrace* trace = context;
@@ -28,6 +33,17 @@ static void captureRomRead(void* context, const struct Gamate* g,
 	(void) address;
 	if (trace->count < ROM_TRACE_LIMIT) trace->offsets[trace->count++] = physicalOffset;
 	trace->total++;
+}
+
+static void captureRamAccess(void* context, const struct Gamate* g, bool write,
+		uint16_t address, uint8_t previous, uint8_t value) {
+	struct RamTrace* trace = context;
+	(void) g;
+	(void) address;
+	(void) previous;
+	if (write) trace->writes++;
+	else trace->reads++;
+	trace->lastValue = value;
 }
 
 static uint8_t* readFile(const char* path, size_t* size) {
@@ -200,7 +216,7 @@ static bool applyOption(struct Gamate* g, const char* option) {
 int main(int argc, char** argv) {
 	if (argc < 4) {
 		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin SERVICE "
-			"[occurrence=HEX] [rom_trace] [NAME=HEX ...]\n",
+			"[occurrence=HEX] [rom_trace] [ram_watch=HEX] [NAME=HEX ...]\n",
 			argv[0]);
 		return 2;
 	}
@@ -211,10 +227,20 @@ int main(int argc, char** argv) {
 		return 2;
 	}
 	unsigned long occurrence = 0;
+	unsigned long ramWatchAddress = 0;
 	bool romTraceEnabled = false;
+	bool ramWatchEnabled = false;
 	for (int i = 4; i < argc; i++) {
 		if (!strcmp(argv[i], "rom_trace")) {
 			romTraceEnabled = true;
+			continue;
+		}
+		if (!strncmp(argv[i], "ram_watch=", 10)) {
+			if (ramWatchEnabled || !parseHex(argv[i] + 10, 0x3FF, &ramWatchAddress)) {
+				fprintf(stderr, "ram_watch must be one hexadecimal RAM address\n");
+				return 2;
+			}
+			ramWatchEnabled = true;
 			continue;
 		}
 		if (strncmp(argv[i], "occurrence=", 11)) continue;
@@ -267,7 +293,8 @@ int main(int argc, char** argv) {
 		}
 	}
 	for (int i = 4; i < argc; i++) {
-		if (!strncmp(argv[i], "occurrence=", 11) || !strcmp(argv[i], "rom_trace")) continue;
+		if (!strncmp(argv[i], "occurrence=", 11) || !strcmp(argv[i], "rom_trace") ||
+				!strncmp(argv[i], "ram_watch=", 10)) continue;
 		if (!applyOption(&g, argv[i])) {
 			fprintf(stderr, "invalid probe option: %s\n", argv[i]);
 			gamateFree(&g);
@@ -309,7 +336,10 @@ int main(int argc, char** argv) {
 	gamateResetVramDiagnostics(&g);
 	gamateResetRomDiagnostics(&g);
 	struct RomTrace romTrace = { 0 };
+	struct RamTrace ramTrace = { 0 };
 	if (romTraceEnabled) gamateSetRomDiagnosticWatch(&g, captureRomRead, &romTrace);
+	if (ramWatchEnabled) gamateSetRamDiagnosticWatch(&g, (uint16_t) ramWatchAddress,
+		captureRamAccess, &ramTrace);
 	g.irqClocks = 0;
 	g.irq = false;
 	bool returned = false;
@@ -345,6 +375,10 @@ int main(int argc, char** argv) {
 	printVramCoverageRuns(g.diagnostics.vramWritten);
 	printRomCoverageRuns(&g);
 	if (romTraceEnabled) printRomTrace(&romTrace);
+	if (ramWatchEnabled) {
+		printf("# ram_watch: address=%03lX reads=%u writes=%u final=%02X\n",
+			ramWatchAddress, ramTrace.reads, ramTrace.writes, ramTrace.lastValue);
+	}
 	printf("slot\tin_a\tin_x\tin_y\tin_s\tin_p\tout_a\tout_x\tout_y\tout_s\tout_p\t"
 		"clocks\tram_changed\tram_first\tram_last\tram_hash\t"
 		"vram_changed\tvram_first\tvram_last\tvram_hash\tvram_unique_written\t"
