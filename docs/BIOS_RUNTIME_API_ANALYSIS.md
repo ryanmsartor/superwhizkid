@@ -554,6 +554,31 @@ Excluding 394 interrupt-spanning calls leaves 9,020 uninterrupted calls. An adde
 reports zero mismatches for timing, register/status behavior, and unrelated AY/bank/UART activity.
 The only measured ROM read is the stacked cartridge `RTS` dummy address, not a semantic data read.
 
+### Pointer-controlled tile/text blitter: `$F027`
+
+The validated completed-call report contains 7,026 `$F027` calls, evenly split between BIOS revisions.
+Of those, 2,366 do not span an IRQ or NMI. A controlled first occurrence in Baseball resolves the
+caller pointer roles but not yet a complete text, character, or stream grammar.
+
+RAM `$006-$007` supplies the first graphics base and RAM `$008-$009` supplies the second graphics
+base. Low-byte XOR at `$006` shifts the first graphics read span by one cartridge byte; low-byte XOR
+at `$008` shifts the second span without changing the geometry. High-byte XOR at `$007` and `$009`
+selects the corresponding other 256-byte page. Entry A, X, and Y are preserved in the controlled
+call; X and Y also remain unchanged across pointer perturbations. The call writes both VRAM planes
+and preserves scroll, AY, mapper, and UART state in the masked comparison.
+
+The Baseball occurrence uses 32 VRAM writes, 106 LCD writes, and 14,202 master clocks; it reads two
+eight-byte graphics runs, an additional cartridge byte, and a large caller RAM region. Replacing
+candidate control bytes at `$023`, `$028`, or `$030` with non-`$FF` values changes the operation:
+`$023` produces 128 VRAM writes, 409 LCD writes, and 37,774-38,670 clocks depending on its value;
+`$028` or `$030` produces 176 VRAM writes, 281 LCD writes, and 23,286 clocks in this call. A baseline
+`$FF` in all three positions preserves the compact 32-write shape. Both BIOS revisions produced the
+same pointer spans, write counts, and cycle counts.
+
+These observations establish a pointer-controlled, RAM-buffer-driven two-plane blitter and two
+graphics bases. They do not yet establish an exact character encoding, run format, terminator grammar,
+or timing equation. The control-byte labels `$023`, `$028`, and `$030` are therefore retained as
+measured addresses, not semantic names.
 ### Rectangle-fill contract: `$F02D`
 
 The combined 1,000-frame completed-call corpus contains 209,088 balanced `$F02D` calls split evenly

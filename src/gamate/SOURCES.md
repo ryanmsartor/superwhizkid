@@ -969,6 +969,19 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   validated report it found zero mismatches across 9,020 non-interrupted calls; 394 calls spanning
   IRQ/NMI were excluded from direct timing comparison. Both BIOS revisions agreed in controlled
   timing and write coverage.
+- `$F027` pointer and control-byte study: a masked first authentic Baseball call was captured under
+  both BIOS revisions. Private-copy low-byte and high-byte XOR perturbations established that RAM
+  `$006-$007` selects the first graphics base and `$008-$009` selects the second graphics base;
+  low bytes shift only the corresponding eight-byte read span and high bytes select the 256-byte page.
+  Entry A/X/Y remained unchanged in the probe. Address-only ROM tracing, VRAM coverage, LCD/VRAM write
+  counts, clocks, and RAM watches were recorded; no ROM or RAM payload was retained.
+- `$F027` result and limitation: the measured Baseball call performs 32 VRAM writes across both planes,
+  106 LCD writes, and 14,202 master clocks. RAM control bytes `$023`, `$028`, and `$030` act as
+  active control fields: replacing the baseline `$FF` with non-`$FF` values expands the call to
+  128 writes/409 LCD writes for `$023`, or 176 writes/281 LCD writes for `$028` or `$030`. Exact
+  character or stream semantics and an exact timing formula remain unresolved. Both BIOS revisions
+  gave identical controlled read spans and write counts. No source, firmware, ROM, or RAM payload
+  was copied or published.
 - `$F02D` corpus method: the validated 1,000-frame completed-call report and the adjacent four-title
   report were combined for 209,088 balanced calls, evenly divided between BIOS revisions. Calls
   spanning IRQ/NMI were separated before direct timing analysis. The independently authored
