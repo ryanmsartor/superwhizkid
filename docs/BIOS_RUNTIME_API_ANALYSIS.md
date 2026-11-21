@@ -660,6 +660,38 @@ matrix covers two titles. Wait-path timing varies with the IRQ phase and callbac
 specified by a fixed cycle equation. RAM and peripheral changes during an IRQ-spanning call must not
 be attributed to `$F006` without separating callback effects.
 
+### IRQ-gated counter wait: `$F009`
+
+The available completed-call report contains 3,696 balanced `$F009` calls across 38 titles, 1,848
+per BIOS revision. Of these, 3,680 span an IRQ or NMI; the 16 uninterrupted calls, from six titles,
+are evenly split between BIOS revisions. All 16 take 42 master clocks and have the same register,
+RAM, status, and hardware-effect signature. Across all completed calls, A returns zero, X/Y/S are
+preserved, and C/Z are set, N is clear, and B/D/I/V are preserved.
+
+| Observable | Contract |
+| --- | --- |
+| Entry A | Ignored; A returns zero. |
+| Entry RAM `$00B` | Values `$00-$17` wait `24 - n` IRQs (`n` is the numeric entry value); `$18` and tested larger values return immediately. |
+| RAM `$00B` on return | Written as zero. |
+| Registers | X, Y, and S are preserved. |
+| Status | C and Z set; N clear; B, D, I, and V preserved. |
+| Ready-path timing | 42 master clocks when the wait condition is already satisfied. |
+| Other hardware | No peripheral effects in uninterrupted calls. IRQ-spanning calls include callback effects. |
+
+Controlled probes used first-call contexts from Dino Bibo under both BIOS revisions to test every
+entry value `$00-$18`. Values `$00-$17` took exactly 24 through 1 periodic IRQs, respectively;
+`$18` took none. Values `$19`, `$1F`, `$20`, `$7F`, `$80`, and `$FF` also returned on the ready path.
+Boundary probes with `$00`, `$17`, `$18`, and `$19` in Brick Blaster, Pipemania, and Legend of Dragon
+Knight reproduced the same threshold under both BIOS revisions. The counter was set only in the
+probe's in-memory RAM, and every controlled call returned with `$00B=0`.
+
+The threshold behavior is consistent with waiting until `$00B` reaches 24 decimal (`$18`), distinct
+from the thresholds measured for `$F003` and `$F006`. The callback's intermediate counter updates
+were not traced directly. Wait-path elapsed clocks vary with title-specific IRQ callback work; RAM and
+peripheral changes in IRQ-spanning calls must not be attributed to `$F009`. Selected values above
+`$20` were tested, but the full range `$21-$7E` was not exhaustive. These are emulated observations,
+not physical timing measurements.
+
 ### Rectangle-fill contract: `$F02D`
 
 The combined 1,000-frame completed-call corpus contains 209,088 balanced `$F02D` calls split evenly

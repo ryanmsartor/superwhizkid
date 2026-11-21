@@ -1002,6 +1002,27 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   within its 10-million-instruction bound. The threshold behavior is shared by both BIOS revisions; the
   IRQ-side mechanism that advances `$00B` was not directly traced and remains an inference. Wait-path
   timing and callback-attributed state changes are not specified as `$F006` effects.
+- `$F009` source and method: local, read-only authentic BIOS and cartridge inputs were observed with
+  the project-authored emulator and `gamatebiosprobe`; this is emulated runtime evidence, not a physical
+  measurement. The contributor-reported `$F009` wait in PR #1 motivated follow-up, but the controlled
+  probes below are the evidence for the service contract. First-call contexts in Brick Blaster, Dino
+  Bibo, Pipemania, and Legend of Dragon Knight were tested under both BIOS revisions. Dino Bibo was
+  probed with every `$00B` value from `$00-$18`, plus selected larger values; the other three titles
+  received boundary-value probes. Ready-path A/X/Y/P perturbations were tested in Brick Blaster and
+  Dino Bibo. Only timing, register/status summaries, peripheral counters, and focused `$00B` access
+  counts/final value were retained. No BIOS, ROM, or general RAM payload was printed or retained.
+- `$F009` result and limitation: the available completed-call report contains 3,696 calls from 38
+  titles, evenly split between BIOS revisions; 3,680 span IRQ/NMI and 16 uninterrupted calls span six
+  titles. All 16 uninterrupted calls take 42 master clocks, clear A, preserve X/Y/S, change only
+  `$00B`, set C/Z, clear N, preserve B/D/I/V, and have no peripheral effects. Across controlled
+  contexts, each tested `$00-$17` value waits `24 - n` IRQs, where `n` is the numeric value at
+  `$00B`; `$18` returns immediately, and selected larger values through `$FF` also use the ready
+  path. Both BIOS revisions agree. This supports a 24-count threshold, but the callback's
+  intermediate counter-update mechanism remains untraced; IRQ-spanning RAM/peripheral changes and
+  timing are not service effects.
+  Values `$21-$7E` were not directly tested. The contributor's reported Start-tap acceptance results
+  were not independently reproduced; no external emulator implementation or code was consulted or
+  copied.
 - `$F027` cross-title method: first authentic calls in Baseball, Fortune 'n Luck, Nightmare of Santa
   Claus, and Time Warrior, plus first VRAM-writing calls in Money Maze, Pipemania, Mars Voyage, Witty
   Apee, Devil Castle, and Kill Shot, were compared under both BIOS revisions. Private-copy XOR/set
