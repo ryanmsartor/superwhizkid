@@ -796,30 +796,12 @@ runs. `occurrence=N` selects authentic caller context before applying perturbati
 documentation should retain only behavioral summaries needed to specify an ABI; local full-state
 hashes are comparison aids rather than distributable firmware data.
 
-### Parallel mapper audit
+### Separate mapper investigation
 
-After the completed-call tracer is stable, instrument executed `$8000-$9FFF` accesses over the full
-catalog before considering lazy 4-in-1 mapper activation. This is independent of BIOS-helper
-semantics but can remove a cartridge fingerprint if ordinary software never triggers a false
-activation.
-
-The original implementation checklist remains:
-
-1. Pair each direct entry with its matching BIOS-to-cartridge return while allowing nested IRQ/NMI
-   callback crossings. (Implemented and validated across the unattended matrix.)
-2. Record input/output CPU registers and flags for each completed helper call. (Implemented.)
-3. Record summarized RAM, VRAM, LCD, AY, UART, mapper, and timing changes without retaining
-   copyrighted buffers. (Implemented.)
-4. Cluster call signatures across titles to identify shared calling conventions. (Aggregate and
-   selected-slot reporting implemented; semantic classification remains.)
-5. Exercise gameplay states, Start/button paths, and link traffic; compare newly reached slots and
-   call signatures against the unattended baseline. (Deterministic controller campaign implemented;
-   adaptive gameplay and link/NMI coverage remain.)
-6. Use purpose-written cartridges to probe individual slots only after their observed inputs and
-   effects suggest safe, narrow hypotheses.
-
-These stages should continue to report behavioral facts rather than publish BIOS instruction
-listings or translated source.
+Mapper activation is a separate question from the service ABI. Its hardware evidence, lazy-activation
+proposal, and required full-corpus checks are tracked in
+[`MAPPER_DETECTION.md`](MAPPER_DETECTION.md); mapper accesses should not be treated as BIOS helper
+semantics.
 
 ## Limits
 

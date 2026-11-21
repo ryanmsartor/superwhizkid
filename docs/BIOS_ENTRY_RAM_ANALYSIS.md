@@ -249,6 +249,15 @@ derived result of its own boot behavior. Other nonzero LFSR seeds and non-wrappi
 remain operational in this test, but they are observably different and should not be described as
 equivalent to authentic startup.
 
+## Post-entry read-before-write coverage
+
+Authentic-state access tracking found at least one cartridge read-before-write in every case. The
+union across the 116 BIOS/cartridge cases covered all 1,024 physical RAM bytes; BIOS reads of
+inherited bytes before their first post-entry write occurred in 110 cases. Repeating the tracking
+with broad controller input added no addresses to either owner-specific union. These counts describe
+observed accesses, not which bytes are required; perturbation results above provide the dependency
+evidence.
+
 ## Interpretation
 
 The earlier page sweep is now substantially narrower:
@@ -284,6 +293,11 @@ service requires nonzero state.
 `GAMATEBOOT_RAM_WATCH_OWNER` filters `bios`, `cartridge`, `other`, or `all` execution owners.
 `tools/gamate-ram-perturbation-summary.py` compares aggregate reports against an authentic-entry
 report. Raw reports and user-supplied software remain outside the repository.
+
+The diagnostic attributes accesses to the PC of the instruction being executed, so IRQ-entry stack
+writes are attributed to the interrupted instruction; later handler accesses are attributed to BIOS
+code. Read-modify-write instructions count their read before their write. This affects owner-specific
+attribution, not the aggregate read-before-write coverage.
 
 These are behavioral results from the current emulator and exercised paths, not physical hardware
 traces. Independent block clearing detects a dependency when removing one region changes an

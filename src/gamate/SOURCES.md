@@ -597,479 +597,91 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 ### Authentic BIOS cartridge-entry state sweep
 
-- Local origin: all 58 user-supplied cartridges were paired with both recognized authentic BIOS
-  revisions. Captures were taken immediately after the BIOS set PC to `$6020` and before the first
-  cartridge instruction executed. The resulting 116 state/RAM artifacts remain gitignored and are
-  not distributed.
-- Method: a temporary capture harness used Superwhizkid's independently authored serialization plus
-  readable field diagnostics. RAM and the serialized VRAM regions were compared byte-for-byte;
-  scalar state, timing, buffer hashes, and SHA-256 artifact identities were indexed locally.
-- Result: 116/116 combinations reached entry. Every UMC/BIT pair has identical RAM and VRAM. Across
-  cartridges, only RAM `$00E0-$00E1` and `$00E5-$00E6` vary; both pairs exactly match that
-  cartridge's stored 16-bit header checksum in all 58 cases. All other RAM bytes and all VRAM bytes
-  are invariant. CPU registers and hardware configuration are common, while the BIOS revisions
-  retain their documented 29-CPU-cycle/58-master-clock display and audio phase difference.
-- Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md`, including the conclusion that one behavioral boot
-  contract can cover the corpus, the warning that authentic RAM/VRAM templates must not be shipped,
-  and the identification of resident interrupt/helper behavior as the principal blocker to a true
-  BIOS-free jump to `$6020`.
-- Limitations: captures reflect the current emulator at one instruction boundary, not a physical bus
-  trace. Invariance does not prove necessity, and hashes were not used as a substitute for the direct
-  RAM/VRAM comparisons. The sweep does not establish post-entry helper usage.
+- Local origin: 58 user-supplied cartridges under both recognized BIOS revisions, read in place.
+  Captures were taken at `$6020` before the first cartridge instruction; local state artifacts remain
+  gitignored and are not distributed.
+- Method: an independently authored harness captured serialized machine state and readable fields.
+  RAM and serialized VRAM were compared byte-for-byte; no captured image was retained in the repository.
+- Result and use: all 116 cases reached entry. Paired BIOS captures had identical RAM/VRAM; RAM
+  variation across cartridges was confined to the two 16-bit checksum fields. This supports the
+  entry contract in
+  [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md) and its conclusion
+  that copied state templates are not a clean-room replacement strategy.
+- Limits: this is one instruction boundary in the current emulator, not a physical bus trace.
+  Invariance does not prove necessity, and the sweep does not establish post-entry service use.
 
 ### Cartridge-entry VRAM perturbation sweep
 
-- Local origin: all 58 user-supplied cartridges were run for 1,000 post-entry frames under both BIOS
-  revisions after replacing only entry VRAM with authentic, zero, `$FF`, alternating-plane, or
-  deterministic address-derived contents. Authentic and zero were repeated with the standard broad
-  controller schedule. Reports remain outside the repository and contain derived hashes/counters but
-  no ROM, BIOS, VRAM image, or framebuffer payload.
-- Method: independently authored diagnostics restart VRAM coverage at `$6020`, count CPU and active
-  LCD reads before a byte's first cartridge write, and retain bitmaps only in nonserialized diagnostic
-  state. The instrumentation is compiled into a separate diagnostic library used by test tools; the
-  normal library and libretro core contain neither its storage nor its per-access checks. A release
-  build's normal `gamate.c` object was byte-identical to the pre-instrumentation object. `gamateboot`
-  reports final machine hashes and behavioral counters;
-  `tools/gamate-vram-perturbation-summary.py` excludes expected VRAM/video differences when comparing
-  execution state. Purpose-written unit tests verify CPU/display read-before-write accounting and
-  ensure display blanking does not count a VRAM fetch.
-- Result: authentic versus cleared VRAM produced zero execution, final-video, or final-VRAM differences
-  in all 116 unattended cases and all 116 automated-input cases. Across all five unattended patterns,
-  arbitrary nonzero contents changed execution for seven titles under both BIOSes and changed the
-  final displayed frame for two; all 116 final VRAM images varied because cartridges need not rewrite
-  the whole 16 KiB backing store. Sixteen unattended titles performed CPU reads before writes, with
-  Insect War reading 12,800 distinct bytes before their first write.
-- Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md` and the clean-room policy that replacement startup may
-  clear VRAM instead of inheriting or reconstructing authentic startup graphics. It does not justify
-  uninitialized or arbitrary VRAM.
-- Limitations: 1,000-frame unattended and deterministic-input paths are broad but not exhaustive;
-  unknown cartridges or later gameplay may have additional requirements. The experiment evaluates
-  behavior in the current emulator, not power-on electrical VRAM state on physical hardware.
+- Local origin and method: the same 58-cartridge/two-BIOS matrix was run for 1,000 post-entry frames
+  with authentic, zero, `$FF`, alternating-plane, or address-derived entry VRAM; authentic and zero
+  were also tested with broad controller input. Diagnostic read-before-write instrumentation and
+  tests live in a separate diagnostic build. The production `gamate.c` object remained byte-identical
+  to its pre-instrumentation version. `tools/gamate-vram-perturbation-summary.py` excludes expected
+  VRAM/video changes from execution comparisons; focused tests verify CPU/display read-before-write
+  accounting and that display blanking does not count a VRAM fetch.
+- Result and use: authentic and cleared VRAM matched in execution, final video, and final VRAM across
+  all 116 cases in both input modes. Arbitrary nonzero patterns changed execution for seven titles
+  and final video for two. The replacement policy is therefore clear VRAM, not arbitrary VRAM; details
+  and limits are in [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md).
+- Limits and legal boundary: deterministic 1,000-frame emulator paths are not exhaustive or physical
+  power-on evidence. Reports retain derived counts and hashes, not ROM, BIOS, VRAM, or framebuffer
+  payloads.
 
 ### Cartridge-entry RAM perturbation and access sweep
 
-- Local origin: all 58 user-supplied cartridges were run for 1,000 post-entry frames under both
-  authentic BIOS revisions. The experiment compared authentic RAM with all-zero, all-`$FF`,
-  callback/checksum-preserving, stack-preserving, and individual 256-byte-page-clearing policies.
-  Authentic-state access tracking was repeated with the standard broad controller schedule. Reports
-  remain outside the repository and contain derived hashes, counters, and address sets, not ROM,
-  BIOS, or RAM payloads.
-- Method: independently authored, diagnostic-only hooks restart physical 1 KiB RAM coverage at
-  `$6020`, mark writes, and classify reads before the first post-entry write by the PC of the current
-  cartridge, BIOS, or other instruction. `gamateboot` applies entry perturbations after authentic
-  boot and reports owner-specific counts and address sets. The reusable
-  `tools/gamate-ram-perturbation-summary.py` compares final CPU, video, audio, VRAM, mapper,
-  peripheral, and activity observations while excluding only the expected final-RAM hash change.
-  Purpose-written unit tests cover owner classification and read/write accounting. The hooks share
-  the separate diagnostic library used by the VRAM experiment; the production `gamate.c` object
-  remained byte-identical to the pre-instrumentation release object.
-- Result: full zero and `$FF` replacement changed 106 and 102 of 116 executions respectively.
-  Preserving only `$000C`, `$00E0-$00E1`, and `$00E5-$00E6` still changed 104; additionally retaining
-  the authentic stack page did not reduce that count. Clearing pages `$000-$0FF`, `$100-$1FF`,
-  `$200-$2FF`, and `$300-$3FF` individually changed 106, 2, 36, and 10 cases respectively. Final
-  video changed in 24 zero-page cases and 8 page-2 cases. Every case performed cartridge
-  read-before-write activity, their union covered all 1,024 physical bytes, and BIOS reads occurred
-  in 110 cases. Automated input added no address to either union.
-- Quarter-page extension: each of the sixteen 64-byte physical blocks was independently cleared in
-  another 1,856 unattended runs. `$000-$03F` accounted for all 106 zero-page cases. `$100-$13F`
-  affected only Time Warrior, while `$140-$1FF` affected none. The four page-2 blocks affected 26,
-  18, 6, and 2 cases; the four page-3 blocks affected 2, 2, 7, and 4. All but one title-level result
-  was paired across BIOSes. Dino Bibo differed only under UMC for `$380-$3BF`, limited to one active
-  AY-A sample and its audio hash at the observation boundary.
-- Sixteen-byte extension: the four highest-priority blocks (`$000-$03F`, `$0C0-$0FF`,
-  `$200-$23F`, and `$240-$27F`) were divided into sixteen chunks and exercised in another 1,856
-  runs. All completed. `$000-$00F` affected 106 cases and `$010-$01F` affected 102; `$020-$02F`
-  and `$030-$03F` affected 8 and 4. `$0C0-$0CF` and `$0D0-$0DF` affected 18 and 22, while
-  `$0E0-$0FF` affected none. The page-2 chunks affected 2, 12, 12, 6, 4, 10, 4, and 0 cases in
-  ascending address order. For each parent block, the union of chunk-level changed cases exactly
-  matched the parent set, with no parent-only interaction case at this resolution.
-- Byte/four-byte extension: all 32 bytes at `$000-$01F` and eight aligned groups at `$0C0-$0DF`
-  were independently cleared in another 4,640 passing runs. `$000C` alone affected the same 106
-  cases as its sixteen-byte parent; `$0011` alone affected the same 102 cases as its parent.
-  `$004-$009` and `$012-$013` produced smaller title-specific changes. Only `$0CC-$0CF`,
-  `$0D0-$0D3`, `$0D8-$0DB`, and `$0DC-$0DF` affected execution among the four-byte groups. Child
-  unions exactly matched all four parent sets. The summary tool's final-state normalization uses a
-  word-boundary match for `RAM=` so final `VRAM=` remains part of the execution signature; separate
-  final-video and final-VRAM columns provide narrower presentation/storage views.
-- `$000E-$0011` trace: a diagnostic-only address watch recorded physical address, instruction PC,
-  owner, access direction and values, nearby `$0010-$0013`, post-entry frame, master clocks,
-  IRQ/NMI counts, and explicit IRQ/NMI/BRK context. Both BIOS revisions increment `$0011` on every
-  periodic IRQ. Inspection of the locally executed handler shows the four-byte carry loop continuing
-  toward `$000E`; a focused overflow trace observed `$00000394` advance through the
-  `$000003FF->$00000400` boundary. A cartridge-owner-only full sweep found `$0011` accesses in
-  fourteen titles at matching sites under both BIOSes. Reports remain local and contain events, not
-  firmware or cartridge bytes.
-- Inverse low-RAM sweep: clearing `$000-$01F` changed 106 cases; preserving `$000C` reduced that to
-  102, preserving `$0011` alone left 106, and preserving both reduced it to ten. Preserving
-  `$0004-$000A`, `$000C`, and `$000E-$0013` produced zero execution, final-video, or final-VRAM
-  differences across all 116 unattended and 116 broad-input cases. `$000A` was added after the
-  input sweep isolated a two-BIOS Treasure Hunter difference to that byte. This establishes tested
-  sufficiency; the following writer/consumer trace supplied the semantic interpretation.
-- Pre-entry writer and focused consumer traces: a diagnostic watch enabled before `$6020` recorded
-  final BIOS writers for `$004-$00A` and `$012-$013` under both revisions. `$004` is the shift
-  accumulator for the accepted `$47` protection reply; `$005-$009` receive no BIOS writes and retain
-  `$FF` reset fill; `$00A` receives an explicit final `$FF` write. `$012-$013` are repeatedly advanced
-  together by the routine behind service `$F030`; static instruction/transition analysis identifies
-  a nonzero-seeded 16-bit feedback shift register that returns its low byte. Focused cartridge traces
-  linked the preserved fields to Hannibal, Fortune 'n Luck, Myth of Asamia, Treasure Hunter, Hot
-  Hero, and Magic Jigsaw access sites. Used for the named low-RAM contract in
-  `docs/BIOS_BOOT_BEHAVIOR.md`, the `$F030` description in `docs/BIOS_RUNTIME_API_ANALYSIS.md`, and
-  the clean-room initialization conclusions in `docs/BIOS_ENTRY_RAM_ANALYSIS.md`.
-- Semantic low-RAM validation: a diagnostic policy cleared `$000-$01F` and initialized only the
-  named protection, sentinel, callback, IRQ-counter, and LFSR fields. It matched authentic-entry
-  CPU, video, audio, VRAM, mapper, peripheral, controller, and activity observations in all 116
-  unattended and all 116 broad-input 1,000-frame cases. Whole-RAM hashes were excluded because the
-  policy intentionally clears unrelated boot residue. This validates behavioral construction of
-  the common low-RAM contract; it does not establish that authentic counter or random phase must be
-  hardcoded by replacement firmware.
-- Counter/LFSR phase sweep: the same 116-case unattended and broad-input matrices tested counter
-  states `$00000000`, `$0000FFFF`, `$0000FF94`, and `$00000494`, plus nonzero LFSR states `$0001`
-  and `$FFFF`.
-  All cases completed. Low-byte and full-wrap counter changes broadly shifted deterministic timing
-  because the BIOS counter increment takes additional carry branches. `$00000494`, which preserves
-  the low-byte carry schedule and avoids a carry into `$00F` during the window, matched every unattended
-  case; input differed only for Kill Shot. A focused cartridge-owner trace found Kill Shot reading
-  `$010` at PC `$8DCA`. LFSR differences were confined to Hot Hero and Magic Jigsaw without input,
-  and Cosmic Fighter and Magic Jigsaw with input, paired across BIOS revisions. Used to recommend
-  authentic `$00000394/$358A` compatibility phases while distinguishing named state from copied residue.
-  Reports remain local and contain derived observations rather than firmware or cartridge payloads.
-- Used for: `docs/BIOS_REPLACEMENT_ANALYSIS.md`, the detailed block/title matrix in
-  `docs/BIOS_ENTRY_RAM_ANALYSIS.md`, rejection of blanket RAM initialization for BIOS skipping, and
-  prioritization of semantic zero-page and upper-work-buffer analysis. Authentic BIOS execution
-  continues to preserve its produced RAM unchanged.
-- Limitations: an instruction-start PC attributes interrupt-entry stack writes to the interrupted
-  instruction, although subsequent handler accesses are attributed to BIOS code; this does not
-  weaken the read-before-write evidence central to the experiment. A read-modify-write counts its
-  read before its write. Fixed 1,000-frame paths are not exhaustive, and a changed hash/counter does
-  not by itself identify a field's meaning. The findings do not authorize copying invariant
-  firmware-derived RAM bytes into replacement firmware.
+- Local origin and method: the 58-cartridge/two-BIOS, 1,000-frame experiment compared authentic RAM
+  with zero, `$FF`, selected-field, page, block, and byte perturbations, then traced pre-entry writers,
+  post-entry reads/writes, and selected phase changes. Diagnostic-only hooks classify reads before
+  each byte's first write by cartridge, BIOS, or other instruction without recording RAM values.
+  Focused tests cover owner attribution and read/write accounting; production objects remained
+  unchanged. `tools/gamate-ram-perturbation-summary.py` compares aggregate observations while
+  excluding only the expected final-RAM hash change.
+- Result and use: blanket fills and callback/checksum-only initialization fail across the corpus.
+  A semantic low-RAM policy using the protection reply, reset-fill sentinels, callback flag, IRQ counter,
+  and nonzero `$F030` state matched the tested unattended and broad-input matrices. Every case had
+  cartridge reads before first writes; their union covered all 1,024 physical bytes. BIOS reads before
+  first post-entry writes occurred in 110 cases, and broad-input tracking added no addresses to either
+  owner union. The full block, byte, phase, and access results are in
+  [`../../docs/BIOS_ENTRY_RAM_ANALYSIS.md`](../../docs/BIOS_ENTRY_RAM_ANALYSIS.md); replacement
+  implications are summarized in
+  [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md).
+- Limits and legal boundary: the experiments establish tested sufficiency, not exhaustive gameplay
+  coverage or physical RAM behavior. Local BIOS/ROM inputs remained read-only; no memory images,
+  firmware-derived initialization template, or payload data were published.
 
-### Post-entry BIOS runtime API trace
+### Post-entry BIOS runtime API analysis
 
-- Local origin: all 62 user-supplied cartridges were executed under both authentic BIOS revisions
-  for 1,000 post-entry frames without input. The final four catalogue additions were run as an
-  eight-case extension to the established 58-title matrix. The combined TSV reports remain outside
-  the repository and contain derived transition metadata but no ROM or BIOS payload.
-- Method: the independently authored `gamatebioscalls` diagnostic classifies executed control-flow
-  transitions across the cartridge/BIOS boundary. It separates hardware IRQ/NMI entry, direct calls
-  and jumps, callback returns, BIOS callback dispatch, and interrupt/subroutine returns. Mapper bank,
-  count, and first frame are retained. `tools/gamate-bios-call-sweep.sh` runs the full matrix.
-- Result: 124/124 runs completed. Every cartridge directly called the stable 18-slot service table at
-  `$F000-$F033`; no direct target outside it was observed. Per BIOS, 163,208 direct calls arose from
-  1,109 distinct source/bank/target rows. The entire direct-event multiset matched between BIOS
-  revisions. `$F030` and `$F033` first appeared at frame 408, demonstrating that the former 300-frame
-  default was insufficient for this audit. All games received `$6026` IRQ callbacks; no `$6023` NMI
-  callback occurred without link input.
-- Used for: `docs/BIOS_RUNTIME_API_ANALYSIS.md`, the increase of standard sweep defaults to 1,000
-  frames, and the conclusion that replacement firmware must implement the service table in addition
-  to boot and interrupt dispatch.
-- Limitations: this is unattended execution coverage, not complete reachability. Slot semantics,
-  nested-call pairing, register conventions, memory/hardware effects, gameplay-only behavior, and
-  link-driven NMI paths remain to be established. Single executed opcode values are used only for
-  transition classification; no instruction listing or translated firmware code is retained.
-- Follow-up method: the independently authored tracer can optionally pair service-table entries with
-  their observed returns and write a separate local report containing input/output registers, flags,
-  stack state, elapsed clocks, changed-memory counts/address extents, changed AY-register masks, and
-  peripheral diagnostic deltas. It does not retain RAM, VRAM, ROM, or BIOS byte contents. Pairing
-  uses the ordinary JSR return address or the cartridge's pre-existing stack return for the two
-  observed tail-jump forms, while interrupt callbacks may occur inside the measured interval.
-- Used for: the staged probing plan in `docs/BIOS_RUNTIME_API_ANALYSIS.md` and future clustering of
-  behavioral call signatures. Derived clusters remain hypotheses until controlled probes establish
-  helper semantics.
-- Result: the 1,000-frame paired sweep completed 326,334 calls across the 124-case matrix, split
-  evenly at 163,167 per BIOS. Another 41 calls per BIOS were open at the final frame boundary. All
-  cases passed with no unmatched return or pairing-stack overflow. Per-slot counts and the complete
-  cartridge/source/mapper/input-output-register signature multisets matched across BIOS revisions;
-  timing and summarized effects could differ when the 58-master-clock entry-phase offset changed
-  whether an interrupt fell inside a call. `tools/gamate-bios-call-summary.py` reproduces aggregate
-  counts and effect categories from the local derived report.
-- Hardware-state clustering extension: completed-call records now include entry/exit VRAM address,
-  scroll, LCD mode flags, AY address, and mapper banks. These are emulator state observations, not
-  copied firmware or cartridge bytes. The 62-cartridge/two-BIOS/1,000-frame matrix completed
-  124/124 cases. The summary tool reports register and status preservation, input-A timing groups,
-  and frequent hardware-state transitions for a selected slot.
-- `$F030` contract use: 362 paired calls across both BIOSes established exact X/Y/S and I/D/V
-  preservation, N/Z derived from returned A, 174-master-clock uninterrupted timing, and no hardware
-  state effects. Existing RAM transition analysis supplies the `$012-$014` LFSR state/scratch role.
-  A subsequent controlled matrix varied incoming carry and selected nonzero states: returned carry
-  equals the pre-advance state’s bit 15 and does not depend on incoming carry. A zero state took 188
-  rather than 174 master clocks and matched the derived result from `$FFFF`, identifying the repair
-  seed as `$FFFF`. Used for the first resolved service table in
-  `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
-- `$F000` prioritization: sixteen uninterrupted calls each took 3,278 master clocks, issued 64 VRAM
-  writes, ended at VRAM address `$128B`, preserved scroll/AY-selection/mapper state, and returned
-  A/X/Y as `$38/$40/$20`. This evidence is used only to select it as the next narrow probe target;
-  no visual or drawing semantic is assigned yet.
-- Controlled `$F000` method: the independently authored `gamatebiosprobe` boots through an authentic
-  BIOS and cartridge to `$6020`, applies named one-field entry-state perturbations, invokes a public
-  service slot with a synthetic subroutine return, and reports only derived registers, timing,
-  changed-address summaries, hashes, and peripheral counters. The local matrix varied CPU registers
-  and status, VRAM address and fill, LCD flags, scroll, AY selection, mapper state, and RAM `$015`.
-- Controlled `$F000` result: BIT and UMC BIOS revisions agreed exactly. The service takes 3,278 master
-  clocks, writes 64 unique VRAM addresses, ends at `$128B`, returns A/X/Y as `$38/$40/$20`, restores
-  S, and preserves scroll, AY selection, and mapper state. `$015` was the only non-stack inherited RAM
-  location read before write; varying it shows that it is the cached LCD-control input, with row
-  increment forced by the service. All tested other inputs left the final VRAM comparison unchanged.
-  Used for the bounded fixed-bitmap-writer contract in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
-- Controlled `$F000` limitations and legal boundary: the matrix tests selected extremes rather than
-  every possible machine state. It does not identify the displayed image or prove that callers ignore
-  its pixels. No BIOS instructions, bitmap bytes, RAM contents, or VRAM contents are retained or
-  published; hashes are local equality checks. Any replacement artwork must be independently authored,
-  and omission of the drawing requires separate compatibility evidence.
-- Controlled `$F033` method: register/status matrices were run through the independently authored
-  service probe under both BIOS revisions. A debugger inspected only the seven post-return output
-  bytes at `$0A1-$0A7` at the probe's established boundary; no BIOS or cartridge bytes, instruction
-  listing, or source-like firmware reconstruction was retained. Independent inspection of Tornado's
-  cartridge caller establishes that it passes the `$0A1` buffer to `$F012` immediately afterward.
-- Controlled `$F033` result: the service treats A/X/Y as six display-ordered packed-BCD digits,
-  writes a `$06` length followed by six ASCII digit/space bytes, suppresses leading zeroes, and
-  retains one final `0` for an all-zero value. It returns A=`$06`, preserves X/S, returns the first
-  displayed character index in Y, sets carry, derives N/Z from A, and preserves tested I/V states.
-  Timing ranges from 222 to 422 master clocks according to the number of leading spaces. Both BIOS
-  revisions agreed exactly, no inherited non-stack RAM was read, and no peripheral state changed.
-  Used for the resolved `$F033` contract in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
-- Controlled `$F033` limitation: the published contract covers valid packed-BCD inputs with D clear.
-  Nibbles `$A-$F` and D-set entry are not used by the observed cartridge path and change output
-  behavior; both remain deliberately unspecified rather than becoming clean-room requirements.
-- Controlled `$F024` method and result: the independent service probe varied entry registers,
-  status, and selected target RAM bytes under both BIOS revisions. With decimal mode clear, entry
-  A/X/Y and prior target values do not affect the result: the service reads and writes two
-  16-location sequences at `$023+$08n` and `$028+$08n`, leaving all 32 bytes as `$FF`. It takes 824
-  master clocks, returns A/Y=`$80` and X=`$00`, restores S, sets Z/V, clears N/C, preserves I, and has
-  no peripheral effects. Used for the strided-RAM-initializer contract in
-  `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
-- Controlled `$F024` limitation: setting D changes its loop arithmetic. All observed commercial calls
-  use D clear, so D-set behavior is excluded from the clean-room contract. The two strided fields are
-  not assigned a sprite, object, or other semantic name until cartridge-side ownership is established.
-- Controlled `$F00F` method: the independent probe varied registers, status, cached LCD control, and
-  initial VRAM fills under both BIOS revisions. Diagnostic VRAM coverage was extended to report
-  logical plane/address runs, avoiding both pixel contents and the unreadable singleton pattern caused
-  by the emulator's interleaved plane storage.
-- Controlled `$F00F` result: both BIOSes take 15,930 master clocks and write zero to 775 unique plane-0
-  bytes: columns 0-30 across rows 230-254. The service ignores tested A/X/Y, reads only cached LCD
-  control `$015`, returns A/X/Y zero, restores S, leaves the final VRAM address at `$1FFE`, selects
-  plane 0 with row increment forced, and preserves scroll and all other peripheral state. It also
-  leaves fixed scratch values in `$018-$01A/$01C-$01D` and `$0A8`. Used for the plane-0 rectangle-clear
-  contract in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
-- Controlled `$F00F` limitation: the geometry and values are resolved, but the rectangle's software
-  role is not. It is deliberately not called a screen, font, sprite, or workspace clear without
-  cartridge-side evidence.
-- Authentic-call probe extension: `gamatebiosprobe occurrence=N` runs normal cartridge execution to
-  the selected real service-table entry, preserves its caller stack/RAM context, then applies named
-  perturbations and measures the matching return. This independently authored mode was added because
-  `$F018` requires a caller parameter block and does not return from arbitrary boot-entry RAM.
-- Diagnostic ROM-read method: access-only instrumentation compiled under
-  `GAMATE_ACCESS_DIAGNOSTICS` records physical cartridge offsets read by BIOS instructions. It stores
-  no ROM values, is absent from the production library/core, and is reset at the controlled service
-  boundary. A unit test verifies mapper-aware physical offsets, duplicate-read counts, unique coverage,
-  exclusion of cartridge-instruction reads, and the optional address callback. `gamatebiosprobe`
-  enables the callback only with `rom_trace` and prints a bounded, run-compressed temporal sequence.
-- `$F018` result: with IRQs masked, Tornado's first authentic call takes 231,396 master clocks and
-  writes 5,120 bytes across both VRAM planes. Coverage is byte columns 0-19 over rows 0-31 and 56-151.
-  Its authentic inputs produce an `$FF` first region and zero second region. Entry-register changes do
-  not affect the result; RAM `$000-$001` supplies a 77-byte control-stream pointer and `$006-$009`
-  control two eight-byte lookup spans whose perturbation changes the corresponding plane output.
-  The BIOS makes 5,275 cartridge reads from 94 unique offsets. The ordered trace shows two passes over
-  the same control stream, one per plane, with graphics fetched as eight-byte records in 20-record
-  bands. Used for the blitter inference in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
-- `$F018` comparison and limitation: masked first calls from Baseball, Enchanted Bricks, Galaxy
-  Invaders, Mighty Tank, Tornado, and Witty Apee range from 640 to 5,120 VRAM writes and 40,716 to
-  236,184 master clocks, establishing caller-defined size. Their ordered reads consistently interleave
-  a sequential control stream with eight-byte graphics records; complex callers select many
-  such records.
-- `$F018` control-stream perturbation method: the diagnostic probe accepts an in-memory physical-ROM
-  XOR applied only to its private cartridge copy after reaching an authentic call. Single-bit changes
-  were applied to row selectors, tile selectors, run lengths, row terminators, and the stream terminator;
-  results were classified from ordered ROM addresses, VRAM coverage, write counts, timing, and return
-  behavior. The local source bytes and decoded graphics were neither printed by the probe nor retained.
-- `$F018` command result: a row selector chooses an absolute eight-pixel-high VRAM band. It is followed
-  by `(tile_index, run_length)` pairs and an `$FF` row delimiter; `$FE` ends the stream. A nonzero tile
-  selects `plane_base + tile_index * 8`, while tile zero advances horizontally without a ROM lookup or
-  VRAM write. Each record supplies eight vertical bytes and is repeated horizontally by the run length.
-  The stream is replayed using the other plane base. Both BIOS revisions produced the same Tornado ROM
-  access sequence, clocks, VRAM coverage, output hash, and peripheral effects. This establishes a
-  two-plane tile-row blitter, but does not independently establish a more general compression command.
-  No cartridge bytes or decoded payload were retained.
-- `$F018` caller-parameter comparison: low-byte XOR perturbations were run at the first authentic call
-  in all 11 catalog titles observed to reach the service: 4-in-1, Baseball, Devil Castle, Enchanted
-  Bricks, Galaxy Invaders, GP Race, Kung-Fu Fighter, Mighty Tank, Tornado, Vindicators, and Witty Apee.
-  `$000-$001` consistently controls stream parsing; malformed shifts either failed to return, expanded
-  into runaway/misaligned work, or encountered an immediate terminator. `$006-$007` and `$008-$009`
-  independently shifted the corresponding plane's graphics reads and changed output while preserving
-  geometry and write count in every title. Used for the stable caller ABI table in
-  `docs/BIOS_RUNTIME_API_ANALYSIS.md`; no entry RAM or cartridge bytes were retained.
-- `$F018` adjacent-RAM result: full-byte entry perturbations at `$002-$005` left timing, ROM reads,
-  VRAM writes, coverage, and output unchanged in all 11 callers. Access coverage shows `$002-$003`
-  are overwritten by every call, while `$004-$005` are neither read nor written. They are classified
-  as service scratch/output and caller-preserved unused bytes respectively, not required inputs.
-- `$F012` corpus method: the validated 1,000-frame report and adjacent four-title report provide
-  39,034 balanced calls, evenly divided between BIOS revisions. The independently authored
-  `tools/gamate-bios-f012-summary.py` excludes interrupt-spanning summaries, derives tile width from
-  LCD/VRAM write counts, and validates register, status, stack, and unrelated-peripheral invariants.
-  It reports zero mismatches across 36,518 non-interrupted calls without retaining memory or ROM data.
-- `$F012` controlled method: the first authentic Bomb Blaster call was probed under both BIOSes while
-  varying A/X/Y, cached LCD control `$015`, initial VRAM fill, descriptor pointer `$000-$001`, and
-  selected bytes in the probe's private cartridge copy. Address-only ordered ROM tracing distinguished
-  descriptor fetches from selector-controlled lookup sequences. No cartridge values, decoded graphics,
-  BIOS instructions, or memory payload were retained in repository output.
-- `$F012` result: `$000-$001` points to a cartridge descriptor beginning with a horizontal tile count
-  and one selector per column. Each selector produces eight output rows; X/Y choose the destination
-  byte column and starting row, and `$015` supplies cached LCD mode. Writes are unconditional, including
-  all-zero output: VRAM writes equal `8 * width` and LCD writes equal `11 * width`. A/Y return the
-  width, X returns the final selector times eight, S is restored, N clears, Z sets, I/D remain
-  unchanged, and carry/V reflect intermediate arithmetic. Authentic widths are 1-18 tiles. Both BIOS
-  revisions agreed in controlled tests.
-- `$F012` limitation: the exact cycle formula and selector-to-graphics-address transformation remain
-  unresolved. Timing is not affected by graphics or dummy-read contents in the controlled call, so the
-  descriptor and selector path is the timing driver. These are retained as explicit follow-up questions
-  rather than inferred from firmware implementation details.
-- `$F012` mapping study (Mighty Boxer occurrence 1, both BIOS revisions): private-copy
-  `romxor` perturbation of each of the 130 unique cartridge offsets read by the call, recording changed
-  VRAM bytes and cycle deltas; ordered ROM-read and VRAM-write address traces via the probe's
-  `rom_sequence` and `vram_bytes` diagnostics. Method: `tests/gamatebiosprobe.c`, with analysis scripts
-  kept in `/tmp` only. Result: descriptor reads are followed by one contiguous eight-byte graphics run
-  per tile; identical selectors share runs and outputs; per-row output is a consistent single-byte
-  function over the observed graphics values (96 rows, 16 values, no conflicts). Dummy reads in 16-read
-  tiles and at a wrap row produced no VRAM or cycle change. The two BIOS revisions gave identical
-  perturbation maps and cycle deltas. The RAM hash differed between BIOS revisions only because of
-  pre-call stack byte `$1F8`, which the call reads but never writes. Limitation: the mapping table was
-  not reproduced or published, the selector-to-address transform and cycle formula remain open, and
-  the page-crossing interpretation of dummy reads is inferred. Legal boundary: the local BIOS and ROM
-  files were read-only inputs, and no ROM or BIOS bytes, derived tables, or traces were committed.
-- `$F015` corpus method: the validated 1,000-frame report and adjacent four-title report provide
-  41,824 balanced calls, evenly divided between BIOS revisions. The independently authored
-  `tools/gamate-bios-f015-summary.py` excludes interrupt-spanning summaries, derives dimensions from
-  LCD/VRAM write counts, and validates copy shape, timing plus indexed-page penalties, registers,
-  status, stack convention, and unrelated peripherals without retaining memory or firmware bytes.
-- `$F015` controlled method: authentic Baseball and Mighty Boxer calls plus controlled perturbations
-  varied A, X/Y, source pointers `$000-$003`, cached LCD control `$015`, dimensions `$01C/$01D`, and
-  initial VRAM fill. Ordered physical-address tracing retained addresses only; focused RAM watches at
-  `$000-$003/$018-$01F` retained access counts and final scratch values. Both BIOS revisions were
-  compared. No source or firmware payload was retained.
-- `$F015` result: the service copies a column-major rectangle from `$000-$001` to plane 0 and from
-  `$002-$003` to plane 1 at destination `(X >> 3, Y)`. `$01C >> 3` gives byte columns and `$01D` rows;
-  zero counts execute 256 iterations. Entry A is ignored, X is preserved, A returns the last copied
-  byte, Y returns bytes per plane modulo 256, C/N clear, Z sets, and I/D/V remain unchanged. It performs
-  `2 * columns * rows` VRAM writes, `1 + 2 * columns * (2 + rows)` LCD writes, and a baseline
-  `234 + columns * (132 + 76 * rows)` master clocks plus two per indexed source page crossing.
-  All 38,790 non-interrupted corpus calls match; the final extra ROM read is the modeled NMOS `RTS`
-  dummy access. Used for the replacement contract in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
-- `$F02A` controlled method: an authentic Baseball occurrence was captured under both BIOS revisions,
-  followed by private-copy register, RAM-dimension, LCD-state, and VRAM-fill probes. RAM watches
-  isolated `$015/$01C/$01D` reads and `$018-$01A/$0A8` scratch writes. Address-only ROM tracing and
-  VRAM coverage were retained only as aggregate addresses and write counts, not payload.
-- `$F02A` result: the service is a column-major plane-0 rectangle fill. `$01C >> 3` supplies byte
-  columns and `$01D` supplies rows. VRAM writes are `columns * rows`, LCD writes are
-  `1 + columns * (2 + rows)`, and master clocks are `126 + columns * (58 + 18 * rows)`.
-  A and S are preserved; X and Y return zero; C and N clear; Z sets; I/D/V remain unchanged.
-  A 1×1 Baseball call takes 202 clocks and writes one plane-0 byte. Zero 8-bit dimensions execute
-  256 iterations under the controlled 256×256 probe, producing 65,536 VRAM writes.
-- `$F02A` corpus method: `tools/gamate-bios-f02a-summary.py` derives dimensions from LCD/VRAM write
-  counts and validates timing, registers, status, and unrelated AY/bank/UART effects. In the
-  validated report it found zero mismatches across 9,020 non-interrupted calls from 18 titles; 394
-  calls spanning IRQ/NMI were excluded from direct timing comparison. Both BIOS revisions agreed in
-  controlled timing and write coverage. The authentic Baseball perturbation is title-specific; corpus
-  validation independently checks the derived write and timing behavior across those calls.
-- `$F003` source and status: local, read-only authentic BIOS and cartridge inputs observed in the
-  project-authored emulator with `gamatebiosprobe`; this is emulated runtime evidence, not a physical
-  measurement or manufacturer documentation. It was used to define and validate the candidate
-  replacement-service contract; no external emulator implementation or code was consulted or copied.
-- `$F003` method: uninterrupted rows in the validated completed-call corpus were checked for registers,
-  flags, RAM-change addresses, timing, and peripheral effects. Authentic first-call contexts from World
-  Cup Soccer and Dino Bibo were probed under both BIOS revisions with RAM `$00B` set to `$00-$08`;
-  selected larger values through `$FF` were tested in World Cup Soccer under both revisions. A/X/Y/P
-  perturbations were run in both titles under the UMC BIOS. The probe retained only call summaries and
-  focused RAM access counts; no firmware, ROM, or general RAM payload was printed or retained. The
-  local BIOS and cartridge files were read-only research inputs.
-- `$F003` result and limitation: all 60 uninterrupted calls from 18 titles (30 per BIOS revision)
-  take 42 master clocks, clear A, preserve X/Y/S, write only RAM `$00B` to zero, set C/Z, clear N,
-  preserve B/D/I/V, and have no peripheral effects. Controlled values `$00-$07` take 8..1 periodic
-  IRQs before return, `$08` returns immediately, and selected larger values through `$FF` also return
-  on the 42-clock path; both BIOS revisions agree. This is consistent with an eight-event threshold,
-  distinct from `$F006`'s five-event threshold. Wait-path timing and IRQ-callback RAM effects are not
-  specified as service behavior; the callback's counter-update mechanism remains untraced, and values
-  `$18-$7E` were not directly tested. No BIOS or ROM contents, traces, or derived payload data were
-  committed, and no external emulator implementation or code was used.
-- `$F006` method: clean corpus rows were checked for registers, flags, the RAM-change address, timing,
-  and peripheral effects. Authentic Dinosaur Park and Witty Apee calls were tested under both BIOS
-  revisions while varying A, X/Y, status, and RAM `$00B`. Values `$00-$05` and selected values through
-  `$FF` were applied only to the probe's in-memory RAM. IRQ counts and elapsed clocks were retained;
-  no firmware, ROM, or general RAM payload was printed or retained.
-- `$F006` result and limitation: all 192 uninterrupted corpus calls from 15 titles take 42 master
-  clocks, clear A, preserve X/Y/S, write only RAM `$00B` to zero, set C/Z, clear N, and preserve I/D/V.
-  Controlled `$00B=0..5` probes take 5..0 periodic IRQs before returning, while `$00B=5` and selected
-  higher values take the 42-clock ready path. With IRQs masked and `$00B=0`, the probe did not return
-  within its 10-million-instruction bound. The threshold behavior is shared by both BIOS revisions; the
-  IRQ-side mechanism that advances `$00B` was not directly traced and remains an inference. Wait-path
-  timing and callback-attributed state changes are not specified as `$F006` effects.
-- `$F009` source and method: local, read-only authentic BIOS and cartridge inputs were observed with
-  the project-authored emulator and `gamatebiosprobe`; this is emulated runtime evidence, not a physical
-  measurement. The contributor-reported `$F009` wait in PR #1 motivated follow-up, but the controlled
-  probes below are the evidence for the service contract. First-call contexts in Brick Blaster, Dino
-  Bibo, Pipemania, and Legend of Dragon Knight were tested under both BIOS revisions. Dino Bibo was
-  probed with every `$00B` value from `$00-$18`, plus selected larger values; the other three titles
-  received boundary-value probes. Ready-path A/X/Y/P perturbations were tested in Brick Blaster and
-  Dino Bibo. Only timing, register/status summaries, peripheral counters, and focused `$00B` access
-  counts/final value were retained. No BIOS, ROM, or general RAM payload was printed or retained.
-- `$F009` result and limitation: the available completed-call report contains 3,696 calls from 38
-  titles, evenly split between BIOS revisions; 3,680 span IRQ/NMI and 16 uninterrupted calls span six
-  titles. All 16 uninterrupted calls take 42 master clocks, clear A, preserve X/Y/S, change only
-  `$00B`, set C/Z, clear N, preserve B/D/I/V, and have no peripheral effects. Across controlled
-  contexts, each tested `$00-$17` value waits `24 - n` IRQs, where `n` is the numeric value at
-  `$00B`; `$18` returns immediately, and selected larger values through `$FF` also use the ready
-  path. Both BIOS revisions agree. This supports a 24-count threshold, but the callback's
-  intermediate counter-update mechanism remains untraced; IRQ-spanning RAM/peripheral changes and
-  timing are not service effects.
-  Values `$21-$7E` were not directly tested. The contributor's reported Start-tap acceptance results
-  were not independently reproduced; no external emulator implementation or code was consulted or
-  copied.
-- `$F027` cross-title method: first authentic calls in Baseball, Fortune 'n Luck, Nightmare of Santa
-  Claus, and Time Warrior, plus first VRAM-writing calls in Money Maze, Pipemania, Mars Voyage, Witty
-  Apee, Devil Castle, and Kill Shot, were compared under both BIOS revisions. Private-copy XOR/set
-  perturbations targeted RAM `$006/$008` in all ten titles, `$007/$009` in the first four, and
-  `$023/$028/$030` in all ten. The diagnostic probe retained only address-only cartridge-read traces,
-  VRAM coverage, aggregate write counts, clocks, and summarized register/state effects; it did not
-  print or retain cartridge, firmware, or caller-RAM payloads. This covers all ten titles with
-  uninterrupted `$F027` corpus calls, but only one selected productive call context per title.
-- `$F027` result and limitation: low-byte changes at `$006/$008` affect ROM-read addresses in all ten
-  selected contexts, but not with a fixed one-byte-span mapping; the number and relation of affected
-  spans vary by caller. The selected calls range from 32 to 1,488 VRAM writes and 106 to 2,930 LCD
-  writes. RAM `$023/$028/$030` zeroing produces different write-count responses across the ten titles.
-  A/X/Y/S were preserved in all ten selected baseline calls; status behavior varies. Both BIOS
-  revisions agree for every tested title/perturbation pair. The evidence supports caller-dependent
-  blitter behavior, not a title-independent pointer or text-format contract. Exact shared pointer
-  roles, control-field meanings, encoding, stream grammar, and timing remain open. No source,
-  firmware, ROM, or RAM payload was copied or published.
-- `$F02D` corpus method: the validated 1,000-frame completed-call report and the adjacent four-title
-  report were combined for 209,088 balanced calls, evenly divided between BIOS revisions. Calls
-  spanning IRQ/NMI were separated before direct timing analysis. The independently authored
-  `tools/gamate-bios-f02d-summary.py` derives rectangle dimensions from LCD/VRAM write counts and
-  verifies timing, registers, status, and unrelated peripheral effects without retaining memory or
-  firmware bytes.
-- `$F02D` controlled method: authentic caller capture plus synthetic entry-state probes varied A/X/Y,
-  cached LCD control `$015`, horizontal extent `$01C`, vertical count `$01D`, incoming LCD state, and
-  status flags. Diagnostic RAM watches at `$018-$01A/$0A8` retained only access counts and final scratch
-  values. Both authentic BIOS revisions were tested. No BIOS or cartridge payload was retained.
-- `$F02D` result: A is the fill byte, X selects starting byte column `X >> 3`, Y selects starting row,
-  `$01C >> 3` is the byte-column count, and `$01D` is the row count. The column-major service selects
-  plane 1, preserves cached LCD mode bits while forcing row increment, and performs
-  `columns * rows` VRAM writes, `1 + columns * (2 + rows)` LCD writes, and
-  `120 + columns * (58 + 18 * rows)` master clocks. Zero loop counts execute 256 iterations. A/S are
-  preserved; X/Y return zero; C/N clear, Z sets, and I/D/V are preserved. All 207,504 non-interrupted
-  corpus calls match this contract. The single reported cartridge read is the emulated NMOS `RTS`
-  dummy read at the stacked return address, not a firmware data dependency. Used for the replacement
-  contract in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
-- Input-coverage method: `tools/gamate-bios-input-campaign.sh` applies independently authored,
-  deterministic schedules for long Start, Select/Start plus A/B actions, and every individual control
-  plus legal direction/button combinations. `tools/gamate-bios-call-coverage.py` compares derived
-  boundary, call-site, register, and broad effect signatures while excluding frame/time/counter drift;
-  local reports contain filenames and derived metadata but no cartridge or BIOS contents.
-- Input-coverage result: the controller cycle passed all 116 cases and added 979 service call sites,
-  5,817 detailed call-site signatures, and 4,027 normalized ABI signatures over the unattended
-  baseline. Long Start added another 250/5,748/3,042 respectively over that union, and the subsequent
-  menu/action schedule added 37/4,303/2,350. All schedules retained the same 18 service slots and only
-  the `$6026` IRQ callback; ordinary controls cannot test link-driven `$6023` NMI behavior. These
-  results are used to prevent unattended-only traces from being mistaken for a complete BIOS ABI.
+- Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
+  The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
+  input-driven coverage. Local trace reports are not distributed.
+- Method: the independently authored `gamatebioscalls` and `gamatebiosprobe` diagnostics observe
+  executed boundary transitions, pair service calls, and summarize registers, status, timing, memory
+  effects, and peripheral state. Controlled probes use authentic call contexts, named state
+  perturbations, address-only ROM traces, or XOR changes to a private in-memory ROM copy. Diagnostic
+  instrumentation is isolated from production builds; output contains derived metadata, not payloads.
+- Result: all 124 unattended cartridge/BIOS runs completed. Across the corpus, calls targeted the
+  same 18-slot table at `$F000-$F033`; every title used at least one slot, and direct-call event
+  multisets and paired register signatures matched across BIOS revisions. The paired sweep completed
+  326,334 calls, with 82 legitimately open at the observation boundary. Controller campaigns
+  expanded observed call-site and ABI signatures without exposing a new slot; they did not exercise
+  link-driven `$6023` NMI callbacks.
+- Resolved contracts are documented in
+  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md): `$F000`
+  fixed bitmap writer; `$F003`, `$F006`, and `$F009` IRQ waits; `$F00F` plane-0 rectangle clear;
+  `$F012` selector-driven eight-row tile writer; `$F015` two-plane rectangle copy; `$F018` tile-row
+  blitter; `$F024` strided RAM initializer; `$F02A` plane-0 fill; `$F02D` plane-1 fill; `$F030`
+  pseudorandom service; and `$F033` packed-BCD formatter. `$F027` remains caller-dependent, and the
+  remaining observed slots are not assigned semantics without evidence.
+- Used for: the replacement-ABI contracts, the 1,000-frame sweep default, and the conclusion that
+  replacement firmware needs resident service and interrupt code, not just an entry-state jump.
+  The linked analysis owns per-service matrices, exact behavior, and probe-specific caveats.
+- Limits: this is behavioral evidence from the project-authored emulator, not physical measurement.
+  Finite corpus and input schedules do not establish exhaustive reachability; link/NMI paths and some
+  caller-specific or timing details remain open. No external emulator implementation was consulted
+  or copied.
+- Clean-room boundary: BIOS and cartridge files remained read-only. No BIOS/ROM bytes, listings,
+  decoded graphics, RAM/VRAM payloads, or ROM-derived mapping tables were retained or published;
+  only behavioral descriptions and derived addresses, counts, and comparisons were used.
 
 The following user-supplied files were read in place solely for boot validation. They are not copied
 into the repository, build output, tests, or releases.

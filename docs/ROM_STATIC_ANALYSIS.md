@@ -11,32 +11,19 @@ that unused hardware features do not exist.
 
 ## 1. Cartridge format and boot ABI
 
-Initial corpus analysis is recorded in
-[`ROM_HEADER_ANALYSIS.md`](ROM_HEADER_ANALYSIS.md). It establishes the checksum, constant format
-marker, copyright field, and `$6020/$6023/$6026` callback table while retaining the unexplained
-header bytes as unknowns.
+Header and callback findings are recorded in
+[`ROM_HEADER_ANALYSIS.md`](ROM_HEADER_ANALYSIS.md).
 
 Capacity, padding, repeated-bank, and mirroring findings are recorded separately in
 [`ROM_LAYOUT_ANALYSIS.md`](ROM_LAYOUT_ANALYSIS.md).
 
-Currently documented fields include:
-
-- `$6000-$6001`: checksum
-- `$6005-$601D`: `COPYRIGHT BIT CORPORATION`
-- `$6020`: standard cartridge entry point
-- `$7000-$7FFF`: region checked by the BIOS checksum routine
-
-A corpus analysis could determine:
+The remaining header questions are:
 
 - The meaning or consistency of bytes `$6002-$6004` and `$601E-$601F`.
 - Whether fields encode a version, publisher, region, cartridge size, or other metadata.
-- Common entry-point instruction patterns.
 - Differences among Bit Corporation, UMC, and Phinnex releases.
 - Whether later cartridges extend the header.
-- Padding, mirroring, and unused-ROM conventions.
 - Relationships between alternate dumps and software revisions.
-
-This is a strong initial project because the header has an unambiguous position in every dump.
 
 ## 2. Mapper use by commercial software
 
@@ -262,29 +249,14 @@ hardware. Static ROM analysis cannot conclusively establish:
 Those questions still require physical measurements, purpose-built test cartridges, or
 logic-analyzer traces.
 
-## Recommended first corpus report
+## Corpus scope and source handling
 
-The initial corpus scope and exact local hashes are recorded in
-[`ROM_CORPUS.md`](ROM_CORPUS.md).
-
-An initial reproducible analyzer should produce:
-
-1. A header and checksum report.
-2. A reachable mapper-write report.
-3. An LCD-register usage report.
-4. A BIOS-call report.
-5. A reachable-opcode census.
-6. Shared-routine clustering.
-
-The report should distinguish raw byte-pattern candidates from reachable instructions and
-dynamically confirmed behavior. It should record file hashes so results are reproducible without
-redistributing commercial ROM bytes.
-
-## Source handling
+The 62-image inventory and local hashes are recorded in [`ROM_CORPUS.md`](ROM_CORPUS.md). Topic
+reports linked above distinguish static candidates from reachable or dynamically confirmed behavior;
+record new implementation-relevant methods and findings in
+[`../src/gamate/SOURCES.md`](../src/gamate/SOURCES.md).
 
 - The local 62-cartridge collection is user-supplied and must remain read-only. Do not copy ROM
   bytes into the repository, retained traces, reports, tests, or releases.
 - Publish hashes, addresses, decoded metadata, statistics, control-flow findings, and original
   analysis rather than copyrighted game data.
-- Record new findings and methodology in [`../src/gamate/SOURCES.md`](../src/gamate/SOURCES.md) when
-  they influence implementation, tests, or compatibility claims.

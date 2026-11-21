@@ -11,24 +11,13 @@ The sweep captured every combination of 58 locally available cartridges and both
 revisions. Each capture occurred immediately after the BIOS set CPU PC to `$6020` and before the
 cartridge executed its first instruction.
 
-All 116 combinations reached the boundary. The important result is that successful boot produces an
-almost entirely cartridge-independent state:
-
-- Paired UMC/NCR and Bit Corporation captures have byte-identical 1 KiB RAM for every cartridge.
-- All 116 captures have byte-identical 16 KiB VRAM.
-- Within either BIOS set, 1,020 of 1,024 RAM bytes are invariant across all 58 cartridges.
-- The only cartridge-dependent RAM bytes are `$00E0-$00E1` and `$00E5-$00E6`. Both pairs contain the
-  cartridge's stored 16-bit header checksum; this relationship holds for all 58 images.
-- There are consequently 57 distinct RAM images. The 4-in-1 and standalone Cube Up share the sole
-  duplicate because their relevant component/checksum is shared.
-- Mapper type and ROM size vary as expected, but the selected bank and first-bank registers are zero
-  at entry for every image.
-- CPU registers, protection state, LCD configuration, VRAM address/plane, scroll values, UART state,
-  AY registers, interrupt-pending state, and BIOS callback-enable state are invariant across the
-  cartridge set and equal between BIOS revisions.
-
-These are aggregate and semantic findings. The invariant RAM and VRAM contents themselves are kept
-out of the repository because they include firmware-derived working data and startup presentation.
+All 116 combinations reached `$6020`. Paired BIOS captures had identical RAM and VRAM; across
+cartridges, 1,020 RAM bytes were invariant and the two varying 16-bit fields held the stored header
+checksum. Mapper selections were zero at entry, and CPU registers and non-phase hardware
+configuration matched the entry contract; the BIOS timing phase difference is described below. The
+table summarizes the boundary. The detailed RAM sweep and field interpretation are in
+[`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md). Captured state images remain local and
+are not distributed.
 
 ## Common cartridge-entry contract
 
@@ -161,87 +150,17 @@ blocker for clean-room replacement work.
 
 ## Entry-RAM perturbation result
 
-WRAM does not admit the same simple policy as VRAM. A second controlled experiment replaced entry
-RAM at `$6020` while preserving CPU and hardware state. It ran all 58 cartridges under both BIOS
-revisions for 1,000 frames and compared final video, audio, CPU, mapper, peripheral, VRAM, and
-activity state while excluding only the deliberately changed final RAM hash.
-
-| Entry-RAM policy | Cases | Changed executions | Changed final video | Changed final VRAM |
-| --- | ---: | ---: | ---: | ---: |
-| All zeroes | 116 | 106 | 30 | 37 |
-| All `$FF` | 116 | 102 | 32 | 31 |
-| Zeroes plus authentic callback/checksum fields | 116 | 104 | 16 | 23 |
-| `$FF` plus authentic callback/checksum fields | 116 | 102 | 32 | 31 |
-| Zeroes plus callback/checksum fields and authentic stack page | 116 | 104 | 16 | 23 |
-
-The known fields in these rows are `$000C`, `$00E0-$00E1`, and `$00E5-$00E6`. Retaining them is
-clearly insufficient. This does not mean every other authentic byte must be copied; it means the
-replacement still lacks a semantic description of additional BIOS-produced working state.
-
-Clearing one physical 256-byte page at a time localized the dependency:
-
-| Cleared physical RAM page | Changed executions | Changed final video | Changed final VRAM | Affected titles |
-| --- | ---: | ---: | ---: | ---: |
-| `$000-$0FF` | 106 | 24 | 29 | 53 under both BIOSes |
-| `$100-$1FF` (stack page) | 2 | 0 | 0 | Time Warrior under both BIOSes |
-| `$200-$2FF` | 36 | 8 | 12 | 18 under both BIOSes |
-| `$300-$3FF` | 10 | 0 | 0 | 5 under both BIOSes |
-
-The follow-up 64-byte sweep localized these dependencies further. `$000-$03F` accounts for all 106
-zero-page execution differences, while the other zero-page quarters affect smaller title subsets.
-Only `$100-$13F` affected a stack-page case (Time Warrior); `$140-$1FF` had no observed effect.
-Pages 2 and 3 contain multiple title-specific regions. The complete block/title matrix is in
+Entry RAM cannot be replaced with a blanket fill. Zeroing or filling it with `$FF` changed 106 or
+102 of 116 executions; preserving only the callback and checksum fields still changed 104. The
+page, byte, inverse, and phase matrices are in
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md).
 
-A further sixteen-byte sweep split `$000-$03F`, `$0C0-$0FF`, `$200-$23F`, and `$240-$27F`.
-`$000-$00F` affected the same 106 cases as its 64-byte parent, while `$010-$01F` independently
-affected 102. `$0E0-$0FF`, including the inherited checksum copies, and `$270-$27F` produced no
-observed post-entry difference. Each parent's changed cases exactly equaled the union of its chunks.
-
-Byte-level refinement identifies `$000C`, the callback-enable flag, as accounting for the affected
-membership of `$000-$00F`: clearing it changes 106 cases across 53 titles. `$0011`, the low byte of
-the 32-bit periodic-IRQ counter at `$00E-$011`, independently accounts for all 102 cases affected by
-`$010-$01F`.
-Smaller dependencies occur at `$004-$009` and `$012-$013`. Four-byte refinement
-localizes the active `$0C0-$0DF` regions to `$0CC-$0CF`, `$0D0-$0D3`, `$0D8-$0DB`, and
-`$0DC-$0DF`; the intervening groups had no observed effect.
-
-Access tracing identifies `$000E-$0011` as the 32-bit periodic-IRQ counter and finds direct `$0011`
-access in fourteen titles, plus input-driven `$0010` access in Kill Shot. An inverse policy that clears `$000-$01F` while preserving
-`$0004-$000A`, `$000C`, and `$0010-$0013` matches authentic execution, final video, and final VRAM
-in all 116 unattended cases and all 116 broad-input cases. Follow-up last-writer and
-cartridge-consumer traces provide clean-room initialization rules for the formerly opaque regions:
-`$004` is the accepted protection reply, `$005-$009` are `$FF` reset-fill sentinels, `$00A` is an
-explicit `$FF` runtime sentinel, and `$012-$013` are the state of BIOS pseudorandom service `$F030`.
-This makes the tested low-RAM contract behaviorally reproducible without copying a RAM image.
-
-A diagnostic policy then constructed those named fields directly after clearing `$000-$01F`.
-It matched authentic entry in all 116 BIOS/cartridge cases for both unattended and broad-input
-1,000-frame matrices across every compared behavioral observation. Only the deliberately different
-whole-RAM hash remained unequal. The exact `$00000394` counter phase and `$358A` LFSR state were used as
-documented comparison inputs; replacement firmware can derive or deliberately define those phases
-rather than preserve unexplained bytes.
-
-Phase-variation sweeps refine that freedom. Counter values `$00000000`, `$0000FFFF`, and `$0000FF94` shift BIOS
-IRQ-handler timing by changing low- or high-byte carry outcomes, producing broad deterministic
-PC/audio differences and narrower sampled video/VRAM differences without failures. Changing only
-byte `$010` from `$03` to `$04` while retaining `$011=$94` and avoiding a carry into `$00F` was
-identical in every unattended case; automated input differed only in Kill Shot, which directly reads
-`$010`. LFSR seeds `$0001` and `$FFFF` also completed every case but changed only exercised random
-consumers. Accordingly, `$00000394/$358A` are the recommended compatibility phases even though they are
-named ABI state rather than an opaque copied block.
-
-Post-entry access tracking found at least one cartridge read-before-write in every case, and the
-union across the corpus covered all 1,024 physical RAM bytes. BIOS code read inherited bytes before
-their first post-entry write in 110 of 116 cases. Repeating authentic-state tracking with the broad
-automated-input schedule added no new union addresses and all 116 cases completed, although neither
-run proves exhaustive gameplay coverage.
-
-The current supported conclusion is therefore: **preserve authentic WRAM when using an authentic
-BIOS, and do not implement BIOS skipping with a blanket fill.** For the common low-RAM boot contract,
-a clean-room replacement can now initialize named functional fields instead of retaining an opaque
-RAM template. This does not yet make BIOS skipping complete: post-entry service calls, CPU/register
-entry state, peripheral state, and phase policy still require validation.
+That analysis identifies a tested semantic initialization policy: establish `$004=$47`,
+`$005-$00A=$FF`, `$000C=$01`, the periodic-IRQ counter, and a nonzero `$F030` state. Constructing
+those fields after clearing `$000-$01F` matched all 116 cases in both unattended and broad-input
+1,000-frame runs. For authentic-BIOS use, preserve WRAM; for a replacement, initialize named fields
+rather than copy a captured RAM image. This is tested sufficiency, not proof of all later gameplay
+paths or a complete BIOS-free boot contract.
 
 ## What should not be copied
 
