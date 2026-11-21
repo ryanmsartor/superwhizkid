@@ -524,6 +524,36 @@ copy shape, baseline timing, bounded page-cross penalties, registers, status, st
 unrelated hardware effects. It reports zero mismatches across all 38,790 available non-interrupted
 calls.
 
+### Plane-0 rectangle-fill contract: `$F02A`
+
+A controlled Baseball call identifies `$F02A` as a column-major plane-0 rectangle fill with a caller
+supplied byte. RAM `$01C` supplies the horizontal pixel extent and RAM `$01D` supplies the vertical
+row count. The byte-column count is `$01C >> 3`; both BIOS revisions agree on the call.
+
+For `columns = $01C >> 3` and `rows = $01D`, with ordinary nonzero counts:
+
+| Observable | Contract |
+| --- | --- |
+| VRAM writes | `columns * rows`, all in plane 0. |
+| LCD writes | `1 + columns * (2 + rows)`. |
+| Master clocks | `126 + columns * (58 + 18 * rows)`. |
+| Registers | A and S are preserved; X and Y return zero. |
+| Status | C and N clear, Z sets, I and D are preserved, and V is preserved. |
+| Scratch | `$018-$01A` hold service scratch and `$0A8` receives the plane-0 selector. |
+| Other hardware | Scroll, AY, mapper, and UART state are preserved. |
+
+The baseline 1×1 call writes A once at `(X >> 3, Y)` and takes 202 master clocks. Width and height
+perturbations produce the corresponding column-major coverage and the LCD/write/timing equations
+above. As with the 8-bit loops in the neighboring fill services, a derived zero count is interpreted
+through 256 iterations; a 256×256 controlled probe therefore reaches 65,536 writes, but the general
+normal-dimension formula should remain the primary contract.
+
+The validated completed-call corpus contains 9,414 `$F02A` calls, evenly split between BIOS revisions.
+Excluding 394 interrupt-spanning calls leaves 9,020 uninterrupted calls. An added
+`tools/gamate-bios-f02a-summary.py` derives dimensions independently from LCD/VRAM write counts and
+reports zero mismatches for timing, register/status behavior, and unrelated AY/bank/UART activity.
+The only measured ROM read is the stacked cartridge `RTS` dummy address, not a semantic data read.
+
 ### Rectangle-fill contract: `$F02D`
 
 The combined 1,000-frame completed-call corpus contains 209,088 balanced `$F02D` calls split evenly

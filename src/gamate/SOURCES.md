@@ -954,6 +954,21 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   `234 + columns * (132 + 76 * rows)` master clocks plus two per indexed source page crossing.
   All 38,790 non-interrupted corpus calls match; the final extra ROM read is the modeled NMOS `RTS`
   dummy access. Used for the replacement contract in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
+- `$F02A` controlled method: an authentic Baseball occurrence was captured under both BIOS revisions,
+  followed by private-copy register, RAM-dimension, LCD-state, and VRAM-fill probes. RAM watches
+  isolated `$015/$01C/$01D` reads and `$018-$01A/$0A8` scratch writes. Address-only ROM tracing and
+  VRAM coverage were retained only as aggregate addresses and write counts, not payload.
+- `$F02A` result: the service is a column-major plane-0 rectangle fill. `$01C >> 3` supplies byte
+  columns and `$01D` supplies rows. VRAM writes are `columns * rows`, LCD writes are
+  `1 + columns * (2 + rows)`, and master clocks are `126 + columns * (58 + 18 * rows)`.
+  A and S are preserved; X and Y return zero; C and N clear; Z sets; I/D/V remain unchanged.
+  A 1×1 Baseball call takes 202 clocks and writes one plane-0 byte. Zero 8-bit dimensions execute
+  256 iterations under the controlled 256×256 probe, producing 65,536 VRAM writes.
+- `$F02A` corpus method: `tools/gamate-bios-f02a-summary.py` derives dimensions from LCD/VRAM write
+  counts and validates timing, registers, status, and unrelated AY/bank/UART effects. In the
+  validated report it found zero mismatches across 9,020 non-interrupted calls; 394 calls spanning
+  IRQ/NMI were excluded from direct timing comparison. Both BIOS revisions agreed in controlled
+  timing and write coverage.
 - `$F02D` corpus method: the validated 1,000-frame completed-call report and the adjacent four-title
   report were combined for 209,088 balanced calls, evenly divided between BIOS revisions. Calls
   spanning IRQ/NMI were separated before direct timing analysis. The independently authored
