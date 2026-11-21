@@ -16,6 +16,7 @@ static char systemDirectory[] = "/tmp/superwhizkid-coretest-XXXXXX";
 static unsigned activeButton = ~0u, polls, videoFrames, audioBatches;
 static int16_t activeAnalogX, activeAnalogY;
 static bool videoVaries, audioActive, audioChannelsDiffer, lastAudioChannelsEqual;
+static bool sawAccurateBackground;
 static int16_t lastAudio[2048 * 2];
 static size_t lastAudioFrames;
 static const char* paletteOption = "original";
@@ -213,6 +214,7 @@ static void video(const void* data, unsigned width, unsigned height, size_t pitc
 		const uint16_t* row = (const uint16_t*) ((const uint8_t*) data + y * pitch);
 		for (unsigned x = 0; x < width; x++) videoVaries |= row[x] != first[0];
 		for (unsigned x = 0; x < width; x++) {
+			sawAccurateBackground |= row[x] == 0x8C6A;
 			if (reportVideoHash) {
 				videoHash = (videoHash ^ (uint8_t) row[x]) * 16777619U;
 				videoHash = (videoHash ^ (row[x] >> 8)) * 16777619U;
@@ -530,9 +532,10 @@ int main(int argc, char** argv) {
 	p_retro_run();
 	assert(!lastAudioChannelsEqual);
 	paletteOption = "accurate";
+	sawAccurateBackground = false;
 	optionUpdate = true;
 	p_retro_run();
-	assert(firstVideoPixel == 0x6348);
+	assert(firstVideoPixel == 0x6348 && sawAccurateBackground);
 	paletteOption = "greyscale";
 	optionUpdate = true;
 	p_retro_run();

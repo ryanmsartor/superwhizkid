@@ -30,7 +30,7 @@ static const uint16_t* selectedPalette;
 static uint16_t contrastPalette[4];
 static const uint16_t* activePalette = contrastPalette;
 static const uint16_t originalPalette[4] = { 0xCE93, 0x8CEB, 0x5327, 0x1102 };
-static const uint16_t gamateLcdPalette[4] = { 0x8C69, 0x6348, 0x3208, 0x1906 };
+static const uint16_t gamateLcdPalette[4] = { 0x8C6A, 0x6348, 0x3208, 0x1906 };
 static const uint16_t greyscalePalette[4] = { 0xFFFF, 0xAD55, 0x52AA, 0x0000 };
 static const uint16_t maximumContrastInk[3] = { 0x0040, 0x0848, 0x0000 };
 static unsigned selectedPaletteIndex;

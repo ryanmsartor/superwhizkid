@@ -104,13 +104,17 @@ hardware measurements take precedence where they conflict with an emulator.
   gameplay images only to check shade ordering and contrast. It is a visual estimate, not calibrated
   colorimetry: camera white balance, exposure, ambient light, contrast-wheel position, aging, and the
   two reported Gamate panel types all prevent a single photograph-derived palette from being exact.
+- Local visual feedback: the user requested a murkier transparent/background shade because the
+  existing Gamate LCD palette appeared too yellow. This is a subjective presentation preference, not
+  a new hardware measurement.
 - Implementation impact: the libretro frontend offers `Original`, `Gamate LCD`, and `Greyscale`.
   `Original` preserves the core's initial uncited visual approximation exactly. `Gamate LCD` uses
-  RGB565 `8C69/6348/3208/1906`; its background is a darker, more yellow-olive panel tone, while
-  progressively driven shades shift toward a slightly lighter navy ink. The adjustment remains a
-  visual interpretation of the same uncalibrated hardware references rather than a new measurement;
-  the legacy internal option value remains `accurate` so existing frontend configurations continue
-  to work. `Greyscale` uses neutral 255/170/85/0 levels. Palette selection only
+  RGB565 `8C6A/6348/3208/1906`; its background is a darker, more yellow-olive panel tone, while
+  progressively driven shades shift toward a slightly lighter navy ink. The background's blue
+  channel was raised by one RGB565 step in response to the visual feedback above. This remains a
+  visual interpretation of the same uncalibrated hardware references, not a new measurement; the
+  legacy internal option value remains `accurate` so existing frontend configurations continue to
+  work. `Greyscale` uses neutral 255/170/85/0 levels. Palette selection only
   maps completed two-bit pixels to output colors and does not change emulated LCD state or timing.
 
 ### Contrast presentation control
