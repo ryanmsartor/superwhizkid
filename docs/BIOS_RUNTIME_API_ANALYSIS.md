@@ -449,6 +449,46 @@ Controlled whole-RAM hashes differed between BIOS revisions in the four probed t
 matching access maps and measured operation fields; the cause is unresolved. These are emulator
 observations, not physical-hardware measurements.
 
+### ROM-backed single-plane graphics service: `$F021`
+
+The 1,000-frame inventory records 46 `$F021` calls per BIOS across 14 titles. The paired
+balanced-call corpus contains 92 calls. Every call returns A=`$FE`, X=`$00`, and preserves S; Y
+varies. Sixty-six calls span an IRQ, so corpus timing and memory-effect summaries include callback
+work. The paired reports match in every field except `ram_changed` for one IRQ-spanning Volcano
+Panic call from `$AF24` at frame 350 (12 versus 13 changed bytes). Because that call spans an IRQ,
+the extra RAM change cannot be attributed to `$F021`.
+
+Controlled first-call probes in Volcano Panic and Famous 7 set I and were run under both BIOS
+revisions. They produce plane-0 VRAM writes only, with no AY, mapper, UART, IRQ, or NMI effects.
+Volcano Panic takes 25,174 clocks and issues 933 VRAM writes, covering 800 unique bytes in
+`$1CC0-$1FDF`; Famous 7 takes 19,882 clocks and issues 860 writes over the same 800-byte coverage.
+Their LCD-write counts are 998 and 919, respectively, and their returned Y values are `$93` and
+`$44`. The ROM-address traces contain 176 reads in Volcano Panic and 70 in Famous 7. The access maps
+and all other reported summaries match between BIOS revisions in these probes, but whole-RAM hashes
+differ; the cause is unresolved. These per-title times are examples, not a timing formula.
+
+In the Volcano Panic context, `$000-$001` are read and preserved. Bit-0 XOR perturbations change
+the ROM-read and output profiles: XORing `$000` changes Y from `$93` to `$94`, changes the ROM-read
+count from 176 to 177, and changes the write profile from 933 writes over 800 addresses to 934 over
+820 addresses. XORing `$001` produces 567 ROM reads (539 unique offsets), 1,189 VRAM writes over
+800 addresses, and 42,348 clocks. This pair is caller-supplied control or source data; its exact
+format and address transformation remain unknown. Changing entry A, X, or Y does not change the
+tested output or ROM-read profile. Changing the entry VRAM pointer to `$0000` or `$1FFF` also leaves
+the output unchanged in this context. Scroll values are preserved.
+
+RAM `$015` is read and preserved, and its value affects LCD flags. In Volcano Panic, tested values
+`$01`, `$10`, `$20`, and `$80` produce output flags `$20`, `$08`, `$04`, and `$10`; `$02`, `$04`,
+and `$08` produce `$00`, while `$3F` produces `$2C`. Setting bit 6 selects a distinct sparse
+addressing pattern: in both Volcano Panic and Famous 7, plane-0 writes cover 56 addresses in
+`$0000-$03A0` and `$1CC0-$1FE0` at `$20` intervals, and the final LCD flags are `$02`. The final
+VRAM pointer is `$0140` in Volcano Panic and `$01A0` in Famous 7, so this mode's full meaning is not
+established.
+
+These are emulator observations from controlled, authentic call contexts, not physical-hardware
+measurements. The service's source-data grammar, selector-to-ROM-address mapping, return-Y rule,
+status-flag contract, and exact timing remain unresolved. ROM traces retained addresses only;
+graphics values and BIOS/ROM payloads were not retained.
+
 ### Fixed-height tile-run contract: `$F012`
 
 The combined completed-call corpus contains 39,034 balanced `$F012` calls, evenly split between BIOS

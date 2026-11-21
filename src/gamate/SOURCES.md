@@ -672,10 +672,11 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   fixed bitmap writer; `$F003`, `$F006`, and `$F009` IRQ waits; `$F00C` two-plane VRAM zero-writer
   with an LCD-control input; `$F00F` plane-0 rectangle clear; `$F012` selector-driven eight-row tile
   writer; `$F015` two-plane rectangle copy; `$F018` tile-row blitter; `$F024` strided RAM
-  initializer; `$F01E` partially bounded two-plane graphics service; `$F02A` plane-0 fill; `$F02D`
-  plane-1 fill; `$F030` pseudorandom service; and `$F033` packed-BCD formatter. `$F027` remains
-  caller-dependent; `$F00C`'s bit-6 addressing mode and `$F01E`'s stream format remain unresolved;
-  `$F01B` and `$F021` remain unassigned.
+  initializer; `$F01E` partially bounded two-plane graphics service; `$F021` partially bounded
+  ROM-backed plane-0 graphics service; `$F02A` plane-0 fill; `$F02D` plane-1 fill; `$F030`
+  pseudorandom service; and `$F033` packed-BCD formatter. `$F027` remains caller-dependent;
+  `$F00C`'s bit-6 addressing mode, `$F01E`'s stream format, and `$F021`'s source-data format remain
+  unresolved; `$F01B` remains unassigned.
 - Used for: the replacement-ABI contracts, the 1,000-frame sweep default, and the conclusion that
   replacement firmware needs resident service and interrupt code, not just an entry-state jump.
   The linked analysis owns per-service matrices, exact behavior, and probe-specific caveats.
@@ -709,6 +710,21 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   `$006-$007` and `$008-$009` feed separate plane outputs, and `$015` affects LCD flags. VRAM output
   was streamed to per-plane hashes without retaining payload. The stream grammar, return-Y rule,
   status behavior, and BIOS-specific whole-RAM hash differences remain unresolved. Exact results
+  and limits are in
+  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+- `$F021` follow-up: the paired balanced-call corpus contains 92 calls, 46 per BIOS across 14
+  titles; 66 calls span IRQs. Every call returns A=`$FE`, X=`$00`, and preserves S, while Y varies.
+  Paired summaries match except for one IRQ-spanning Volcano Panic call from `$AF24` at frame 350,
+  whose changed-RAM count is 12 versus 13; the difference is not attributed to the service.
+  First-call probes in Volcano Panic and Famous 7 were isolated with I set and compared under both
+  BIOSes. Entry registers, VRAM pointers, and scroll values were perturbed; `$000-$001` received
+  bitwise XOR perturbations; `$015` was tested with controlled values. Address-only ROM traces and
+  derived VRAM/LCD write summaries were compared without retaining payload. The probes write plane
+  0 only, preserve `$000-$001` and `$015`, and show that the former affects ROM-read/output behavior
+  while the latter affects LCD flags and selects a sparse addressing mode when bit 6 is set. The
+  `$000-$001` format, ROM address transformation, selector mapping, return-Y rule, status contract,
+  and exact timing remain unresolved. The direct probes' access maps and reported summaries match
+  across BIOSes, but their whole-RAM hashes differ for unresolved reasons. Methods, measurements,
   and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - Clean-room boundary: BIOS and cartridge files remained read-only. No BIOS/ROM bytes, listings,
