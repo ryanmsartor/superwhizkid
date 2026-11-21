@@ -47,3 +47,12 @@ documented sources, not copied as implementation text.
 The project is licensed under the GNU General Public License, version 2 or (at your option) any
 later version. See [`LICENSE`](LICENSE). Included third-party interface material retains its own
 copyright notice.
+
+
+## Support the author
+
+The superwhizkid project is, and will remain indefinitely, free and open source. 
+
+That said, if you like my work and would like to support it, donations are welcome. 
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H7BO8ZE)
