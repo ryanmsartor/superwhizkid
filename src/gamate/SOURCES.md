@@ -902,6 +902,26 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   VRAM writes, coverage, and output unchanged in all 11 callers. Access coverage shows `$002-$003`
   are overwritten by every call, while `$004-$005` are neither read nor written. They are classified
   as service scratch/output and caller-preserved unused bytes respectively, not required inputs.
+- `$F012` corpus method: the validated 1,000-frame report and adjacent four-title report provide
+  39,034 balanced calls, evenly divided between BIOS revisions. The independently authored
+  `tools/gamate-bios-f012-summary.py` excludes interrupt-spanning summaries, derives tile width from
+  LCD/VRAM write counts, and validates register, status, stack, and unrelated-peripheral invariants.
+  It reports zero mismatches across 36,518 non-interrupted calls without retaining memory or ROM data.
+- `$F012` controlled method: the first authentic Bomb Blaster call was probed under both BIOSes while
+  varying A/X/Y, cached LCD control `$015`, initial VRAM fill, descriptor pointer `$000-$001`, and
+  selected bytes in the probe's private cartridge copy. Address-only ordered ROM tracing distinguished
+  descriptor fetches from selector-controlled lookup sequences. No cartridge values, decoded graphics,
+  BIOS instructions, or memory payload were retained in repository output.
+- `$F012` result: `$000-$001` points to a cartridge descriptor beginning with a horizontal tile count
+  and one selector per column. Each selector produces eight output rows; X/Y choose the destination
+  byte column and starting row, and `$015` supplies cached LCD mode. Writes are unconditional, including
+  all-zero output: VRAM writes equal `8 * width` and LCD writes equal `11 * width`. A/Y return the
+  width, X returns the final selector times eight, S is restored, N clears, Z sets, I/D remain
+  unchanged, and carry/V reflect intermediate arithmetic. Authentic widths are 1-18 tiles. Both BIOS
+  revisions agreed in controlled tests.
+- `$F012` limitation: the exact cycle formula and selector-to-graphics-address transformation remain
+  unresolved. Timing is measurably affected by the lookup path. These are retained as explicit
+  follow-up questions rather than inferred from firmware implementation details.
 - `$F015` corpus method: the validated 1,000-frame report and adjacent four-title report provide
   41,824 balanced calls, evenly divided between BIOS revisions. The independently authored
   `tools/gamate-bios-f015-summary.py` excludes interrupt-spanning summaries, derives dimensions from

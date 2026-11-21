@@ -410,6 +410,50 @@ and runs, sum horizontal spans, identify repeated stream/base triples, and flag 
 selectors. That can distinguish the ordinary contract from caller-specific edge cases before a
 clean-room replacement is designed.
 
+### Fixed-height tile-run contract: `$F012`
+
+The combined completed-call corpus contains 39,034 balanced `$F012` calls, evenly split between BIOS
+revisions. Of those, 36,518 do not span an IRQ or NMI. Every non-interrupted call fits the same
+register and write-shape contract; interrupt-spanning calls are excluded because their summaries mix
+callback work into the service effects.
+
+Controlled authentic-call probes identify a compact descriptor stream in cartridge ROM. RAM
+`$000-$001` points to its first byte, the number of horizontal tiles. One tile selector follows for
+each column. Every selector produces eight row bytes at `(X >> 3, Y)` through
+`(X >> 3, Y + 7)`, after which the service advances one byte column. The starting X and Y registers
+therefore specify pixel coordinates, while entry A is ignored. The cached LCD-control byte at `$015`
+supplies the selected plane and other retained mode bits.
+
+Every tile unconditionally overwrites eight complete destination bytes. A controlled selector whose
+output was all zero still issued eight VRAM writes: an initially zero destination showed no changed
+bytes, while `$FF` and `$5A` fills were replaced. There is no transparent-row path.
+
+| Observable | Contract |
+| --- | --- |
+| Descriptor | One width byte followed by `width` tile selectors. |
+| Graphics lookup | Each selector deterministically chooses the eight output row bytes; the exact cartridge address transformation remains unresolved. |
+| VRAM writes | `8 * width`. |
+| LCD writes | `11 * width`. |
+| Registers | A and Y return the tile width; X returns the final selector multiplied by eight; S is restored. |
+| Status | N clears and Z sets; I and D are preserved. Carry and V depend on intermediate address arithmetic. |
+| Scratch | `$018-$01B` are service scratch. |
+| Other hardware | Scroll, AY, mapper, and UART state are preserved. |
+
+Width perturbation expands both the selector stream and destination coverage exactly one column at a
+time. Selector perturbation changes only the corresponding eight-byte graphics lookup and output.
+X perturbation moves the byte column at each eight-pixel boundary, Y perturbation moves the first row,
+and A perturbation has no effect. Both BIOS revisions produced identical ordered ROM coverage,
+timing, VRAM coverage, output, registers, and LCD activity in the controlled comparison.
+
+Observed authentic widths range from 1 through 18 tiles. Timing varies within a width according to
+the selector-controlled lookup path. An exact timing formula and the selector-to-graphics-address
+transformation remain open; neither is needed to validate the resolved drawing and calling convention
+above.
+
+`tools/gamate-bios-f012-summary.py` derives width from LCD/VRAM write counts and validates the write
+shape, return registers, status invariants, stack balance, and unrelated hardware effects. It reports
+zero mismatches across all 36,518 available non-interrupted calls.
+
 ### Two-plane bitmap-copy contract: `$F015`
 
 The combined completed-call corpus contains 41,824 balanced `$F015` calls, evenly split between BIOS
