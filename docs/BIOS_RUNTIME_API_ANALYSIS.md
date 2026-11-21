@@ -412,15 +412,16 @@ clean-room replacement is designed.
 
 ### ROM-driven plane-0 graphics writer: `$F01B`
 
-The 1,000-frame inventory records 18 `$F01B` calls per BIOS across 13 titles. The paired
-balanced-call corpus contains 34 calls, 17 per BIOS across 12 titles; 32 calls span IRQs. Every
-paired report field matches across revisions. All 34 calls return A=`$FE`, X=`$00`, and preserve S;
-Y varies. The IRQ-spanning corpus is useful for the register signature, but its timing and memory
-summaries include callback work.
+The no-input 1,000-frame inventory records 18 `$F01B` entries per BIOS across 12 titles. The
+paired balanced-call corpus contains 34 calls, 17 per BIOS across 12 titles; 32 calls span IRQs.
+Every paired report field matches across revisions. All 34 calls return A=`$FE`, X=`$00`, and
+preserve S; Y varies. The IRQ-spanning corpus is useful for the register signature, but its timing
+and memory summaries include callback work.
 
 IRQ-masked first-call probes in Baseball, Brick Blaster, Magic Jigsaw, and Witty Apee, plus later
 calls in Devil Castle and Witty Apee, were compared under both BIOS revisions. Each tested call
-writes only plane 0 and covers exactly 800 unique addresses, `$1CC0-$1FDF`. The calls issue
+writes only plane 0. Those tested contexts cover 800 unique addresses, `$1CC0-$1FDF`; the later
+all-title matrix below identifies a Cosmic Fighter exception. The calls issue
 1,020-1,600 VRAM writes and take 27,134-57,484 clocks across these contexts; the range includes
 repeated writes to the same addresses and does not define a timing formula. The first-call probes
 had no AY, mapper, UART, IRQ, or NMI effects. In Baseball, changing entry A, X, or Y individually,
@@ -449,11 +450,12 @@ control structure.
 | `$3F` | `$2C` | `$1CC0-$1FDF` |
 
 With `$015=$40`, the final VRAM pointer is `$0220` in Baseball and `$0160` in Brick Blaster.
-The addressing-mode meaning is not established. Devil Castle is the only title in the completed
-call corpus observed using both `$F01B` and `$F021`. I-masked probes show that each writes the same
-800-byte plane-0 region, while their ROM read ranges, write counts, and timings differ. Separate
-control tests show that both are affected by `$015`; these common behaviors do not establish an
-alias.
+Cosmic Fighter's corresponding first call ends at `$0260`; the final pointer is therefore
+caller-context-dependent. The addressing-mode meaning is not established. Devil Castle is the only
+title in the completed call corpus observed using both `$F01B` and `$F021`. I-masked probes show
+that each writes the same 800-byte plane-0 region, while their ROM read ranges, write counts, and
+timings differ. Separate control tests show that both are affected by `$015`; these common behaviors
+do not establish an alias.
 
 #### Exhaustive `$015` mapping in Baseball
 
@@ -474,19 +476,48 @@ coverage, and final pointer for every value.
 
 The direct cross-BIOS comparison does not use whole-RAM hashes: the unperturbed Baseball probes
 have different whole-RAM hashes, and their cause was not localized. This exhaustive mapping is
-specific to Baseball's first authentic call; it does not establish that every caller uses `$015`
-identically or explain the physical meaning of the sparse mode.
+specific to Baseball's first authentic call. It does not by itself establish the mapping across
+other callers or explain the physical meaning of the sparse mode.
+
+#### Cross-title `$015` control-byte contract
+
+The four 1,000-frame campaigns (no input, long Start, menu actions, and controller cycle) cover the
+62-title cartridge corpus under both BIOS revisions. `$F01B` was observed in 22 titles. For each,
+one first authentic call context was selected from the baseline or input campaigns and probed with
+I set for all 256 `$015` values under both BIOSes: 11,264 probes total. No probe failed to return.
+Within each title and addressing mode, the checked return/status, timing, write counts, VRAM hashes
+and geometry, and ROM-read coverage stayed constant across the byte sweep. Paired BIOS outputs
+agreed, excluding whole-RAM hashes.
+
+The same flag formula holds in all 22 title contexts:
+
+`out_lcd = (bit 0 ? $20 : 0) | (bit 4 ? $08 : 0) | (bit 5 ? $04 : 0) | (bit 6 ? $02 : 0) | (bit 7 ? $10 : 0)`.
+
+Bits 1-3 have no effect on the checked return, timing, ROM-read, or VRAM results. Bits 0, 4, 5,
+and 7 change only the final LCD flags. Bit 6 additionally selects the same 56 plane-0 addresses in
+every tested title: `$0000-$03A0` and `$1CC0-$1FE0` at `$20` intervals. Within each addressing
+mode, the remaining checked outputs, including VRAM hash and geometry, were invariant across all
+256 input values.
+
+Ordinary-mode geometry is not universal: 21 title contexts cover `$1CC0-$1FDF` (800 addresses),
+while Cosmic Fighter covers `$1CC0-$1FF3` (820 addresses). Thus the `$015` flag/mode mapping is
+cross-title, but it does not imply a fixed output extent, final VRAM pointer, timing, or ROM-data
+format. The matrix covers the first authentic call per title, not every later invocation. No
+`$F01B` calls were observed in the other 40 titles during these fixed input windows; that is not
+proof that those games can never call the service. In Cosmic Fighter, the ordinary-mode call takes
+42,708 master clocks and issues 1,060 VRAM writes and 1,137 LCD writes; bit-6 mode preserves those
+counts and timing while selecting the common 56-address sparse coverage.
 
 Controlled status tests in Witty Apee and all 34 completed-call summaries follow
 `P_out = (P_in & $0C) | $23`: N and V clear, Z and C set, and I and D preserved. This describes
 observed calls, not the physical significance of the CPU's unused status bits. The exact
 `$000-$001` format, ROM-source mapping, return-Y rule, and data-dependent timing remain unresolved.
 ROM traces retained addresses only; no BIOS/ROM or VRAM payload was retained. These are emulator
-observations, not physical-hardware measurements. The complete `$015` value-to-flags and
-addressing-mode mapping is established only for the controlled Baseball call described above.
-Selected single-byte XORs in a private ROM copy produced a mixture of no output change, localized
-and broad output changes, and expanded work; they did not resolve a source-data format. No ROM
-bytes or graphics payload were retained.
+observations, not physical-hardware measurements. The `$015` mapping is established across the
+22 observed title contexts above; `$000-$001` format, ROM-source mapping, return-Y rule, and
+data-dependent timing remain unresolved. Selected single-byte XORs in a private ROM copy produced
+a mixture of no output change, localized and broad output changes, and expanded work; they did not
+resolve a source-data format. No ROM bytes or graphics payload were retained.
 
 ### Caller-supplied two-plane graphics service: `$F01E`
 

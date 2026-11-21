@@ -2,6 +2,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 #include "gamate/gamate.h"
+#include "gamatebiosinput.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -308,9 +309,17 @@ int main(int argc, char** argv) {
 		gamateFree(&g);
 		return 1;
 	}
+	unsigned frame = 1;
+	const char* press = getenv("GAMATEBIOSCALLS_PRESS");
+	g.frameDone = false;
+	g.buttons = gamateBiosButtonsForFrame(frame, press);
 	if (occurrence) {
 		unsigned long seen = 0;
 		for (uint64_t instruction = 0; instruction < 100000000; instruction++) {
+			if (g.frameDone) {
+				g.frameDone = false;
+				g.buttons = gamateBiosButtonsForFrame(++frame, press);
+			}
 			unsigned cycles = gamateCpuStep(&g);
 			gamateRunClocks(&g, cycles * 2);
 			if (g.cpu.pc == service && ++seen == occurrence) break;

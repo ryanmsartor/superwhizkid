@@ -2,6 +2,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
 #include "gamate/gamate.h"
+#include "gamatebiosinput.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -213,24 +214,6 @@ static bool addEvent(struct Event* events, size_t* eventCount, const char* direc
 	return true;
 }
 
-// GAMATEBIOSCALLS_PRESS="frame:mask:frames,..." uses active-high diagnostic masks; the emulated
-// controller remains active low. Frame numbers are relative to cartridge entry.
-static uint8_t buttonsForFrame(unsigned frame) {
-	uint8_t buttons = 0xFF;
-	const char* press = getenv("GAMATEBIOSCALLS_PRESS");
-	while (press && *press) {
-		char* end;
-		unsigned from = (unsigned) strtoul(press, &end, 0);
-		if (*end++ != ':') break;
-		unsigned mask = (unsigned) strtoul(end, &end, 0);
-		if (*end++ != ':') break;
-		unsigned count = (unsigned) strtoul(end, &end, 0);
-		if (frame >= from && frame < from + count) buttons &= (uint8_t) ~(mask & 0xFF);
-		press = *end == ',' ? end + 1 : NULL;
-	}
-	return buttons;
-}
-
 int main(int argc, char** argv) {
 	if (argc < 3 || argc > 5) {
 		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin [frames-after-entry] "
@@ -302,7 +285,7 @@ int main(int argc, char** argv) {
 	size_t callDepth = 0;
 	uint64_t completedCalls = 0, unpairedReturns = 0, callStackOverflow = 0;
 	for (unsigned frame = 1; frame <= frames; frame++) {
-		g.buttons = buttonsForFrame(frame);
+		g.buttons = gamateBiosButtonsForFrame(frame, getenv("GAMATEBIOSCALLS_PRESS"));
 		g.frameDone = false;
 		while (!g.frameDone) {
 			uint16_t source = g.cpu.pc;

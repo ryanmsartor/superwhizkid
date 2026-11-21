@@ -710,30 +710,36 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   and its behavior across every caller context remain open. The probe retained only derived
   results, not VRAM or ROM payload. Exact scopes and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
-- `$F01B` follow-up: the 1,000-frame inventory records 18 calls per BIOS across 13 titles; the
-  paired balanced-call corpus contains 34 calls, 17 per BIOS across 12 titles, with 32 calls
-  spanning IRQs. Every pair of report rows matches across BIOS revisions; all calls return A=`$FE`,
-  X=`$00`, and preserve S. I-masked probes in Baseball, Brick Blaster, Magic Jigsaw, Witty Apee,
-  and later Devil Castle/Witty Apee calls covered input-register, RAM, `$015`, VRAM-pointer, LCD,
-  and scroll perturbations. Tested ordinary-mode calls write plane 0 at `$1CC0-$1FDF`; controlled
-  `$015` values affect LCD flags, and bit 6 selects the same 56-address sparse pattern in Baseball
-  and Brick Blaster under both BIOSes. The observed status relation is
-  `P_out = (P_in & $0C) | $23`; `$000-$001` format, ROM-source mapping, return-Y rule, and timing
-  model remain unresolved. ROM traces retained addresses only; no values or payload were retained.
-  A 256-value `$015` matrix at Baseball's first authentic call, run under both BIOSes with I set,
-  completed 512 probes with zero mismatches. It established the mapping
-  `(bit 0->$20, bit 4->$08, bit 5->$04, bit 6->$02, bit 7->$10)` to final LCD flags; bits 1-3
-  had no effect on the checked register, timing, read-map, or VRAM outputs. Only bit 6 changed
-  VRAM coverage and final pointer, selecting 56 `$20`-spaced addresses instead of the ordinary
-  800-byte span. VRAM output hashes were stable within each addressing mode; timing, write counts,
-  and the ROM read map were constant across the matrix. Selected single-byte XORs in a private
-  copy of the ROM under the Bit BIOS yielded no
-  output change at some tested offsets and localized or broad changes at others, sometimes with
-  expanded writes and timing. This did not resolve the source format; no source or graphics bytes
-  were retained. The unperturbed direct probes had differing whole-RAM hashes between BIOS
-  revisions; their cause was not investigated and those hashes were excluded from the cross-BIOS
-  contract comparison. These are local emulator experiments, not physical measurements, and the
-  complete `$015` map applies only to this call context. The detailed result and limits are in
+- `$F01B` follow-up: the no-input 1,000-frame inventory records 18 entries per BIOS across 12
+  titles. The paired balanced-call corpus contains 34 calls, 17 per BIOS across 12 titles, with 32
+  calls spanning IRQs. Every paired report row matches across BIOS revisions; all calls return
+  A=`$FE`, X=`$00`, and preserve S. I-masked probes in Baseball, Brick Blaster, Magic Jigsaw,
+  Witty Apee, and later Devil Castle/Witty Apee calls covered input-register, RAM, `$015`,
+  VRAM-pointer, LCD, and scroll perturbations. The ordinary-mode coverage was `$1CC0-$1FDF` in
+  those contexts, but a broader matrix found a Cosmic Fighter exception. The observed status
+  relation is `P_out = (P_in & $0C) | $23`; `$000-$001` format, ROM-source mapping, return-Y rule,
+  and timing model remain unresolved. ROM traces retained addresses only; no values or payload
+  were retained. An exhaustive 256-value `$015` matrix in Baseball under both BIOSes produced 512
+  probes with no mismatch. The same mapping was tested at the first authentic call in every title
+  where `$F01B` was observed in four existing 1,000-frame campaigns over 62 titles and both BIOSes:
+  22 titles and 11,264 probes. All probes returned. Within each title and addressing mode, checked
+  return/status, timing, write counts, VRAM hashes and geometry, and ROM-read coverage stayed
+  constant across the byte sweep. Paired BIOS outputs agreed, excluding whole-RAM hashes. The LCD
+  mapping `(bit 0->$20, bit 4->$08, bit 5->$04, bit 6->$02, bit 7->$10)` held in every context.
+  Bits 1-3 had no effect on checked return, timing, ROM-read, or VRAM results; bits 0, 4, 5, and 7
+  changed only flags; bit 6 selected the same 56 `$20`-spaced addresses in all 22 contexts.
+  Twenty-one ordinary-mode contexts cover 800 addresses at `$1CC0-$1FDF`; Cosmic Fighter covers
+  820 at `$1CC0-$1FF3`. In Cosmic Fighter the ordinary-mode call took 42,708 master clocks and
+  issued 1,060 VRAM and 1,137 LCD writes; bit-6 mode retained those counts and timing with sparse
+  coverage. The probe now shares the frame-relative input schedule helper with `gamatebioscalls`;
+  its 4-in-1 call source/frame matched the existing controller-cycle report. Both diagnostic
+  targets built successfully; production behavior and performance are unaffected. Selected
+  single-byte XORs in a private ROM copy yielded no output change at some offsets and localized or
+  broad changes at others, sometimes with expanded writes and timing. This did not resolve the
+  source format; no BIOS/ROM or graphics payload was retained. These are local emulator
+  observations, not physical measurements. The matrix covers only the first authentic call per
+  observed title; later invocation contexts and the physical meaning of the sparse mode remain
+  open. The detailed methods, results, and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - `$F01E` follow-up: the paired balanced-call corpus contains 216 calls across 18 titles. First-call
   probes in Famous 7, Time Warrior, Volcano Panic, and Robin Hood were compared under both BIOSes
