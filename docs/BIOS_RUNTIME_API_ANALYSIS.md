@@ -600,6 +600,36 @@ Entry A, X, Y, and S are preserved in these ten selected baseline calls. The ten
 supports a caller-RAM-driven blitter family, not a single recovered text or graphics format. Exact
 pointer roles, control-field meanings, encoding, terminator grammar, and timing remain open. The
 addresses `$023`, `$028`, and `$030` are empirical perturbation sites, not semantic field names.
+
+### IRQ-gated counter wait: `$F006`
+
+The validated report contains 6,326 `$F006` calls; 192 uninterrupted calls are evenly split between
+the two BIOS revisions and span 15 titles. Every uninterrupted call takes 42 master clocks and has
+the same register, RAM-write, status, and hardware-effect shape.
+
+| Observable | Contract |
+| --- | --- |
+| Entry A | Ignored; A returns zero. |
+| Entry RAM `$00B` | Values 0–4 wait; 5 and tested higher values return immediately. |
+| RAM `$00B` on return | Written as zero. |
+| Registers | X, Y, and S are preserved. |
+| Status | C and Z set; N clear; I, D, and V preserved. |
+| Ready-path timing | 42 master clocks when the wait condition is already satisfied. |
+| Other hardware | No VRAM, LCD, AY, mapper, or UART effects in uninterrupted calls. |
+
+Controlled probes in Dinosaur Park and Witty Apee, under both BIOS revisions, set `$00B` to each
+value from 0 through 5. The calls took respectively 5, 4, 3, 2, 1, and 0 periodic IRQs before
+returning; `$00B=5` returned immediately. Values `$7E`, `$7F`, `$80`, `$81`, and `$FF` also took the
+42-clock ready path. With IRQs masked and `$00B=0`, the probe did not observe a clean return within
+its 10-million-instruction bound. These results imply that the IRQ path advances or otherwise
+satisfies a `$00B` threshold; the intermediate counter values were not traced directly, so the exact
+incrementing mechanism remains an inference.
+
+The corpus supports the 42-clock ready-path contract across 15 titles, while the controlled wait
+matrix covers two titles. Wait-path timing varies with the IRQ phase and callback work and is not
+specified by a fixed cycle equation. RAM and peripheral changes during an IRQ-spanning call must not
+be attributed to `$F006` without separating callback effects.
+
 ### Rectangle-fill contract: `$F02D`
 
 The combined 1,000-frame completed-call corpus contains 209,088 balanced `$F02D` calls split evenly

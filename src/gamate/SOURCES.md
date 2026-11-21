@@ -970,6 +970,18 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   calls spanning IRQ/NMI were excluded from direct timing comparison. Both BIOS revisions agreed in
   controlled timing and write coverage. The authentic Baseball perturbation is title-specific; corpus
   validation independently checks the derived write and timing behavior across those calls.
+- `$F006` method: clean corpus rows were checked for registers, flags, the RAM-change address, timing,
+  and peripheral effects. Authentic Dinosaur Park and Witty Apee calls were tested under both BIOS
+  revisions while varying A, X/Y, status, and RAM `$00B`. Values `$00-$05` and selected values through
+  `$FF` were applied only to the probe's in-memory RAM. IRQ counts and elapsed clocks were retained;
+  no firmware, ROM, or general RAM payload was printed or retained.
+- `$F006` result and limitation: all 192 uninterrupted corpus calls from 15 titles take 42 master
+  clocks, clear A, preserve X/Y/S, write only RAM `$00B` to zero, set C/Z, clear N, and preserve I/D/V.
+  Controlled `$00B=0..5` probes take 5..0 periodic IRQs before returning, while `$00B=5` and selected
+  higher values take the 42-clock ready path. With IRQs masked and `$00B=0`, the probe did not return
+  within its 10-million-instruction bound. The threshold behavior is shared by both BIOS revisions; the
+  IRQ-side mechanism that advances `$00B` was not directly traced and remains an inference. Wait-path
+  timing and callback-attributed state changes are not specified as `$F006` effects.
 - `$F027` cross-title method: first authentic calls in Baseball, Fortune 'n Luck, Nightmare of Santa
   Claus, and Time Warrior, plus first VRAM-writing calls in Money Maze, Pipemania, Mars Voyage, Witty
   Apee, Devil Castle, and Kill Shot, were compared under both BIOS revisions. Private-copy XOR/set
