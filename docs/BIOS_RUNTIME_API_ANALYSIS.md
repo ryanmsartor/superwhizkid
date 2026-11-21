@@ -892,13 +892,20 @@ Volcano Panic under both BIOSes.
 Combined `$015` values `$00`, `$3F`, `$40`, `$41`, `$50`, `$60`, `$C0`, `$7F`, and `$FF` were
 tested in Baseball. The flag contributions compose independently:
 `out_lcd = $03 | (bit 0 ? $20 : 0) | (bit 4 ? $08 : 0) | (bit 5 ? $04 : 0) | (bit 7 ? $10 : 0)`.
-Bit 6 does not add an LCD flag; it selects the `$20`-stride address pattern. For every tested
-value with bit 6 set (`$40`, `$41`, `$50`, `$60`, `$C0`, `$7F`, and `$FF`), the same flags and
-address coverage were reproduced under both BIOS revisions. Every tested pattern returned
-`A = $40 | RAM[$015]`; the combined probes retained the 247,326-clock duration, 12,800 VRAM
-writes, and 13,602 LCD writes. In sparse mode, the 462 unique locations are 231 addresses per
-plane, with identical coverage in both planes. The result establishes how the tested flag bits
-combine, not the hardware meaning of the stride mode or every possible byte value.
+Bit 6 does not add an LCD flag; it selects the `$20`-stride address pattern. For every tested value
+with bit 6 set (`$40`, `$41`, `$50`, `$60`, `$C0`, `$7F`, and `$FF`), the same flags and address
+coverage were reproduced under both BIOS revisions. In sparse mode, the 462 unique locations are
+231 addresses per plane, with identical coverage in both planes.
+
+A full `$015` byte sweep (`$00-$FF`) was then run at Baseball's first `$F00C` occurrence under
+both BIOS revisions, for 512 isolated probes. Every value matched the observed contract: A is
+`$40 | RAM[$015]`; the LCD-flag formula above holds; bit 6 alone selects the sparse address set;
+and X, Y, S, status, timing, write counts, VRAM coverage, and final pointer all matched their
+expected invariants. Each probe took 247,326 master clocks and issued 12,800 VRAM writes and 13,602
+LCD writes. The two BIOS revisions had no non-hash field or coverage differences, and their
+whole-RAM hashes matched for every input value. This closes the `$015` byte-value map for this
+authentic call context, but does not establish the hardware meaning of the stride or behavior in
+every caller context.
 
 The only alternate A result in the completed-call corpus is `$60`, in both BIOSes for Time Warrior's
 second `$F00C` call. Probing that authentic occurrence shows outgoing LCD flags `$07`; changing
@@ -908,9 +915,9 @@ the authentic result. This confirms that `$015` is an active LCD-control input, 
 Four title pairs have different whole-RAM hashes between BIOS revisions, although their reported
 registers, counts, extents, and the checked read/write address sets match. The hash differences do
 not localize a service-output mismatch; their cause remains unresolved. The bit-6 stride's hardware
-meaning, untested `$015` combinations, and physical-hardware behavior remain open. Controlled calls
-mask IRQs to isolate the service; this does not imply that a replacement should suppress the IRQs
-that occur during authentic calls.
+meaning and physical-hardware behavior remain open. Controlled calls mask IRQs to isolate the
+service; this does not imply that a replacement should suppress the IRQs that occur during
+authentic calls.
 
 ### Rectangle-fill contract: `$F02D`
 
