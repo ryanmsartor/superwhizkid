@@ -902,6 +902,24 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   VRAM writes, coverage, and output unchanged in all 11 callers. Access coverage shows `$002-$003`
   are overwritten by every call, while `$004-$005` are neither read nor written. They are classified
   as service scratch/output and caller-preserved unused bytes respectively, not required inputs.
+- `$F015` corpus method: the validated 1,000-frame report and adjacent four-title report provide
+  41,824 balanced calls, evenly divided between BIOS revisions. The independently authored
+  `tools/gamate-bios-f015-summary.py` excludes interrupt-spanning summaries, derives dimensions from
+  LCD/VRAM write counts, and validates copy shape, timing plus indexed-page penalties, registers,
+  status, stack convention, and unrelated peripherals without retaining memory or firmware bytes.
+- `$F015` controlled method: authentic Baseball and Mighty Boxer calls plus controlled perturbations
+  varied A, X/Y, source pointers `$000-$003`, cached LCD control `$015`, dimensions `$01C/$01D`, and
+  initial VRAM fill. Ordered physical-address tracing retained addresses only; focused RAM watches at
+  `$000-$003/$018-$01F` retained access counts and final scratch values. Both BIOS revisions were
+  compared. No source or firmware payload was retained.
+- `$F015` result: the service copies a column-major rectangle from `$000-$001` to plane 0 and from
+  `$002-$003` to plane 1 at destination `(X >> 3, Y)`. `$01C >> 3` gives byte columns and `$01D` rows;
+  zero counts execute 256 iterations. Entry A is ignored, X is preserved, A returns the last copied
+  byte, Y returns bytes per plane modulo 256, C/N clear, Z sets, and I/D/V remain unchanged. It performs
+  `2 * columns * rows` VRAM writes, `1 + 2 * columns * (2 + rows)` LCD writes, and a baseline
+  `234 + columns * (132 + 76 * rows)` master clocks plus two per indexed source page crossing.
+  All 38,790 non-interrupted corpus calls match; the final extra ROM read is the modeled NMOS `RTS`
+  dummy access. Used for the replacement contract in `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
 - `$F02D` corpus method: the validated 1,000-frame completed-call report and the adjacent four-title
   report were combined for 209,088 balanced calls, evenly divided between BIOS revisions. Calls
   spanning IRQ/NMI were separated before direct timing analysis. The independently authored

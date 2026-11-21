@@ -410,6 +410,59 @@ and runs, sum horizontal spans, identify repeated stream/base triples, and flag 
 selectors. That can distinguish the ordinary contract from caller-specific edge cases before a
 clean-room replacement is designed.
 
+### Two-plane bitmap-copy contract: `$F015`
+
+The combined completed-call corpus contains 41,824 balanced `$F015` calls, evenly split between BIOS
+revisions. Of those, 38,790 do not span an IRQ or NMI. Every non-interrupted call fits one copy,
+register, and timing contract; the other 3,034 are excluded from direct timing classification because
+their summaries include interrupt callback work.
+
+| Input | Meaning |
+| --- | --- |
+| X | Starting horizontal pixel coordinate; destination byte column is `X >> 3`. |
+| Y | Starting destination row. |
+| RAM `$000-$001` | First-plane source pointer. It is replaced with the second pointer during the call. |
+| RAM `$002-$003` | Second-plane source pointer; preserved. |
+| RAM `$015` | Cached raw LCD-control value; mode bits are retained and row increment is forced. |
+| RAM `$01C` | Horizontal pixel extent; byte-column count is `$01C >> 3`. |
+| RAM `$01D` | Vertical row count. |
+
+Entry A is ignored. The routine copies a contiguous, column-major source rectangle into plane 0,
+then repeats from the second pointer into plane 1. For each byte column it programs the plane, column,
+and starting row, then streams the column's source bytes with row increment enabled. Existing VRAM is
+overwritten rather than merged. As in `$F02D`, either 8-bit loop count becoming zero executes 256
+iterations rather than skipping the operation.
+
+For `columns = $01C >> 3`, `rows = $01D`, and `bytes_per_plane = columns * rows`:
+
+| Observable | Contract |
+| --- | --- |
+| ROM data reads | `2 * bytes_per_plane`, followed by the cartridge-side `RTS` dummy read described below. |
+| VRAM writes | `2 * bytes_per_plane`, one complete rectangle per plane. |
+| LCD writes | `1 + 2 * columns * (2 + rows)`. |
+| Baseline clocks | `234 + columns * (132 + 76 * rows)`. |
+| Page-cross penalty | Two additional master clocks for each indexed source read that crosses a 6502 page. |
+| Registers | X preserved; A returns the final copied byte; Y returns `bytes_per_plane & $FF`. |
+| Status | C and N clear, Z set; I, D, and V preserved. |
+| Stack | A normal JSR balances S. A cartridge tail-JMP into the service consumes the pre-existing return address, as expected for the service's final RTS. |
+| Scratch | `$018/$019` hold raw plane/column and starting row; `$01C` becomes the byte-column count; `$01E/$01F` are loop/index scratch. `$000-$001` finish equal to the second source pointer. |
+| Other hardware | Scroll, AY, mapper, and UART state are preserved; final LCD state selects plane 1 with row increment. |
+
+Observed clean shapes use widths of 1–20 byte columns and heights of 2–72 rows. The most common
+shape is 1×8 bytes per plane (24,148 calls). Baseball provides a controlled 4×8 example; Mighty Boxer
+provides 6×32 and wrapping-Y examples. Source-pointer perturbations shift only the corresponding
+contiguous ROM span, and VRAM-fill perturbations confirm unconditional overwrite behavior. Both BIOS
+revisions produce identical controlled ROM reads, timing, output, registers, and LCD effects.
+
+Each authentic trace contains one additional cartridge read after the source spans. It occurs at the
+stacked return address during the BIOS `RTS`, so it is the modeled NMOS dummy bus read rather than a
+source byte or inline argument.
+
+`tools/gamate-bios-f015-summary.py` derives dimensions from LCD/VRAM write counts and validates the
+copy shape, baseline timing, bounded page-cross penalties, registers, status, stack convention, and
+unrelated hardware effects. It reports zero mismatches across all 38,790 available non-interrupted
+calls.
+
 ### Rectangle-fill contract: `$F02D`
 
 The combined 1,000-frame completed-call corpus contains 209,088 balanced `$F02D` calls split evenly
