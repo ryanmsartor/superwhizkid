@@ -601,6 +601,36 @@ supports a caller-RAM-driven blitter family, not a single recovered text or grap
 pointer roles, control-field meanings, encoding, terminator grammar, and timing remain open. The
 addresses `$023`, `$028`, and `$030` are empirical perturbation sites, not semantic field names.
 
+### IRQ-gated counter wait: `$F003`
+
+The validated report contains 7,424 `$F003` calls. Its 60 uninterrupted calls are evenly split
+between the two BIOS revisions and span 18 titles. Every uninterrupted call takes 42 master clocks
+and has the same register, RAM-write, status, and hardware-effect shape.
+
+| Observable | Contract |
+| --- | --- |
+| Entry A | Ignored; A returns zero. |
+| Entry RAM `$00B` | Values `$00-$07` wait (8 to 1 IRQs); tested values `>= $08` return immediately. |
+| RAM `$00B` on return | Written as zero. |
+| Registers | X, Y, and S are preserved. |
+| Status | C and Z set; N clear; B, D, I, and V preserved. |
+| Ready-path timing | 42 master clocks when the wait condition is already satisfied. |
+| Other hardware | No VRAM, LCD, AY, mapper, or UART effects in uninterrupted calls. |
+
+Controlled probes used first-call contexts from World Cup Soccer and Dino Bibo under both BIOS
+revisions. Entry values `$00` through `$08` took respectively 8 through 0 periodic IRQs before
+returning. In World Cup Soccer, values `$09`, `$0A`, `$0F`, `$10`, `$17`, `$7F`, `$80`, `$F7`, `$F8`,
+and `$FF` also took the 42-clock ready path under both BIOS revisions. A/X/Y/P perturbations in
+World Cup Soccer and Dino Bibo confirmed the ready-path register and status behavior. Thus the
+tested behavior is consistent with a threshold of eight, distinct from `$F006`'s threshold of five.
+
+The corpus validates the ready path across 18 titles, while the controlled wait matrix covers two.
+Wait-path timing varies with IRQ callback work and is not specified by a fixed cycle equation. The
+correlation between the number of IRQs and the entry value of `$00B` does not identify the callback's
+exact update mechanism; RAM and peripheral changes during an IRQ-spanning call must not be attributed
+to `$F003` without separating callback effects. Values from `$18` through `$7E` were not directly
+tested, so the complete high-byte range is not exhaustively established.
+
 ### IRQ-gated counter wait: `$F006`
 
 The validated report contains 6,326 `$F006` calls; 192 uninterrupted calls are evenly split between

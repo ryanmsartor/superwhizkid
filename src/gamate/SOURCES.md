@@ -970,6 +970,26 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   calls spanning IRQ/NMI were excluded from direct timing comparison. Both BIOS revisions agreed in
   controlled timing and write coverage. The authentic Baseball perturbation is title-specific; corpus
   validation independently checks the derived write and timing behavior across those calls.
+- `$F003` source and status: local, read-only authentic BIOS and cartridge inputs observed in the
+  project-authored emulator with `gamatebiosprobe`; this is emulated runtime evidence, not a physical
+  measurement or manufacturer documentation. It was used to define and validate the candidate
+  replacement-service contract; no external emulator implementation or code was consulted or copied.
+- `$F003` method: uninterrupted rows in the validated completed-call corpus were checked for registers,
+  flags, RAM-change addresses, timing, and peripheral effects. Authentic first-call contexts from World
+  Cup Soccer and Dino Bibo were probed under both BIOS revisions with RAM `$00B` set to `$00-$08`;
+  selected larger values through `$FF` were tested in World Cup Soccer under both revisions. A/X/Y/P
+  perturbations were run in both titles under the UMC BIOS. The probe retained only call summaries and
+  focused RAM access counts; no firmware, ROM, or general RAM payload was printed or retained. The
+  local BIOS and cartridge files were read-only research inputs.
+- `$F003` result and limitation: all 60 uninterrupted calls from 18 titles (30 per BIOS revision)
+  take 42 master clocks, clear A, preserve X/Y/S, write only RAM `$00B` to zero, set C/Z, clear N,
+  preserve B/D/I/V, and have no peripheral effects. Controlled values `$00-$07` take 8..1 periodic
+  IRQs before return, `$08` returns immediately, and selected larger values through `$FF` also return
+  on the 42-clock path; both BIOS revisions agree. This is consistent with an eight-event threshold,
+  distinct from `$F006`'s five-event threshold. Wait-path timing and IRQ-callback RAM effects are not
+  specified as service behavior; the callback's counter-update mechanism remains untraced, and values
+  `$18-$7E` were not directly tested. No BIOS or ROM contents, traces, or derived payload data were
+  committed, and no external emulator implementation or code was used.
 - `$F006` method: clean corpus rows were checked for registers, flags, the RAM-change address, timing,
   and peripheral effects. Authentic Dinosaur Park and Witty Apee calls were tested under both BIOS
   revisions while varying A, X/Y, status, and RAM `$00B`. Values `$00-$05` and selected values through
