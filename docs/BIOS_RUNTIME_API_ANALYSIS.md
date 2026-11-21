@@ -601,6 +601,32 @@ supports a caller-RAM-driven blitter family, not a single recovered text or grap
 pointer roles, control-field meanings, encoding, terminator grammar, and timing remain open. The
 addresses `$023`, `$028`, and `$030` are empirical perturbation sites, not semantic field names.
 
+#### Expanded caller comparison
+
+The first productive `occurrence=1` was probed with IRQs masked in 14 additional titles:
+Box Forum, Brick Blaster, Dino Ball, Enchanted Bricks, GP Race, Galaxy Invaders, Kung-Fu Fighter,
+Magic Jigsaw, Mighty Tank, Mini Golf, Myth of Asamia, Tough Guy, Vindicators, and Volcano Panic.
+The later four-title corpus extension also includes Incantational Couple; both of its authentic
+`$F027` occurrences were probed. Across these 16 contexts, both BIOS revisions matched in return
+registers/status, timing, ordered cartridge-address reads, VRAM coverage, and output hash. The new
+contexts range from 32 to 1,248
+VRAM writes and 13,962 to 172,762 master clocks.
+
+Single-bit XORs at each byte `$006-$009` and zeroing `$023`, `$028`, or `$030` were then tested in
+Box Forum, Dino Ball, Galaxy Invaders, Tough Guy, GP Race, and both Incantational Couple contexts,
+under both BIOS revisions. All seven bytes were read before first write and left unwritten in these
+contexts. Every pointer-byte XOR changed the ordered cartridge-read sequence, but its effect on read
+count and timing varied; for example, changing `$007` in Galaxy Invaders added 168 reads and 8,912
+master clocks while preserving VRAM write geometry. The three zeroed fields were likewise
+caller-dependent: they sometimes changed only reads/timing/output, sometimes changed VRAM/LCD
+geometry, and sometimes had no observed effect. `$030=0` changed geometry in GP Race and the two
+Incantational Couple calls, but not in the other sampled contexts. Both BIOS revisions agreed on
+every tested perturbation.
+
+This confirms these bytes are caller-owned inputs in the tested calls, not a universal parameter
+schema. It does not resolve their per-title meanings or stream grammar. The probe retained only
+derived counts, hashes, coverage, and ROM addresses; source payloads were not printed or retained.
+
 ### IRQ-gated counter wait: `$F003`
 
 The validated report contains 7,424 `$F003` calls. Its 60 uninterrupted calls are evenly split

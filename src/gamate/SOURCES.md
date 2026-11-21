@@ -679,6 +679,13 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   Finite corpus and input schedules do not establish exhaustive reachability; link/NMI paths and some
   caller-specific or timing details remain open. No external emulator implementation was consulted
   or copied.
+- `$F027` follow-up: IRQ-masked `occurrence=1` probes covered 14 additional titles under both BIOS
+  revisions; both authentic occurrences in Incantational Couple were also compared. A controlled
+  matrix toggled `$006-$009` and zeroed `$023/$028/$030` in five varied titles and both Incantational
+  calls. The fields were read-before-write and unwritten in these contexts, but their effects varied
+  by caller and occurrence; this supports retaining the caller-dependent label rather than inventing
+  a shared format. Exact results, call scopes, and limits are in
+  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - Clean-room boundary: BIOS and cartridge files remained read-only. No BIOS/ROM bytes, listings,
   decoded graphics, RAM/VRAM payloads, or ROM-derived mapping tables were retained or published;
   only behavioral descriptions and derived addresses, counts, and comparisons were used.
