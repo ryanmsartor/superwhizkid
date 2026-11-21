@@ -667,13 +667,15 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   326,334 calls, with 82 legitimately open at the observation boundary. Controller campaigns
   expanded observed call-site and ABI signatures without exposing a new slot; they did not exercise
   link-driven `$6023` NMI callbacks.
-- Resolved contracts are documented in
+- Resolved and bounded contracts are documented in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md): `$F000`
-  fixed bitmap writer; `$F003`, `$F006`, and `$F009` IRQ waits; `$F00F` plane-0 rectangle clear;
-  `$F012` selector-driven eight-row tile writer; `$F015` two-plane rectangle copy; `$F018` tile-row
-  blitter; `$F024` strided RAM initializer; `$F02A` plane-0 fill; `$F02D` plane-1 fill; `$F030`
-  pseudorandom service; and `$F033` packed-BCD formatter. `$F027` remains caller-dependent, and the
-  remaining observed slots are not assigned semantics without evidence.
+  fixed bitmap writer; `$F003`, `$F006`, and `$F009` IRQ waits; `$F00C` two-plane VRAM zero-writer
+  with an LCD-control input; `$F00F` plane-0 rectangle clear; `$F012` selector-driven eight-row tile
+  writer; `$F015` two-plane rectangle copy; `$F018` tile-row blitter; `$F024` strided RAM
+  initializer; `$F01E` partially bounded two-plane graphics service; `$F02A` plane-0 fill; `$F02D`
+  plane-1 fill; `$F030` pseudorandom service; and `$F033` packed-BCD formatter. `$F027` remains
+  caller-dependent; `$F00C`'s bit-6 addressing mode and `$F01E`'s stream format remain unresolved;
+  `$F01B` and `$F021` remain unassigned.
 - Used for: the replacement-ABI contracts, the 1,000-frame sweep default, and the conclusion that
   replacement firmware needs resident service and interrupt code, not just an entry-state jump.
   The linked analysis owns per-service matrices, exact behavior, and probe-specific caveats.
@@ -690,6 +692,24 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   counts within each pair; `$023/$028/$030` were read 1/2/2 times. This is consistent with two
   caller-supplied 16-bit cartridge-address words, but not a common data grammar. Exact results,
   call scopes, and limits are in
+  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+- `$F00C` follow-up: `occurrence=1` probes covered 57 titles under both BIOSes with I set and VRAM
+  seeded to `$FF`; controlled `$015` bit patterns and A/X/Y changes were tested in Baseball, and the
+  bit-6 path was checked in Dino Ball and Volcano Panic. Time Warrior's authentic second occurrence
+  was separately probed under both revisions. The tests found a 12,800-write two-plane zeroing path,
+  LCD-control effects from `$015`, and a distinct sparse write pattern when bit 6 is set. Four
+  paired whole-RAM hashes differed despite matching checked access sets and all other reported
+  outputs; their cause is unresolved. The probe streamed VRAM values into aggregate counters and
+  retained no payload. Exact scopes and limits are in
+  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+- `$F01E` follow-up: the paired balanced-call corpus contains 216 calls across 18 titles. First-call
+  probes in Famous 7, Time Warrior, Volcano Panic, and Robin Hood were compared under both BIOSes
+  with I set; register changes, RAM XOR perturbations, and address-only ROM coverage were used to
+  bound the caller inputs. In Time Warrior, `$000-$001` select a ROM-side control/descriptor region,
+  `$006-$007` and `$008-$009` feed separate plane outputs, and `$015` affects LCD flags. VRAM output
+  was streamed to per-plane hashes without retaining payload. The stream grammar, return-Y rule,
+  status behavior, and BIOS-specific whole-RAM hash differences remain unresolved. Exact results
+  and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - Clean-room boundary: BIOS and cartridge files remained read-only. No BIOS/ROM bytes, listings,
   decoded graphics, RAM/VRAM payloads, or ROM-derived mapping tables were retained or published;

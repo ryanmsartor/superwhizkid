@@ -410,6 +410,45 @@ and runs, sum horizontal spans, identify repeated stream/base triples, and flag 
 selectors. That can distinguish the ordinary contract from caller-specific edge cases before a
 clean-room replacement is designed.
 
+### Caller-supplied two-plane graphics service: `$F01E`
+
+The 1,000-frame slot inventory records 110 `$F01E` entries per BIOS across 19 titles. The paired
+balanced-call corpus contains 216 calls, 108 per BIOS across 18 titles. All reported fields match
+between revisions. A returns `$FE`, X returns `$FF`, and S is preserved in every completed call;
+Y varies across callers. Calls report 0-7,984 VRAM writes, with LCD writes exactly
+`5 * (VRAM writes / 4) + 1`. Since 212 of the 216 completed calls span IRQs, these aggregate counts
+and elapsed times include callback work.
+
+Controlled first-call probes in Famous 7, Time Warrior, Volcano Panic, and Robin Hood set I to
+isolate the service and were paired across both BIOS revisions. The measured service time varies
+from 52,184 clocks in Famous 7 to 453,760 in Time Warrior, consistent with work driven by caller
+data rather than a fixed-cost helper. The isolated probes had no AY, mapper, UART, IRQ, or NMI
+effects. Separate A, X, and Y perturbations in Famous 7 and Time Warrior did not change their
+measured graphics output or ROM-read profile. In these two contexts, Y's return value was also
+independent of the tested entry Y; its result differs by context, so no general return rule is
+established.
+
+The access maps in Time Warrior, Volcano Panic, and Robin Hood read `$000-$001`, `$006-$009`, and
+`$015`; the first pair is also rewritten, while `$006-$009` and `$015` are preserved. In Time Warrior,
+one-bit XORs to `$000-$001` change the ROM-read coverage and operation. XORing bit 0 of `$000`
+specifically produces a 144-clock return with no VRAM writes, while changing `$001` selects a
+different read/output profile. This is consistent with `$000-$001` supplying a ROM-side control or
+descriptor address, but the format is not resolved.
+
+In Time Warrior, `$006-$007` and `$008-$009` act as separate 16-bit source bases for the two VRAM
+planes. One-bit XORs to either byte of the first pair changed the streamed output hash for plane 0
+only; XORs to either byte of the second pair changed plane 1 only. Each change preserved the tested
+write count and coverage while shifting the corresponding ROM-read coverage. Output bytes were
+streamed directly into per-plane hashes and counts; no graphics payload was retained.
+
+`$015` is an active LCD-control input in the tested contexts: XORing its low bit changes the final
+LCD flags from `$03` to `$23` in both Famous 7 and Time Warrior, without changing their VRAM output
+hashes or write counts. The bit's hardware meaning is not established. The exact control-stream
+grammar, source units and record layout, return-Y rule, and status-flag contract remain open.
+Controlled whole-RAM hashes differed between BIOS revisions in the four probed titles despite
+matching access maps and measured operation fields; the cause is unresolved. These are emulator
+observations, not physical-hardware measurements.
+
 ### Fixed-height tile-run contract: `$F012`
 
 The combined completed-call corpus contains 39,034 balanced `$F012` calls, evenly split between BIOS
@@ -726,6 +765,49 @@ were not traced directly. Wait-path elapsed clocks vary with title-specific IRQ 
 peripheral changes in IRQ-spanning calls must not be attributed to `$F009`. Selected values above
 `$20` were tested, but the full range `$21-$7E` was not exhaustive. These are emulated observations,
 not physical timing measurements.
+
+### Two-plane VRAM zero-writer and LCD-control service: `$F00C`
+
+The paired completed-call corpus contains 248 `$F00C` calls: 124 per BIOS revision across 57 titles.
+Every call writes 12,800 VRAM bytes and 13,602 LCD registers. The corpus includes calls spanning
+seven or eight IRQs, so those totals are not by themselves a clean measure of service-only timing or
+peripheral effects.
+
+The first call in each of the 57 titles was probed under both BIOS revisions, with the input status
+preserved except for setting I and with VRAM prefilled to `$FF`. All 114 probes had the same main
+effect profile: A returns `$40`, the output LCD flags are `$03`, the VRAM pointer ends at `$1900`,
+12,800 distinct VRAM locations are written in 247,326 master clocks, and the cartridge ROM read
+count is one. Detailed traces in Baseball, Dino Ball, and Volcano Panic identify that single read as
+the stacked return-address dummy fetch, not a cartridge data input. Per-plane write coverage is
+`$0000-$18FF` in both planes. A streaming value-count check in Baseball found zero-valued output
+bytes for `$015` inputs `$00`, `$40`, and `$FF` under both BIOSes, without retaining the VRAM payload.
+
+The first-call RAM access map in those detailed probes reads `$015` and stack bytes; it writes
+`$01E` and stack bytes. Separate A, X, and Y perturbations in Baseball did not change the measured
+operation. Across the tested `$015` patterns, A returns `$40` OR the `$015` input, X returns `$00`,
+Y returns `$C8`, and S is preserved. With I set, C is set, Z is clear, and N follows returned A;
+I, D, and V were preserved under the tested input flags. Timing remained 247,326 clocks across the
+tested register and `$015` values.
+
+Controlled one-bit `$015` perturbations in Baseball, paired across both BIOS revisions, show that
+bits 0, 4, 5, and 7 respectively add `$20`, `$08`, `$04`, and `$10` to the outgoing LCD flags.
+Bits 1-3 did not change LCD flags or VRAM coverage in those probes. Bit 6 changes the clear's
+address pattern: instead of every address through `$18FF`, each plane receives a write at every
+`$20`-byte interval through `$1CC0` (231 distinct addresses per plane), while the total remains
+12,800 writes and the final pointer is `$1CE0`. This sparse path also matched in Dino Ball and
+Volcano Panic under both BIOSes.
+
+The only alternate A result in the completed-call corpus is `$60`, in both BIOSes for Time Warrior's
+second `$F00C` call. Probing that authentic occurrence shows outgoing LCD flags `$07`; changing
+`$015` to zero changes A to `$40` and the flags to `$03`, while setting `$015` to `$20` reproduces
+the authentic result. This confirms that `$015` is an active LCD-control input, not merely scratch.
+
+Four title pairs have different whole-RAM hashes between BIOS revisions, although their reported
+registers, counts, extents, and the checked read/write address sets match. The hash differences do
+not localize a service-output mismatch; their cause remains unresolved. The bit-6 stride's meaning,
+other combinations of `$015`, and physical-hardware behavior remain open. Controlled calls mask IRQs
+to isolate the service; this does not imply that a replacement should suppress the IRQs that occur
+during authentic calls.
 
 ### Rectangle-fill contract: `$F02D`
 
