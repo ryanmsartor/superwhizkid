@@ -7,15 +7,14 @@ startup graphics, or a state snapshot that could substitute for either BIOS.
 
 ## Entry-state sweep
 
-The sweep captured every combination of 58 locally available cartridges and both recognized BIOS
-revisions. Each capture occurred immediately after the BIOS set CPU PC to `$6020` and before the
-cartridge executed its first instruction.
+The sweep captured every combination of the 62-cartridge corpus and both recognized BIOS revisions.
+Each capture occurred immediately after the BIOS set CPU PC to `$6020` and before the cartridge
+executed its first instruction.
 
-All 116 combinations reached `$6020`. Paired BIOS captures had identical RAM and VRAM; across
-cartridges, 1,020 RAM bytes were invariant and the two varying 16-bit fields held the stored header
-checksum. Mapper selections were zero at entry, and CPU registers and non-phase hardware
-configuration matched the entry contract; the BIOS timing phase difference is described below. The
-table summarizes the boundary. The detailed RAM sweep and field interpretation are in
+All 124 combinations reached `$6020`. Paired BIOS captures had identical RAM and VRAM hashes.
+Mapper selections were zero at entry, and CPU registers and non-phase hardware configuration matched
+the entry contract; the BIOS timing phase difference is described below. The table summarizes the
+boundary. The detailed RAM sweep and field interpretation are in
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md). Captured state images remain local and
 are not distributed.
 
@@ -83,9 +82,9 @@ A clean-room replacement now appears technically feasible. It can implement the 
 protection, header/checksum validation, entry point, callback ABI, and machine initialization from
 behavioral requirements rather than reproduce authentic instruction sequences.
 
-It does not need 58 cartridge-specific boot recipes. Cartridge-dependent entry RAM is limited to the
-header checksum, which the replacement can calculate or copy from the public header fields. Mapper
-selection remains a core/cartridge responsibility rather than firmware content.
+It does not need a separate boot recipe for each cartridge. Cartridge-dependent entry RAM is limited
+to the header checksum, which the replacement can calculate or copy from the public header fields.
+Mapper selection remains a core/cartridge responsibility rather than firmware content.
 
 The replacement must remain resident after boot. Commercial software relies on BIOS interrupt
 wrappers that update BIOS counters, receive link data, and conditionally call cartridge callbacks at
@@ -114,26 +113,27 @@ likely to create special CPU paths.
 
 ## Entry-VRAM perturbation result
 
-The exact authentic startup image is not required by the tested commercial corpus. A controlled
-experiment replaced only the 16 KiB VRAM contents at `$6020`, preserving CPU, RAM, LCD state and
-phase, mapper, interrupts, audio, peripherals, and every other entry field.
+The exact authentic startup image is not required for measured execution and final-video behavior
+over the tested 1,000-frame windows. A controlled experiment replaced only the 16 KiB VRAM contents
+at `$6020`, preserving CPU, RAM, LCD state and phase, mapper, interrupts, audio, peripherals, and
+every other entry field.
 
-Five entry policies were tested for 1,000 frames across all 58 cartridges and both BIOS revisions:
+Five entry policies were tested for 1,000 frames across the 62-cartridge corpus and both BIOS
+revisions:
 authentic contents, all zeroes, all `$FF`, alternating plane-oriented bytes, and a deterministic
-address-derived pattern. The authentic and cleared runs were also repeated with the standard broad
-controller-input schedule.
+address-derived pattern. Authentic and cleared runs were also compared with all buttons held.
 
 | Comparison | Cases | Execution differences | Final-video differences | Final-VRAM differences |
 | --- | ---: | ---: | ---: | ---: |
-| Authentic versus cleared, unattended | 116 | 0 | 0 | 0 |
-| Authentic versus cleared, automated input | 116 | 0 | 0 | 0 |
-| All five patterns, unattended | 116 | 14 (7 titles under both BIOSes) | 4 (2 titles under both BIOSes) | 116 |
+| Authentic versus cleared, no input | 124 | 0 | 0 | 8 |
+| Authentic versus cleared, all buttons held | 124 | 0 | 0 | 0 |
+| All five patterns, no input | 124 | 14 (7 titles under both BIOSes) | 4 (2 titles under both BIOSes) | 124 |
 
 “Execution” compares final CPU/RAM/mapper/LCD-address state, audio and peripheral activity, controller
-behavior, and relevant counters while deliberately excluding video and VRAM hashes. Under both
-unattended and automated-input coverage, clearing VRAM was exactly equivalent to inheriting the
-authentic startup image: every compared execution field, frame-1/60/1000 video and audio observation,
-final framebuffer hash, and final VRAM hash matched.
+behavior, and relevant counters while deliberately excluding video and VRAM hashes. Clearing VRAM
+produced no measured execution or final-video differences in either input condition. The final VRAM
+hash differed in eight no-input cases but matched in all all-buttons-held cases, so the clear policy
+is behaviorally equivalent over these tested windows, not byte-for-byte equivalent at frame 1,000.
 
 The broader perturbations establish an important limit. Sixteen titles in the unattended run made
 CPU VRAM reads before writing every byte they read; input-driven coverage found fifteen such titles.
@@ -150,17 +150,19 @@ blocker for clean-room replacement work.
 
 ## Entry-RAM perturbation result
 
-Entry RAM cannot be replaced with a blanket fill. Zeroing or filling it with `$FF` changed 106 or
-102 of 116 executions; preserving only the callback and checksum fields still changed 104. The
-page, byte, inverse, and phase matrices are in
+Entry RAM cannot be replaced with a blanket fill. Zeroing or filling it with `$FF` changed 114 or
+110 of 124 executions. The page, byte, inverse, and phase matrices are in
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md).
 
 That analysis identifies a tested semantic initialization policy: establish `$004=$47`,
 `$005-$00A=$FF`, `$000C=$01`, the periodic-IRQ counter, and a nonzero `$F030` state. Constructing
-those fields after clearing `$000-$01F` matched all 116 cases in both unattended and broad-input
+those fields after clearing `$000-$01F` matched all 124 cases in both no-input and all-buttons-held
 1,000-frame runs. For authentic-BIOS use, preserve WRAM; for a replacement, initialize named fields
 rather than copy a captured RAM image. This is tested sufficiency, not proof of all later gameplay
-paths or a complete BIOS-free boot contract.
+paths or a complete BIOS-free boot contract. It does not validate a blanket fill of the entire 1 KiB
+WRAM or exhaustive gameplay. Targeted perturbations found effects from clearing `$00CE` in 13 titles
+and `$021F` in two titles; their semantics and initialization sources remain unresolved. See
+[`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md) for scope and limits.
 
 ## What should not be copied
 

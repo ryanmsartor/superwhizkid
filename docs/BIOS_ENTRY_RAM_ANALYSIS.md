@@ -7,10 +7,10 @@ not authentic RAM contents or a reusable firmware-derived state image.
 ## Quarter-page sweep
 
 Each 64-byte physical RAM block was independently cleared at cartridge entry while every other RAM
-byte and all CPU, hardware, mapper, timing, and peripheral state remained authentic. All 58 locally
-available cartridges were run under both recognized BIOS revisions for 1,000 post-entry frames,
-giving 116 cases per block and 1,856 perturbed runs. Every run completed without an unsupported
-opcode or blank-output failure.
+byte and all CPU, hardware, mapper, timing, and peripheral state remained authentic. All 62
+cartridges were run under both recognized BIOS revisions for 1,000 post-entry frames, giving 124
+cases per block and 1,984 perturbed runs. Every run completed without an unsupported opcode or
+blank-output failure.
 
 “Changed execution” compares final CPU, video, audio, VRAM, mapper, peripheral, controller, and
 activity observations while excluding only the deliberately changed final RAM hash. Counts are
@@ -18,15 +18,15 @@ BIOS/cartridge cases; the title column collapses matching results across BIOS re
 
 | Block | Physical range | Changed executions | Final-video changes | Final-VRAM changes | Affected titles |
 | --- | --- | ---: | ---: | ---: | --- |
-| `00` | `$000-$03F` | 106 | 24 | 29 | 53 titles; all except Bao Qing Tian, Basketball, Dinosaur Park, Riddle of the Ancient Tomb, and The Golden Pyramid |
+| `00` | `$000-$03F` | 114 | 24 | 29 | 57 titles; all except Bao Qing Tian, Basketball, Dinosaur Park, Riddle of the Ancient Tomb, and The Golden Pyramid |
 | `01` | `$040-$07F` | 10 | 2 | 0 | Dino Bibo; Galaxy Invaders; Mars Voyage; Money Maze; Time Warrior |
 | `02` | `$080-$0BF` | 14 | 2 | 0 | Famous 7; Galaxy Invaders; Insect War; Jewelriss; Money Maze; One Million Whys; Tornado |
-| `03` | `$0C0-$0FF` | 38 | 2 | 3 | Baseball; Boom; Devil Castle; Dino Bibo; Fantasy Travel; Flying Goblin; Fortune 'n Luck; Galaxy Invaders; Kill Shot; Legend of Dragon Knight; Marauder; Money Maze; Myth of Asamia; Nightmare of Santa Claus; One Million Whys; Pipemania; Punk Boy; Snowman Legend; Tennis |
+| `03` | `$0C0-$0FF` | 46 | 2 | 3 | Baseball; Boom; Devil Castle; Dino Bibo; Fantasy Travel; Flying Goblin; Fortress of Fierceness; Fortune 'n Luck; Galaxy Invaders; Incantational Couple; Kiki Inland; Kill Shot; Legend of Dragon Knight; Marauder; Mighty Boxer; Money Maze; Myth of Asamia; Nightmare of Santa Claus; One Million Whys; Pipemania; Punk Boy; Snowman Legend; Tennis |
 | `04` | `$100-$13F` | 2 | 0 | 0 | Time Warrior |
 | `05` | `$140-$17F` | 0 | 0 | 0 | None observed |
 | `06` | `$180-$1BF` | 0 | 0 | 0 | None observed |
 | `07` | `$1C0-$1FF` | 0 | 0 | 0 | None observed |
-| `08` | `$200-$23F` | 26 | 4 | 8 | Bomb Blaster and its alternate dump; Famous 7; Fist of Thunder; GP Race; Jewelriss; Kill Shot; Mars Voyage; Tornado; Tough Guy; Treasure Hunter; Witty Apee; World Cup Soccer |
+| `08` | `$200-$23F` | 28 | 4 | 8 | Bomb Blaster and its alternate dump; Famous 7; Fist of Thunder; GP Race; Jewelriss; Kill Shot; Mars Voyage; Mighty Boxer; Tornado; Tough Guy; Treasure Hunter; Witty Apee; World Cup Soccer |
 | `09` | `$240-$27F` | 18 | 4 | 4 | Bomb Blaster and its alternate dump; Dino Ball; Famous 7; Flipuzzle; Mars Voyage; One Million Whys; Pipemania; Tough Guy |
 | `0A` | `$280-$2BF` | 6 | 2 | 2 | Dino Ball; Hot Hero; Kill Shot |
 | `0B` | `$2C0-$2FF` | 2 | 0 | 0 | Tornado |
@@ -42,23 +42,24 @@ that the BIOS revisions produce different entry RAM, which direct comparison has
 
 ## Sixteen-byte refinement
 
-The four highest-priority 64-byte blocks were subdivided into sixteen-byte chunks and rerun through
-the same 116-case, 1,000-frame matrix. These 1,856 additional runs all completed. For every parent
-block, the union of its four changed-case sets exactly equals the parent's changed-case set: no title
-changed only when multiple chunks in the parent were cleared together.
+The four highest-priority 64-byte blocks were subdivided into sixteen-byte chunks. All listed chunks
+were cleared for the 62-cartridge corpus under both BIOS revisions, giving 124 cases per chunk.
+For every parent block, the union of its four changed-case sets exactly equals the
+parent's changed-case set: no title changed only when multiple chunks in the parent were cleared
+together.
 
 | Chunk | Physical range | Changed executions | Final-video changes | Final-VRAM changes | Affected titles |
 | --- | --- | ---: | ---: | ---: | --- |
-| `00` | `$000-$00F` | 106 | 20 | 25 | 53 titles; all except Bao Qing Tian, Basketball, Dinosaur Park, Riddle of the Ancient Tomb, and The Golden Pyramid |
-| `01` | `$010-$01F` | 102 | 4 | 5 | 51 titles; all except Bao Qing Tian, Basketball, Devil Castle, Dinosaur Park, Riddle of the Ancient Tomb, Robin Hood, and The Golden Pyramid |
+| `00` | `$000-$00F` | 114 | 20 | 25 | 57 titles; all except Bao Qing Tian, Basketball, Dinosaur Park, Riddle of the Ancient Tomb, and The Golden Pyramid |
+| `01` | `$010-$01F` | 110 | 4 | 5 | 55 titles; all except Bao Qing Tian, Basketball, Devil Castle, Dinosaur Park, Riddle of the Ancient Tomb, Robin Hood, and The Golden Pyramid |
 | `02` | `$020-$02F` | 8 | 2 | 2 | Galaxy Invaders; Magic Jigsaw; Mars Voyage; Time Warrior |
 | `03` | `$030-$03F` | 4 | 0 | 0 | Magic Jigsaw; Mars Voyage |
-| `0C` | `$0C0-$0CF` | 18 | 2 | 3 | Baseball; Devil Castle; Fantasy Travel; Flying Goblin; Fortune 'n Luck; Galaxy Invaders; Money Maze; Punk Boy; Snowman Legend |
+| `0C` | `$0C0-$0CF` | 26 | 2 | 3 | Baseball; Devil Castle; Fantasy Travel; Flying Goblin; Fortress of Fierceness; Fortune 'n Luck; Galaxy Invaders; Incantational Couple; Kiki Inland; Mighty Boxer; Money Maze; Punk Boy; Snowman Legend |
 | `0D` | `$0D0-$0DF` | 22 | 0 | 0 | Boom; Dino Bibo; Kill Shot; Legend of Dragon Knight; Marauder; Money Maze; Myth of Asamia; Nightmare of Santa Claus; One Million Whys; Pipemania; Tennis |
 | `0E` | `$0E0-$0EF` | 0 | 0 | 0 | None observed |
 | `0F` | `$0F0-$0FF` | 0 | 0 | 0 | None observed |
 | `20` | `$200-$20F` | 2 | 0 | 0 | GP Race |
-| `21` | `$210-$21F` | 12 | 0 | 4 | Bomb Blaster and its alternate dump; Jewelriss; Mars Voyage; Witty Apee; World Cup Soccer |
+| `21` | `$210-$21F` | 14 | 0 | 4 | Bomb Blaster and its alternate dump; Jewelriss; Mars Voyage; Mighty Boxer; Witty Apee; World Cup Soccer |
 | `22` | `$220-$22F` | 12 | 0 | 0 | Bomb Blaster and its alternate dump; Famous 7; Fist of Thunder; Tornado; Tough Guy |
 | `23` | `$230-$23F` | 6 | 0 | 0 | Kill Shot; Tornado; Treasure Hunter |
 | `24` | `$240-$24F` | 4 | 0 | 0 | Famous 7; Pipemania |
@@ -71,14 +72,17 @@ The `$0E0-$0EF` result includes the duplicated cartridge-checksum fields at `$00
 observed post-entry difference. This does not remove the checksum from the boot contract: it only
 shows that the inherited copies were not needed by these exercised post-entry paths. Conversely,
 `$000-$00F` includes the callback-enable byte at `$000C`, so its broad effect cannot yet be assigned
-to the other fifteen bytes. `$010-$01F` independently affects 51 titles and therefore contains at
+to the other fifteen bytes. `$010-$01F` independently affects 55 titles and therefore contains at
 least one additional broadly consumed field or counter.
 
 ## Byte and four-byte refinement
 
-All 32 individual bytes in `$000-$01F` and all eight aligned four-byte groups in `$0C0-$0DF` were
-then cleared independently. The same 116-case, 1,000-frame matrix produced 4,640 additional passing
-runs. “Execution” here includes final VRAM; only the deliberately changed final RAM hash is excluded.
+All 32 individual bytes in `$000-$01F`, the four bytes in `$00CC-$00CF`, and the four bytes in
+`$021C-$021F` were independently cleared across the 62-cartridge corpus. The eight aligned
+four-byte groups in `$0C0-$0DF` and four groups in `$0210-$021F` were also cleared. Each test covered
+both BIOS revisions and 1,000 post-entry frames, for 4,960 byte-address/case and 1,488 four-byte
+group/case comparisons. “Execution” includes final VRAM; only the deliberately changed final RAM
+hash is excluded.
 
 | Address | Changed executions | Final-video changes | Final-VRAM changes | Affected titles or observation |
 | --- | ---: | ---: | ---: | --- |
@@ -89,18 +93,26 @@ runs. “Execution” here includes final VRAM; only the deliberately changed fi
 | `$007` | 2 | 0 | 2 | Myth of Asamia; retained VRAM only |
 | `$008` | 2 | 0 | 2 | Myth of Asamia |
 | `$009` | 2 | 0 | 2 | Myth of Asamia; retained VRAM only |
-| `$00A-$00B` | 0 each | 0 | 0 | No observed effect; `$00B` was already zero |
-| `$00C` | 106 | 20 | 23 | 53 titles; exactly the same affected-case membership as chunk `$000-$00F` |
-| `$00D-$00F` | 0 each | 0 | 0 | No observed effect; `$00E-$00F` were already zero |
+| `$00A-$00B` | 0 each | 0 | 0 | No observed effect |
+| `$00C` | 114 | 20 | 23 | 57 titles; same affected-case membership as chunk `$000-$00F` |
+| `$00CC` | 0 | 0 | 0 | No observed effect |
+| `$00CD` | 0 | 0 | 0 | No observed effect |
+| `$00CE` | 26 | 2 | 3 | Baseball; Devil Castle; Fantasy Travel; Flying Goblin; Fortress of Fierceness; Fortune 'n Luck; Galaxy Invaders; Incantational Couple; Kiki Inland; Mighty Boxer; Money Maze; Punk Boy; Snowman Legend |
+| `$00CF` | 2 | 0 | 0 | Money Maze |
+| `$00D-$00F` | 0 each | 0 | 0 | No observed effect |
 | `$010` | 0 | 0 | 0 | No observed effect |
-| `$011` | 102 | 4 | 5 | 51 titles; exactly the same affected-case membership as chunk `$010-$01F` |
+| `$011` | 110 | 4 | 5 | 55 titles; same affected-case membership as chunk `$010-$01F` |
 | `$012` | 4 | 2 | 2 | Hot Hero; Magic Jigsaw |
 | `$013` | 2 | 2 | 2 | Magic Jigsaw |
-| `$014-$017` | 0 each | 0 | 0 | Already zero at entry |
-| `$018-$019` | 0 each | 0 | 0 | Nonzero at entry, with no observed effect when cleared |
-| `$01A` | 0 | 0 | 0 | Already zero at entry |
-| `$01B-$01D` | 0 each | 0 | 0 | Nonzero at entry, with no observed effect when cleared |
-| `$01E-$01F` | 0 each | 0 | 0 | Already zero at entry |
+| `$014-$017` | 0 each | 0 | 0 | No observed effect |
+| `$018-$019` | 0 each | 0 | 0 | No observed effect |
+| `$01A` | 0 | 0 | 0 | No observed effect |
+| `$01B-$01D` | 0 each | 0 | 0 | No observed effect |
+| `$01E-$01F` | 0 each | 0 | 0 | No observed effect |
+| `$021C` | 0 | 0 | 0 | No observed effect |
+| `$021D` | 2 | 0 | 0 | Witty Apee |
+| `$021E` | 0 | 0 | 0 | No observed effect |
+| `$021F` | 4 | 0 | 0 | Mighty Boxer; Witty Apee |
 
 All affected byte-level cases paired across both BIOS revisions. `$000C` is the already documented
 callback-enable flag. Clearing it alone accounts for the broad membership of the first chunk's
@@ -114,16 +126,21 @@ periodic-IRQ counter.
 | `$0C0-$0C3` | 0 | 0 | 0 | None observed |
 | `$0C4-$0C7` | 0 | 0 | 0 | None observed |
 | `$0C8-$0CB` | 0 | 0 | 0 | None observed |
-| `$0CC-$0CF` | 18 | 2 | 3 | Baseball; Devil Castle; Fantasy Travel; Flying Goblin; Fortune 'n Luck; Galaxy Invaders; Money Maze; Punk Boy; Snowman Legend |
+| `$0CC-$0CF` | 26 | 2 | 3 | Baseball; Devil Castle; Fantasy Travel; Flying Goblin; Fortress of Fierceness; Fortune 'n Luck; Galaxy Invaders; Incantational Couple; Kiki Inland; Mighty Boxer; Money Maze; Punk Boy; Snowman Legend |
 | `$0D0-$0D3` | 16 | 0 | 0 | Boom; Kill Shot; Legend of Dragon Knight; Marauder; Money Maze; Myth of Asamia; Nightmare of Santa Claus; Tennis |
 | `$0D4-$0D7` | 0 | 0 | 0 | None observed |
 | `$0D8-$0DB` | 8 | 0 | 0 | Dino Bibo; Money Maze; Nightmare of Santa Claus; Tennis |
 | `$0DC-$0DF` | 4 | 0 | 0 | One Million Whys; Pipemania |
+| `$210-$213` | 0 | 0 | 0 | None observed |
+| `$214-$217` | 4 | 0 | 0 | Mars Voyage; World Cup Soccer |
+| `$218-$21B` | 6 | 0 | 2 | Bomb Blaster and its alternate dump; Jewelriss |
+| `$21C-$21F` | 4 | 0 | 2 | Mighty Boxer; Witty Apee |
 
 For chunks `$000-$00F`, `$010-$01F`, `$0C0-$0CF`, and `$0D0-$0DF`, the union of the child-level
 affected cases exactly equals the parent's set. This set equality does not prove that the children
 are independently sufficient: inverse testing below found a low-RAM interaction hidden by titles
-that already differed through `$000C` or `$0011`.
+that already differed through `$000C` or `$0011`. The `$00CE` and `$00CF` effects overlap in Money
+Maze, while the four `$0210-$021F` groups account for the 14 changed cases in chunk `$21`.
 
 ## IRQ counter trace and inverse policy
 
@@ -159,22 +176,23 @@ the counter part of the cartridge-visible BIOS ABI, not merely private firmware 
 value is meaningful counter phase derived from elapsed IRQs during boot; clean-room code
 may calculate or deliberately redefine its phase, but should not copy it as an unexplained byte.
 
-Inverse tests cleared all of `$000-$01F` and selectively restored authentic functional fields:
+Inverse tests cleared all of `$000-$01F` across the 62-cartridge corpus and selectively restored
+authentic functional fields:
 
 | Preserved entry fields | Changed executions | Final-video changes | Final-VRAM changes |
 | --- | ---: | ---: | ---: |
-| None | 106 | 24 | 29 |
-| `$000C` | 102 | 4 | 7 |
-| `$0011` | 106 | 22 | 27 |
+| None | 114 | 24 | 29 |
+| `$000C` | 110 | 4 | 7 |
+| `$0011` | 114 | 22 | 27 |
 | `$000C`, `$0011` | 10 | 2 | 4 |
 | `$0004-$000A`, `$000C`, `$0010-$0013` | 0 | 0 | 0 |
 
 The ten residual cases after preserving `$000C/$0011` were Fortune 'n Luck, Hannibal, Hot Hero,
 Magic Jigsaw, and Myth of Asamia under both BIOSes. Restoring the independently localized smaller
 fields removed all unattended differences. Automated input then exposed `$000A` in Treasure Hunter;
-preserving it as part of `$0004-$000A` removed that final two-BIOS difference. The final candidate
-policy matches authentic entry across all 116 unattended cases and all 116 broad-input cases for
-execution, final video, and final VRAM while clearing every other byte in `$000-$01F`.
+preserving it as part of `$0004-$000A` removed that difference. The final candidate policy matches
+authentic entry across all 124 no-input cases and all 124 all-buttons-held cases for execution, final
+video, and final VRAM while clearing every other byte in `$000-$01F`.
 
 ### Semantics of the preserved fields
 
@@ -205,11 +223,12 @@ counter phase, and initialize the BIOS random-generator state.
 
 A final diagnostic policy cleared `$000-$01F` and constructed the named fields above directly:
 `$004=$47`, `$005-$00A=$FF`, `$00C=$01`, IRQ-counter phase `$00000394`, and LFSR state `$358A`.
-It did not copy any entry-RAM block. All 58 cartridges under both BIOS revisions then matched the
-authentic-entry observations through 1,000 frames in both the unattended and broad automated-input
-matrices: 116 of 116 cases in each matrix had identical CPU, video, audio, VRAM, mapper, peripheral,
-controller, and activity results. The whole-RAM hashes intentionally differed because unrelated
-boot residue remained cleared.
+It did not copy any entry-RAM block. All 62 cartridges under both BIOS revisions then matched the
+authentic-entry observations through 1,000 frames across all 124 no-input cases and all 124
+all-buttons-held cases (`GAMATEBOOT_PRESS="1:255:1000"`). Both schedules matched CPU, video, audio,
+VRAM, mapper, peripheral, controller, and activity results. The whole-RAM hashes intentionally
+differ because unrelated boot residue remains cleared. The test establishes sufficiency for this
+low-RAM policy; upper WRAM remains authentic and is not covered by this result.
 
 The exact counter and LFSR values in this equivalence test reproduce authentic phase for controlled
 comparison. They are documented state variables, not a claim that replacement firmware must hardcode
@@ -218,30 +237,28 @@ and document a nonzero random seed, with resulting phase differences tested sepa
 
 ### Counter- and random-phase sensitivity
 
-The semantic policy was then rerun with independently varied counter and LFSR states. Every policy
-completed all 116 BIOS/cartridge cases without a boot or execution failure.
+The semantic policy was rerun with independently varied counter and LFSR states across all 124
+BIOS/cartridge cases without a boot or execution failure.
 
-| Entry-state variation | Unattended execution/video/VRAM differences | Input execution/video/VRAM differences | Interpretation |
-| --- | ---: | ---: | --- |
-| Counter `$00000000` | 102 / 4 / 5 | 100 / 14 / 16 | Changes the low-byte carry schedule and therefore BIOS IRQ-handler timing. |
-| Counter `$0000FFFF` | 102 / 8 / 9 | 100 / 18 / 20 | Immediately exercises carries into both `$010` and `$00F`, producing a larger phase shift. |
-| Counter `$0000FF94` | 98 / 0 / 0 | 98 / 2 / 2 | Preserves low-byte wrap times, but the first carry reaches `$00F` and lengthens that handler path. |
-| Counter `$00000494` | 0 / 0 / 0 | 2 / 0 / 0 | Preserves low-byte wrap timing and avoids a carry into `$00F` in the window; only Kill Shot's input path observes the changed `$010`. |
-| LFSR `$0001` | 4 / 2 / 2 | 4 / 4 / 4 | Changes deterministic random results only on exercised consumer paths. |
-| LFSR `$FFFF` | 4 / 2 / 2 | 4 / 4 / 4 | Same affected-case count as `$0001`, with different deterministic random state. |
+| Entry-state variation | No-input execution/video/VRAM differences | Interpretation |
+| --- | ---: | --- |
+| Counter `$00000000` | 110 / 4 / 5 | Changes the low-byte carry schedule and therefore BIOS IRQ-handler timing. |
+| Counter `$0000FFFF` | 110 / 8 / 9 | Immediately exercises carries into both `$010` and `$00F`, producing a larger phase shift. |
+| Counter `$0000FF94` | 106 / 0 / 0 | Preserves low-byte wrap times, but the first carry reaches `$00F` and lengthens that handler path. |
+| Counter `$00000494` | 0 / 0 / 0 | Preserves low-byte wrap timing and avoids a carry into `$00F` in the window. |
+| LFSR `$0001` | 4 / 2 / 2 | Changes deterministic random results only on exercised consumer paths. |
+| LFSR `$FFFF` | 4 / 2 / 2 | Same affected-case count as `$0001`, with different deterministic random state. |
 
-The LFSR differences pair across both BIOSes. Without input they occur in Hot Hero and Magic Jigsaw;
-with the broad input schedule they occur in Cosmic Fighter and Magic Jigsaw. Focused counter tracing
-shows Kill Shot repeatedly reading `$010` at cartridge PC `$8DCA` during its IRQ callback, explaining
-the two input-driven `$00000494` differences. The absence of a final-video or VRAM difference there does
-not make the high byte private; it establishes direct software visibility.
+The LFSR differences pair across both BIOSes and occur in Hot Hero and Magic Jigsaw. Focused counter
+tracing shows Kill Shot repeatedly reading `$010` at cartridge PC `$8DCA` during its IRQ callback.
+This direct software access remains observable independently of the phase matrix.
 
 Counter changes require special interpretation. `$011` increments on every periodic IRQ; when it
 wraps, the BIOS executes the additional `$010` increment path. A phase change therefore alters the
 number and placement of handler cycles even in software that never reads the counter. Wrapping
 `$010` introduces another distinct branch outcome. The widespread PC/audio/activity differences are
-thus expected deterministic timing consequences, not evidence that 51 games validate the literal
-entry number.
+thus expected deterministic timing consequences, not evidence that every affected game validates
+the literal entry number.
 
 For maximum authentic compatibility, replacement startup should reproduce the observed `$00000394`
 counter phase and `$358A` LFSR state, preferably as named, documented ABI initialization or as the
@@ -251,33 +268,36 @@ equivalent to authentic startup.
 
 ## Post-entry read-before-write coverage
 
-Authentic-state access tracking found at least one cartridge read-before-write in every case. The
-union across the 116 BIOS/cartridge cases covered all 1,024 physical RAM bytes; BIOS reads of
-inherited bytes before their first post-entry write occurred in 110 cases. Repeating the tracking
-with broad controller input added no addresses to either owner-specific union. These counts describe
-observed accesses, not which bytes are required; perturbation results above provide the dependency
-evidence.
+Authentic-state access tracking found at least one cartridge read-before-write in every one of the
+124 BIOS/cartridge cases; the combined cartridge-owned union covered all 1,024 physical RAM bytes.
+BIOS reads of inherited bytes before their first post-entry write occurred in 118 cases. Repeating
+tracking with controller input added no addresses to either owner union. These counts describe
+observed accesses, not which values are required; perturbation results above provide the dependency
+evidence. The `$00CE` and `$021F` tests show software sensitivity in 13 and two titles respectively,
+but do not by themselves establish the bytes' meaning, initialization source, or physical power-on
+values. No common BIOS initialization requirement is inferred from them.
 
 ## Interpretation
 
 The earlier page sweep is now substantially narrower:
 
-- `$000-$03F` alone reproduces all 106 execution differences seen when the entire zero page was
+- `$000-$03F` alone reproduces all 114 execution differences seen when the entire zero page was
   cleared. Later zero-page quarters still contain title-specific dependencies, but they do not add
   another affected case to that total.
 - The stack-page result is entirely localized to `$100-$13F` and Time Warrior. Clearing
   `$140-$1FF` produced no compared difference in this sweep.
-- Page 2 contains several distinct title work areas rather than one isolated common field. Its four
-  quarters affect 13, 9, 3, and 1 title respectively.
+- Page 2 contains several distinct title work areas rather than one isolated common field. The chunk,
+  byte, and four-byte tables show their title-specific effects across the whole corpus.
 - Page 3 is also title-specific. Its four quarters affect Punk Boy, Flying Goblin, and combinations
-  of Flying Goblin, Insect War, World Cup Soccer, and Dino Bibo.
+  of Flying Goblin, Insect War, World Cup Soccer, and Dino Bibo. Clearing `$00CE` changes 26 cases,
+  including final-video and VRAM observations in a small subset.
 - Only blocks `00`, `01`, `02`, `03`, `08`, `09`, and `0A` changed the sampled final video in this
   experiment. A zero observed count remains coverage evidence, not proof that a block is irrelevant
   in all later gameplay.
 
-The next efficient step is static/runtime correlation for the `$0CC-$0DF` and page-2 title groups.
-Those later regions are cartridge work areas, not part of the common low-RAM BIOS contract
-established here.
+The 62-cartridge results leave other title-specific `$0CC-$0DF` and page-2 dependencies for
+static/runtime correlation. The effects at `$00CE` and `$021F` are documented as observed
+perturbation sensitivity; their semantics and physical power-on values remain unresolved.
 
 ## Reproduction and limits
 

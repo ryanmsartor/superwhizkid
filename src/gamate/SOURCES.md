@@ -599,14 +599,15 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 ### Authentic BIOS cartridge-entry state sweep
 
-- Local origin: 58 user-supplied cartridges under both recognized BIOS revisions, read in place.
+- Local origin: the 62-cartridge user-supplied collection under both recognized BIOS revisions,
+  read in place.
   Captures were taken at `$6020` before the first cartridge instruction; local state artifacts remain
   gitignored and are not distributed.
 - Method: an independently authored harness captured serialized machine state and readable fields.
-  RAM and serialized VRAM were compared byte-for-byte; no captured image was retained in the repository.
-- Result and use: all 116 cases reached entry. Paired BIOS captures had identical RAM/VRAM; RAM
-  variation across cartridges was confined to the two 16-bit checksum fields. This supports the
-  entry contract in
+  Paired BIOS RAM and VRAM hashes matched for all cases. No captured image was retained in the
+  repository.
+- Result and use: all 124 cases reached entry. Paired BIOS captures had identical RAM/VRAM hashes.
+  The established entry fields and checksum relationship are described in
   [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md) and its conclusion
   that copied state templates are not a clean-room replacement strategy.
 - Limits: this is one instruction boundary in the current emulator, not a physical bus trace.
@@ -614,42 +615,50 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 ### Cartridge-entry VRAM perturbation sweep
 
-- Local origin and method: the same 58-cartridge/two-BIOS matrix was run for 1,000 post-entry frames
+- Local origin and method: the 62-cartridge/two-BIOS matrix was run for 1,000 post-entry frames
   with authentic, zero, `$FF`, alternating-plane, or address-derived entry VRAM; authentic and zero
-  were also tested with broad controller input. Diagnostic read-before-write instrumentation and
+  were also tested with all buttons held. Diagnostic read-before-write instrumentation and
   tests live in a separate diagnostic build. The production `gamate.c` object remained byte-identical
   to its pre-instrumentation version. `tools/gamate-vram-perturbation-summary.py` excludes expected
   VRAM/video changes from execution comparisons; focused tests verify CPU/display read-before-write
   accounting and that display blanking does not count a VRAM fetch.
-- Result and use: authentic and cleared VRAM matched in execution, final video, and final VRAM across
-  all 116 cases in both input modes. Arbitrary nonzero patterns changed execution for seven titles
-  and final video for two. The replacement policy is therefore clear VRAM, not arbitrary VRAM; details
-  and limits are in [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md).
+- Result and use: authentic and cleared VRAM matched execution and final video in all 124 cases for
+  both input conditions. Final VRAM differed in eight no-input cases and matched in every
+  all-buttons-held case. Across the five no-input patterns, nonzero patterns changed execution for
+  seven titles and final video for two; every case had a different final VRAM hash under at least one
+  pattern. The replacement policy is clear VRAM, not arbitrary VRAM; details and limits are in
+  [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md).
 - Limits and legal boundary: deterministic 1,000-frame emulator paths are not exhaustive or physical
   power-on evidence. Reports retain derived counts and hashes, not ROM, BIOS, VRAM, or framebuffer
   payloads.
 
 ### Cartridge-entry RAM perturbation and access sweep
 
-- Local origin and method: the 58-cartridge/two-BIOS, 1,000-frame experiment compared authentic RAM
-  with zero, `$FF`, selected-field, page, block, and byte perturbations, then traced pre-entry writers,
-  post-entry reads/writes, and selected phase changes. Diagnostic-only hooks classify reads before
-  each byte's first write by cartridge, BIOS, or other instruction without recording RAM values.
-  Focused tests cover owner attribution and read/write accounting; production objects remained
-  unchanged. `tools/gamate-ram-perturbation-summary.py` compares aggregate observations while
-  excluding only the expected final-RAM hash change.
-- Result and use: blanket fills and callback/checksum-only initialization fail across the corpus.
-  A semantic low-RAM policy using the protection reply, reset-fill sentinels, callback flag, IRQ counter,
-  and nonzero `$F030` state matched the tested unattended and broad-input matrices. Every case had
-  cartridge reads before first writes; their union covered all 1,024 physical bytes. BIOS reads before
-  first post-entry writes occurred in 110 cases, and broad-input tracking added no addresses to either
-  owner union. The full block, byte, phase, and access results are in
+- Local origin and method: the 62-cartridge/two-BIOS, 1,000-frame corpus was tested with full-RAM,
+  block, chunk, byte, four-byte, inverse, semantic-field, and phase perturbations. The semantic
+  low-RAM policy was checked with no input and all buttons held (`GAMATEBOOT_PRESS="1:255:1000"`).
+  Filtered watches traced selected RAM accesses without retaining RAM values. Diagnostic-only hooks
+  classify reads before each byte's first write by cartridge, BIOS, or other instruction without
+  recording RAM values. Focused tests cover owner attribution and read/write accounting; production
+  objects remained unchanged.
+  `tools/gamate-ram-perturbation-summary.py` compares aggregate observations while excluding only
+  the expected final-RAM hash change.
+- Result and use: clearing all WRAM or filling it with `$FF` changed 114 and 110 of 124 executions.
+  The semantic low-RAM policy using the protection reply, reset-fill sentinels, callback flag, IRQ
+  counter, and nonzero `$F030` state matched all 124 cases with no input and all 124 with all buttons
+  held. Every case had cartridge reads before first writes; their union covered all 1,024 physical
+  bytes. BIOS reads before first post-entry writes occurred in 118 cases. Controller-input tracking
+  added no addresses to either owner union. The full block, byte, phase, and access results are in
   [`../../docs/BIOS_ENTRY_RAM_ANALYSIS.md`](../../docs/BIOS_ENTRY_RAM_ANALYSIS.md); replacement
   implications are summarized in
   [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md).
+  Clearing `$00CE` changed 26 cases, with final-video and final-VRAM differences in two and three
+  cases; clearing `$021F` changed four cases without final-video or final-VRAM differences. Their
+  meanings and initialization sources remain unresolved.
 - Limits and legal boundary: the experiments establish tested sufficiency, not exhaustive gameplay
   coverage or physical RAM behavior. Local BIOS/ROM inputs remained read-only; no memory images,
-  firmware-derived initialization template, or payload data were published.
+  firmware-derived initialization template, or payload data were published. Reports retain derived
+  counts and hashes, not ROM, BIOS, VRAM, framebuffer, or RAM payloads.
 
 ### Post-entry BIOS runtime API analysis
 
