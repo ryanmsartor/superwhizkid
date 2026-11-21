@@ -623,9 +623,18 @@ geometry, and sometimes had no observed effect. `$030=0` changed geometry in GP 
 Incantational Couple calls, but not in the other sampled contexts. Both BIOS revisions agreed on
 every tested perturbation.
 
+Address watches in the five varied titles and both Incantational Couple contexts show a repeatable
+read-count shape under both BIOSes: `$006/$007` are each read twice as often as `$008/$009`, with
+equal counts within each byte pair; `$023`, `$028`, and `$030` are read once, twice, and twice,
+respectively. None of these seven addresses is written by the service in those calls. Together with
+the independent address perturbations, this is consistent with `$006-$007` and `$008-$009` serving
+as two caller-supplied 16-bit cartridge-address words. Their precise data roles remain
+caller-dependent; the three single-byte inputs still have no established shared meaning.
+
 This confirms these bytes are caller-owned inputs in the tested calls, not a universal parameter
-schema. It does not resolve their per-title meanings or stream grammar. The probe retained only
-derived counts, hashes, coverage, and ROM addresses; source payloads were not printed or retained.
+schema. It does not resolve their per-title meanings or stream grammar. The analysis uses only
+derived counts, hashes, coverage, and ROM addresses; RAM-watch final values and source payloads are
+omitted.
 
 ### IRQ-gated counter wait: `$F003`
 
