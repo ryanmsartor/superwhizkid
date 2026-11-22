@@ -1037,6 +1037,22 @@ into the repository, build output, tests, or releases.
   signed left shift in the decimal-SBC wrap calculation; it was replaced with an explicit eight-bit
   conversion and the exhaustive decimal test's independent reference calculation was updated to
   express the same defined wrap. Normal and debug suites retain the same exhaustive results.
+- A follow-up local `gprof` profile of the production machine core used 5,000 unattended frames
+  including boot in Brick Blaster and World Cup Soccer with the UMC BIOS. `gamateRunClocks`
+  accounted for approximately 61% and 55% of sampled time, respectively; sampling and compiler
+  inlining limit the attribution. The event loop now bounds the step by other device events before
+  calculating the next sample deadline, and divides only if that step can reach the sample. Event
+  processing order and serialized state remain unchanged. Batched-versus-single-clock tests cover
+  simultaneous device events, pending NMI, in-flight UART, sample phases, and sample rates from 1
+  through the maximum 32-bit value. Sixteen 1,000-post-entry-frame comparisons across eight titles,
+  both BIOSes, the 32/64/128/256/512 KiB size classes, and the 4-in-1 matched full-frame
+  video/audio hashes, activity counts, PC, and serialized-state hashes. Baseline and optimized
+  1,000-frame reports also matched byte-for-byte across the 62-cartridge/two-BIOS sweep; both
+  completed 124/124 cases. After correctness checks, seven alternating uninstrumented
+  5,000-post-entry-frame benchmark pairs with no input and the UMC BIOS measured
+  median times of 4.2326 versus 4.2012 seconds for Brick Blaster and 4.3087 versus 4.2623 for World
+  Cup Soccer, improvements of 0.74% and 1.08%. These small gains are host-specific and do not
+  establish ARM performance. This work used local experiments and no external emulator source.
 - A frontend presentation pass used the purpose-written libretro integration workload, which cycles
   raw output, every ghosting level, every redraw-flicker level, live option transitions, palettes,
   and contrast states. The filtered renderer now has separate flicker-only and ghosting-only loops;

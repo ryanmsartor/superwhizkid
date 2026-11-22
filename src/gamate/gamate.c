@@ -649,12 +649,6 @@ void gamateRunClocks(struct Gamate* g, unsigned clocks) {
 		}
 		step = earlierEvent(step, g->ay.noiseCounter, g->ayNoisePeriod);
 		step = earlierEvent(step, g->ay.envelopeCounter, g->ayEnvelopePeriod);
-		if (g->sampleRate) {
-			uint64_t remaining = g->samplePhase < 4433000 ? 4433000 - g->samplePhase : 0;
-			uint64_t untilSample = remaining ?
-				(remaining + g->sampleRate - 1) / g->sampleRate : 1;
-			if (untilSample < step) step = (unsigned) untilSample;
-		}
 		if (g->irqClocks < IRQ_PERIOD) {
 			step = earlierEvent(step, g->irqClocks, IRQ_PERIOD);
 		}
@@ -663,6 +657,14 @@ void gamateRunClocks(struct Gamate* g, unsigned clocks) {
 		}
 		if (g->frameClocks < GAMATE_CLOCKS_PER_FRAME) {
 			step = earlierEvent(step, g->frameClocks, GAMATE_CLOCKS_PER_FRAME);
+		}
+		// Avoid dividing unless the next device interval actually reaches a sample boundary.
+		if (g->sampleRate && (g->samplePhase >= 4433000 ||
+				g->samplePhase + (uint64_t) step * g->sampleRate >= 4433000)) {
+			uint64_t remaining = g->samplePhase < 4433000 ? 4433000 - g->samplePhase : 0;
+			uint64_t untilSample = remaining ?
+				(remaining + g->sampleRate - 1) / g->sampleRate : 1;
+			if (untilSample < step) step = (unsigned) untilSample;
 		}
 
 		g->masterClocks += step;

@@ -792,6 +792,54 @@ static void testClockBatching(void) {
 	gamateFree(&single);
 }
 
+static void testSampleEventBatching(void) {
+	static const unsigned rates[] = { 1, 44100, 48000, 192000, 4433000, 8866000, UINT32_MAX };
+	uint8_t bios[GAMATE_BIOS_SIZE] = { 0 }, rom[0x4000] = { 0 };
+	for (size_t r = 0; r < sizeof(rates) / sizeof(*rates); r++) {
+		for (unsigned phase = 0; phase < 3; phase++) {
+			struct Gamate batch, single;
+			gamateInit(&batch);
+			gamateInit(&single);
+			assert(gamateLoad(&batch, rom, sizeof(rom), bios, sizeof(bios)));
+			assert(gamateLoad(&single, rom, sizeof(rom), bios, sizeof(bios)));
+			int16_t batchAudio[2000 * 2] = { 0 }, singleAudio[2000 * 2] = { 0 };
+			configureClockTest(&batch, batchAudio);
+			configureClockTest(&single, singleAudio);
+			gamateSetAudio(&batch, batchAudio, 2000, rates[r]);
+			gamateSetAudio(&single, singleAudio, 2000, rates[r]);
+			batch.samplePhase = single.samplePhase = phase == 0 ? 0 :
+				phase == 1 ? 4432999 : 2 * UINT64_C(4433000) + 1;
+			batch.ay.toneCounter[0] = single.ay.toneCounter[0] = batch.ayTonePeriod[0] - 1;
+			batch.ay.noiseCounter = single.ay.noiseCounter = batch.ayNoisePeriod - 1;
+			batch.lcdClock = single.lcdClock = 161;
+			batch.irqClocks = single.irqClocks = 32767;
+			batch.frameClocks = single.frameClocks = GAMATE_CLOCKS_PER_FRAME - 1;
+			gamateWrite(&batch, 0x4400, 0xA5);
+			gamateWrite(&single, 0x4400, 0xA5);
+			gamateUartReceiveBit(&batch, true);
+			gamateUartReceiveBit(&single, true);
+			batch.nmi = single.nmi = true;
+			gamateRunClocks(&batch, 1024);
+			for (unsigned clock = 0; clock < 1024; clock++) gamateRunClocks(&single, 1);
+			assert(batch.audioCount == single.audioCount && batch.audioCount <= 2000);
+			assert(batch.frameDone == single.frameDone);
+			assert(!memcmp(batchAudio, singleAudio, batch.audioCount * 2 * sizeof(*batchAudio)));
+			assert(!memcmp(&batch.diagnostics, &single.diagnostics, sizeof(batch.diagnostics)));
+			size_t stateSize = gamateStateSize(&batch);
+			void* batchState = malloc(stateSize);
+			void* singleState = malloc(stateSize);
+			assert(batchState && singleState);
+			assert(gamateSaveState(&batch, batchState, stateSize));
+			assert(gamateSaveState(&single, singleState, stateSize));
+			assert(!memcmp(batchState, singleState, stateSize));
+			free(batchState);
+			free(singleState);
+			gamateFree(&batch);
+			gamateFree(&single);
+		}
+	}
+}
+
 int main(void) {
 	testMemory();
 	testUart();
@@ -805,5 +853,6 @@ int main(void) {
 	testCpuBusAccesses();
 	testAudio();
 	testClockBatching();
+	testSampleEventBatching();
 	return 0;
 }
