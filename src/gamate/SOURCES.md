@@ -735,10 +735,10 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   fixed bitmap writer; `$F003`, `$F006`, and `$F009` IRQ waits; `$F00C` two-plane VRAM zero-writer
   with an LCD-control input; `$F00F` plane-0 rectangle clear; `$F012` selector-driven eight-row tile
   writer; `$F015` two-plane rectangle copy; `$F018` tile-row blitter; `$F01B` plane-0 row-run
-  stream service; `$F01E` partially bounded two-plane graphics service; `$F021`
-  partially bounded ROM-backed plane-0 graphics service; `$F024` strided RAM initializer; `$F02A`
+  stream service; `$F01E` partially bounded two-plane graphics service; `$F021` plane-0
+  row-literal stream service; `$F024` strided RAM initializer; `$F02A`
   plane-0 fill; `$F02D` plane-1 fill; `$F030` pseudorandom service; and `$F033` packed-BCD formatter.
-  `$F027` remains caller-dependent; `$F00C`'s bit-6 addressing mode, `$F01E`'s stream format, and `$F021`'s source-data format remain unresolved.
+  `$F027` remains caller-dependent; `$F00C`'s bit-6 addressing mode, and `$F01E`'s stream format remain unresolved.
 - Used for: the replacement-ABI contracts, the 1,000-frame sweep default, and the conclusion that
   replacement firmware needs resident service and interrupt code, not just an entry-state jump.
   The linked analysis owns per-service matrices, exact behavior, and probe-specific caveats.
@@ -1170,8 +1170,8 @@ unresolved stream format are corrected there.
   - Instrumentation: a diagnostic-only LCD port-write callback (`gamateSetLcdDiagnosticWatch`,
     compiled only with `GAMATE_ACCESS_DIAGNOSTICS`) was added to expose the register/value
     sequence written to `$5000-$5007`.
-  - Checker: `tests/gamatebiosf01b.c` (CMake target `gamatebiosf01b`, linked only against the
-    diagnostics library) is an independently written model. It checks:
+  - Checker: `tests/gamatebiosrowstream.c` (CMake target `gamatebiosrowstream`, service `F01B`;
+    linked only against the diagnostics library) is an independently written model. It checks:
     - the complete LCD port-write sequence;
     - A/X/Y/S and the status register;
     - RAM writes below `$400` outside the stack page;
@@ -1195,6 +1195,8 @@ unresolved stream format are corrected there.
     1,628 master clocks).
   - Synthetic cases: all 960 cases matched under both BIOS revisions. These included up to 4 Y
     wraps, every `$015` bit class, and D-set entry.
+  - Stack use: the service uses at most 2 stack bytes below entry S. This was measured after the
+    checker was generalized; see the `$F021` entry below.
   - Both BIOS revisions behaved identically.
   - The full contract is in
     [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md). It covers:
@@ -1271,6 +1273,10 @@ unresolved stream format are corrected there.
 
 #### `$F021` ROM-backed graphics service
 
+The historical entry below is superseded in part by the
+[executable model entry](#f021-row-literal-stream-executable-model) that follows. Its LCD-flag and
+sparse-mode interpretations, and its unresolved format, are corrected there.
+
 - `$F021` follow-up: the paired balanced-call corpus contains 92 calls, 46 per BIOS across 14
   titles; 66 calls span IRQs. Every call returns A=`$FE`, X=`$00`, and preserves S, while Y varies.
   Paired summaries match except for one IRQ-spanning Volcano Panic call from `$AF24` at frame 350,
@@ -1286,6 +1292,53 @@ unresolved stream format are corrected there.
   across BIOSes, but their whole-RAM hashes differ for unresolved reasons. Methods, measurements,
   and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+
+#### `$F021` row-literal stream executable model
+
+- **Source and status:**
+  - Inputs: the local user-supplied collection (all 62 cartridges, 19 of which call `$F021` in the
+    standard campaigns) and both authentic BIOS revisions, read in place.
+  - Status: execution observations from the independently authored emulator, not physical
+    measurements.
+- **Method:**
+  - Hypothesis: the `$F01B` contract and the shared signature of both services suggested a sibling
+    grammar.
+  - Exploration: synthetic RAM streams with exact LCD port logs, captured through the diagnostic-only
+    LCD write callback, showed the same preamble and row/escape/terminator handling. They also
+    showed that data bytes are written once rather than decoded as value/count pairs.
+  - Checker: the `$F01B` checker was generalized into `tests/gamatebiosrowstream.c` (CMake target
+    `gamatebiosrowstream`, diagnostics library only). Service argument `F021` selects the
+    literal-byte model.
+  - Additional measurement: the checker now records stack depth below entry S for both services.
+  - Validation runs:
+    - the standard four-campaign, 1,000-frame corpus over all 62 cartridges and both BIOSes, using
+      I-masked and authentic-interrupt replays;
+    - batched synthetic streams in RAM and in the private in-memory ROM copy, with random entry
+      registers, `$015` values, and D-set entry.
+- **Result:**
+  - Authentic corpus: all 406 calls, 203 per BIOS in 19 titles, matched with zero mismatches,
+    including exact timing.
+  - Unmasked replays: all calls entered with I clear, and 280 spanned interrupts. Every call
+    produced the same port sequence, registers, and status, with only handler time added.
+  - Synthetic cases: all 450 cases matched under both BIOSes.
+  - Stack use: both row-stream services use at most 2 stack bytes below entry S.
+  - The contract, including the literal timing term of 66 master clocks per byte and the absence of
+    an `$01A` write, is in
+    [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+- **Corrections:**
+  - The earlier `$015` flag mapping and the bit-6 "sparse addressing" interpretation were probe
+    artifacts. `$015` is written verbatim to LCD register 1.
+  - The `$000-$001` XOR results follow from pointer redirection.
+  - The earlier inventory missed five caller titles.
+- **Limits and legal boundary:**
+  - Timing reflects the emulator's validated CPU and bus model.
+  - D-set behavior lies outside all authentic calls.
+  - Non-terminating streams are not part of the contract.
+  - The model was derived from port logs, counts, timing, and equality comparisons. No BIOS
+    instructions were reconstructed.
+  - No BIOS, ROM, stream, RAM, or VRAM payload was retained or published.
+  - BIOS and ROM files remained read-only.
+  - No external emulator source was consulted or copied.
 
 #### Shared clean-room boundary
 

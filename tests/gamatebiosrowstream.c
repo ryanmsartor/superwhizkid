@@ -1,14 +1,16 @@
 /* Copyright (c) 2026 Ry
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
-/* Diagnostic-only checker for the observed BIOS $F01B row-run stream contract. It compares BIOS
- * execution with an independent behavioral model at LCD-port granularity.
+/* Diagnostic-only checker for the observed BIOS $F01B row-run and $F021 row-literal stream
+ * contracts. It compares BIOS execution with an independent behavioral model at LCD-port
+ * granularity. The two services share their LCD preamble, row commands, escape, and terminator;
+ * $F01B decodes value/count runs, while $F021 writes each data byte once.
  *
- * corpus mode runs the standard post-entry window; at every $F01B entry it replays a copy of the
+ * corpus mode runs the standard post-entry window; at every service entry it replays a copy of the
  * machine with I set and checks the call, then replays a second copy with the authentic interrupt
  * state to confirm that interrupts add only handler time. The original machine continues
  * unchanged.
- * stdin mode snapshots the first $F01B entry and replays purpose-written synthetic streams, one
+ * stdin mode snapshots the first service entry and replays purpose-written synthetic streams, one
  * per line: [@LCD] [!PPAAXXYY] [%POINTER] HEX... Pointers in cartridge space place the stream in
  * the private in-memory ROM copy, which is restored after the case.
  *
@@ -27,8 +29,12 @@ enum { MAX_PORTS = 1 << 18, BASE_ROW = 0xE6, CLEAR_ROWS = 25, TERMINATOR = 0xFE,
 /* Clock terms fitted from synthetic streams and checked against every authentic call. */
 enum {
 	BASE_CLOCKS = 15362, ROW_CLOCKS = 140, PAIR_CLOCKS = 134, REPEAT_CLOCKS = 18,
-	CROSSING_CLOCKS = 2, WRAP_CLOCKS = 8,
+	LITERAL_CLOCKS = 66, CROSSING_CLOCKS = 2, WRAP_CLOCKS = 8,
 };
+
+/* Selected service: false for $F01B value/count runs, true for $F021 literal bytes. */
+static bool literal;
+static uint16_t entry;
 
 struct Ports {
 	uint8_t regs[MAX_PORTS], values[MAX_PORTS];
@@ -46,12 +52,13 @@ struct Model {
 struct Result {
 	bool returned, interrupted, ports, registers, status, ram, peripherals, clocks;
 	long long clockDelta;
+	unsigned stackDepth;
 };
 
 struct Totals {
 	unsigned long calls, returned, interrupted, ports, registers, status, ram, peripherals, clocks;
 	unsigned long romStreams, ramStreams, maxPairs, maxRunBytes, maxRows, maxWraps, maxCrossings;
-	unsigned long overflowCalls, decimalEntry;
+	unsigned long overflowCalls, decimalEntry, maxStackDepth;
 	unsigned long openEntry, openReturned, openSpanned, openPorts, openRegisters, openExtraMax;
 };
 
@@ -148,9 +155,12 @@ static void model(const struct Gamate* g, struct Model* m) {
 				offset = peek(g, (uint16_t) (pointer + ++index));
 				break;
 			}
-			uint8_t count = peek(g, (uint16_t) (pointer + ++index));
-			unsigned length = count ? count : 256u;
-			m->pairs++;
+			unsigned length = 1;
+			if (!literal) {
+				uint8_t count = peek(g, (uint16_t) (pointer + ++index));
+				length = count ? count : 256u;
+				m->pairs++;
+			}
 			m->runBytes += length;
 			m->lastValue = value;
 			for (unsigned i = 0; i < length; i++) emit(&m->ports, 7, value);
@@ -163,7 +173,8 @@ static void model(const struct Gamate* g, struct Model* m) {
 	m->wraps = index >> 8;
 	for (unsigned i = 0; i <= index; i++) m->crossings += (pointer & 0xFF) + (i & 0xFF) > 0xFF;
 	m->clocks = BASE_CLOCKS + (uint64_t) ROW_CLOCKS * m->rows + (uint64_t) PAIR_CLOCKS * m->pairs +
-		(uint64_t) REPEAT_CLOCKS * (m->runBytes - m->pairs) +
+		(uint64_t) REPEAT_CLOCKS * (m->runBytes - m->pairs) * !literal +
+		(uint64_t) LITERAL_CLOCKS * m->runBytes * literal +
 		(uint64_t) CROSSING_CLOCKS * m->crossings + (uint64_t) WRAP_CLOCKS * m->wraps;
 }
 
@@ -188,7 +199,11 @@ static struct Result check(struct Gamate* g, struct Model* m, bool events) {
 	captured.count = 0;
 	gamateResetRamDiagnostics(g);
 	gamateSetLcdDiagnosticWatch(g, captureLcdWrite, &captured);
+	uint8_t entryS = g->cpu.s;
 	while (!r.returned && g->masterClocks - start < limit) {
+		if ((uint8_t) (entryS - g->cpu.s) > r.stackDepth && g->cpu.s < entryS) {
+			r.stackDepth = (uint8_t) (entryS - g->cpu.s);
+		}
 		uint16_t source = g->cpu.pc;
 		uint8_t opcode = peek(g, source);
 		unsigned cycles = gamateCpuStep(g);
@@ -240,6 +255,7 @@ static void tally(struct Totals* t, const struct Result* r, const struct Model* 
 	t->ramStreams += pointer < 0x2000;
 	t->overflowCalls += m->overflow;
 	t->decimalEntry += (inP & 0x08) != 0;
+	if (r->stackDepth > t->maxStackDepth) t->maxStackDepth = r->stackDepth;
 	if (m->pairs > t->maxPairs) t->maxPairs = m->pairs;
 	if (m->runBytes > t->maxRunBytes) t->maxRunBytes = m->runBytes;
 	if (m->rows > t->maxRows) t->maxRows = m->rows;
@@ -251,10 +267,12 @@ static void printTotals(const char* bios, const char* title, const struct Totals
 	printf("%s\t%s\tcalls=%lu\treturned=%lu\tinterrupted=%lu\tport_mismatch=%lu\t"
 		"register_mismatch=%lu\tstatus_mismatch=%lu\tram_mismatch=%lu\tperipheral_mismatch=%lu\t"
 		"clock_mismatch=%lu\trom_streams=%lu\tram_streams=%lu\tmax_pairs=%lu\tmax_run_bytes=%lu\t"
-		"max_rows=%lu\tmax_wraps=%lu\tmax_crossings=%lu\toverflow_calls=%lu\tdecimal_entry=%lu\n",
+		"max_rows=%lu\tmax_wraps=%lu\tmax_crossings=%lu\toverflow_calls=%lu\tdecimal_entry=%lu\t"
+		"max_stack_depth=%lu\n",
 		bios, title, t->calls, t->returned, t->interrupted, t->ports, t->registers, t->status,
 		t->ram, t->peripherals, t->clocks, t->romStreams, t->ramStreams, t->maxPairs,
-		t->maxRunBytes, t->maxRows, t->maxWraps, t->maxCrossings, t->overflowCalls, t->decimalEntry);
+		t->maxRunBytes, t->maxRows, t->maxWraps, t->maxCrossings, t->overflowCalls, t->decimalEntry,
+		t->maxStackDepth);
 }
 
 static void maskInterrupts(struct Gamate* g) {
@@ -272,7 +290,7 @@ static int corpus(struct Gamate* g, struct Gamate* replay, struct Model* m,
 		while (!g->frameDone) {
 			unsigned cycles = gamateCpuStep(g);
 			gamateRunClocks(g, cycles * 2);
-			if (g->cpu.pc != 0xF01B) continue;
+			if (g->cpu.pc != entry) continue;
 			*replay = *g;
 			maskInterrupts(replay);
 			uint16_t pointer = (uint16_t) (replay->ram[0] | replay->ram[1] << 8);
@@ -330,7 +348,7 @@ static uint8_t* streamByte(struct Gamate* g, uint16_t address) {
 static int synthetic(struct Gamate* g, const struct Gamate* base, struct Model* m) {
 	static char line[1 << 18];
 	static uint8_t stream[1 << 16], saved[1 << 16];
-	bool events = getenv("GAMATEBIOSF01B_EVENTS") != NULL;
+	bool events = getenv("GAMATEBIOSROWSTREAM_EVENTS") != NULL;
 	struct Totals t = { 0 };
 	while (fgets(line, sizeof(line), stdin)) {
 		*g = *base;
@@ -372,10 +390,16 @@ static int synthetic(struct Gamate* g, const struct Gamate* base, struct Model* 
 }
 
 int main(int argc, char** argv) {
-	if (argc < 4 || (strcmp(argv[3], "corpus") && strcmp(argv[3], "stdin"))) {
-		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin corpus [frames]|stdin\n", argv[0]);
+	if (argc < 5 || (strcmp(argv[1], "F01B") && strcmp(argv[1], "F021")) ||
+			(strcmp(argv[4], "corpus") && strcmp(argv[4], "stdin"))) {
+		fprintf(stderr, "usage: %s F01B|F021 gamate_bios.bin cartridge.bin corpus [frames]|stdin\n",
+			argv[0]);
 		return 2;
 	}
+	literal = !strcmp(argv[1], "F021");
+	entry = literal ? 0xF021 : 0xF01B;
+	argc--;
+	argv++;
 	size_t biosSize, romSize;
 	uint8_t* bios = readFile(argv[1], &biosSize);
 	uint8_t* rom = readFile(argv[2], &romSize);
@@ -418,11 +442,11 @@ int main(int argc, char** argv) {
 			while (!g->frameDone && !found) {
 				unsigned cycles = gamateCpuStep(g);
 				gamateRunClocks(g, cycles * 2);
-				found = g->cpu.pc == 0xF01B;
+				found = g->cpu.pc == entry;
 			}
 		}
 		if (!found) {
-			fprintf(stderr, "no $F01B call in the standard window\n");
+			fprintf(stderr, "no $%04X call in the standard window\n", entry);
 			return 1;
 		}
 		*base = *g;

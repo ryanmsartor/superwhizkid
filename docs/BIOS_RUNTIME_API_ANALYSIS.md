@@ -664,8 +664,9 @@ was saved or published.
 
 `$F01B` is fully defined for every observed calling context and for the synthetic edge classes
 listed below. It clears a fixed 25-row band of plane 0, then decodes a caller-supplied row/run
-stream into LCD port writes. An independent model in `tests/gamatebiosf01b.c` reproduces the BIOS's
-LCD port-write sequence, returned registers and status, RAM side effects, and exact elapsed clocks.
+stream into LCD port writes. An independent model in `tests/gamatebiosrowstream.c` (service
+argument `F01B`) reproduces the BIOS's LCD port-write sequence, returned registers and status, RAM
+side effects, stack use, and exact elapsed clocks.
 
 #### Contract
 
@@ -705,6 +706,8 @@ Consequences:
 Returns and side effects:
 
 - A=`$FE` and X=`$00`. Y is the low byte of the terminator's stream index. S is restored.
+- The service uses at most 2 stack bytes below its entry S, not counting the caller's return
+  address.
 - `$001` becomes the entry value plus `index >> 8`, where `index` is the terminator's stream
   index. It is written only when the index wrapped past `$FF`.
 - `$01A` is written only if at least one value/count pair was decoded. It then holds the last
@@ -913,45 +916,132 @@ full address-sequence equality is not claimed for those comparisons. Both bytes 
 influential and rewritten, but these low-bit tests do not establish whether they encode a pointer,
 descriptor, or mutable parser state. Their roles and the stream grammar remain unresolved.
 
-### ROM-backed single-plane graphics service: `$F021`
+### Plane-0 row-literal stream service: `$F021`
 
-The 1,000-frame inventory records 46 `$F021` calls per BIOS across 14 titles. The paired
-balanced-call corpus contains 92 calls. Every call returns A=`$FE`, X=`$00`, and preserves S; Y
-varies. Sixty-six calls span an IRQ, so corpus timing and memory-effect summaries include callback
-work. The paired reports match in every field except `ram_changed` for one IRQ-spanning Volcano
-Panic call from `$AF24` at frame 350 (12 versus 13 changed bytes). Because that call spans an IRQ,
-the extra RAM change cannot be attributed to `$F021`.
+`$F021` is fully defined for every observed calling context and for the synthetic edge classes
+listed below. It is the literal-byte sibling of [`$F01B`](#plane-0-row-run-stream-service-f01b):
+the LCD preamble, row commands, escape, terminator, pointer handling, return registers, and status
+rule are the same, but each data byte is written once instead of being decoded as a value/count
+pair. The independent model in `tests/gamatebiosrowstream.c` (service argument `F021`) reproduces
+the BIOS's LCD port-write sequence, returned registers and status, RAM side effects, stack use, and
+exact elapsed clocks.
 
-Controlled first-call probes in Volcano Panic and Famous 7 set I and were run under both BIOS
-revisions. They produce plane-0 VRAM writes only, with no AY, mapper, UART, IRQ, or NMI effects.
-Volcano Panic takes 25,174 clocks and issues 933 VRAM writes, covering 800 unique bytes in
-`$1CC0-$1FDF`; Famous 7 takes 19,882 clocks and issues 860 writes over the same 800-byte coverage.
-Their LCD-write counts are 998 and 919, respectively, and their returned Y values are `$93` and
-`$44`. The ROM-address traces contain 176 reads in Volcano Panic and 70 in Famous 7. The access maps
-and all other reported summaries match between BIOS revisions in these probes, but whole-RAM hashes
-differ; the cause is unresolved. These per-title times are examples, not a timing formula.
+#### Contract
 
-In the Volcano Panic context, `$000-$001` are read and preserved. Bit-0 XOR perturbations change
-the ROM-read and output profiles: XORing `$000` changes Y from `$93` to `$94`, changes the ROM-read
-count from 176 to 177, and changes the write profile from 933 writes over 800 addresses to 934 over
-820 addresses. XORing `$001` produces 567 ROM reads (539 unique offsets), 1,189 VRAM writes over
-800 addresses, and 42,348 clocks. This pair is caller-supplied control or source data; its exact
-format and address transformation remain unknown. Changing entry A, X, or Y does not change the
-tested output or ROM-read profile. Changing the entry VRAM pointer to `$0000` or `$1FFF` also leaves
-the output unchanged in this context. Scroll values are preserved.
+Inputs:
 
-RAM `$015` is read and preserved, and its value affects LCD flags. In Volcano Panic, tested values
-`$01`, `$10`, `$20`, and `$80` produce output flags `$20`, `$08`, `$04`, and `$10`; `$02`, `$04`,
-and `$08` produce `$00`, while `$3F` produces `$2C`. Setting bit 6 selects a distinct sparse
-addressing pattern: in both Volcano Panic and Famous 7, plane-0 writes cover 56 addresses in
-`$0000-$03A0` and `$1CC0-$1FE0` at `$20` intervals, and the final LCD flags are `$02`. The final
-VRAM pointer is `$0140` in Volcano Panic and `$01A0` in Famous 7, so this mode's full meaning is not
-established.
+- RAM `$000-$001` is a little-endian pointer to the stream. The stream may be in cartridge ROM or
+  RAM, and it is read sequentially from `pointer + i`. `$000` is never written.
+- RAM `$015` is written verbatim to LCD register 1.
+- Entry A, X, Y, and C are ignored. Entry D affects row arithmetic exactly as in `$F01B`; every
+  authentic call enters with D clear.
 
-These are emulator observations from controlled, authentic call contexts, not physical-hardware
-measurements. The service's source-data grammar, selector-to-ROM-address mapping, return-Y rule,
-status-flag contract, and exact timing remain unresolved. ROM traces retained addresses only;
-graphics values and BIOS/ROM payloads were not retained.
+LCD port sequence:
+
+1. Write `$015` to register 1.
+2. Clear rows `$E6-$FE`. For each row, write register 5 = row, register 4 = `$00`, then 32 writes of
+   `$00` to register 7.
+3. Decode the stream:
+   - Byte 0 is a row offset. Offset `$FE` terminates the stream.
+   - Any other offset selects absolute row `$E6 + offset`, computed with carry clear. The service
+     writes register 5 = row, then register 4 = `$00`.
+   - Each following byte other than `$FF` is written once to register 7. These bytes may include
+     `$FE`.
+   - `$FF` is an escape: the next byte is a new absolute row offset, or `$FE` to terminate.
+
+The value `$FF` therefore cannot be written as data. All output goes to plane 0, starting at
+column 0 of each selected row. Register-1 bits such as increment-by-row change how the LCD applies
+the same port sequence; the BIOS does not alter the sequence.
+
+Returns and side effects:
+
+- A=`$FE` and X=`$00`. Y is the low byte of the terminator's stream index. S is restored.
+- `$001` advances by `index >> 8` and is written only when the index wraps.
+- No other RAM below `$400` is written outside the stack page. Unlike `$F01B`, `$F021` does not
+  write `$01A`.
+- The service uses at most 2 stack bytes below its entry S, not counting the caller's return
+  address.
+- No AY or bank-register writes occur, the UART is not clocked, UART transmit state is unchanged,
+  and the scroll registers are not written.
+
+Status:
+
+`P_out = (P_in & $1C) | $23 | V`
+
+V is the signed overflow of the last row addition, computed exactly as in `$F01B`.
+
+Timing in master clocks, with CPU cycles in parentheses:
+
+```text
+15362 (7681)
++ 140 (70) * row_commands
++  66 (33) * literal_bytes
++   2 (1)  * crossing_reads
++   8 (4)  * Y_wraps
+```
+
+- `literal_bytes` counts bytes written after row commands.
+- Crossing reads and Y wraps are defined as in `$F01B`.
+- `$015` and decimal mode do not affect timing.
+- Interrupts add only handler time.
+
+Interrupts:
+
+- The service does not mask interrupts, and authentic calls enter with I clear.
+- An interrupt changes neither the port sequence nor the register and status results. This assumes
+  the game's handler does not use the LCD ports, which held in the corpus.
+
+#### Validation
+
+- **Authentic corpus:**
+  - Coverage: the four standard 1,000-frame input campaigns across all 62 cartridges and both BIOS
+    revisions, 496 runs.
+  - Calls and titles: 406 calls, 203 per BIOS, in 19 titles.
+  - Results: an I-masked replay at every entry had zero port, register, status, RAM, peripheral, or
+    clock mismatches.
+  - Stream properties: every stream was in cartridge ROM. The largest call used 25 row commands,
+    800 literal bytes, 3 Y wraps, and 387 crossing reads. No authentic call entered with D set or
+    produced an overflowing row addition.
+- **Unmasked replay:**
+  - Results: all 406 calls entered with I clear, and 280 spanned interrupts. Every call returned
+    with zero port, register, or status mismatches.
+  - Timing: interrupts added at most 1,918 master clocks of handler time.
+- **Synthetic streams:**
+  - Method: the checker snapshots Volcano Panic's first entry and replays streams under both BIOS
+    revisions.
+  - Coverage:
+    - 150 RAM streams with random entry A, X, Y, P (D clear), and `$015`;
+    - 150 private-copy ROM streams with up to 4 Y wraps and 1,151 crossing reads;
+    - 150 D-set entries.
+  - Edge cases: these include escape-only rows, offset `$FF`, literal `$FE`, row wrap, and
+    overflowing offsets.
+  - Results: every case matches.
+- **Earlier inventory:** that inventory listed 14 caller titles. The broader campaigns also find
+  `$F021` calls in Baseball, Incantational Couple, Legend of Dragon Knight, Pipemania, and the 4-in-1
+  cartridge.
+
+#### Corrections to earlier `$F021` findings
+
+- The `$015` "flag mapping" and bit-6 "sparse addressing pattern" are the same artifacts corrected
+  for `$F01B`. The BIOS writes `$015` verbatim to register 1, and bit 6 is LCD increment-by-row mode
+  applied to an unchanged sequence.
+- The `$000`/`$001` XOR results follow from pointer redirection. An XOR on `$000` moves the start by
+  one byte. An XOR on `$001` moves it by a page.
+- The common `$1CC0-$1FDF` coverage is the fixed 25-row clear.
+- Per-title Y, write counts, and timing follow from stream content through the formula above.
+- The previously unresolved source grammar, ROM mapping, return-Y rule, status flags, and timing are
+  resolved above.
+- Devil Castle's use of both services is explained by their shared preamble and row grammar. They
+  are distinct entry points with different data encodings, not aliases.
+
+#### Limits
+
+- Timing reflects the emulator's validated CPU and bus model, not a separate physical measurement.
+- D-set behavior lies outside all authentic calls and inherits the emulator's decimal arithmetic.
+- Non-terminating streams are not part of the contract.
+- The fixed campaigns do not prove that other titles never call `$F021`.
+- The retained evidence consists of derived counts and purpose-written synthetic streams. No BIOS,
+  ROM, stream, RAM, or VRAM payload was retained or published.
 
 ### Fixed-height tile-run contract: `$F012`
 
