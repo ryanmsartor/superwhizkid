@@ -654,11 +654,119 @@ selector exceeded 31 and no run length was zero. All 30 contexts matched the wri
 measured address traces, stream structure, timing, returned registers, write counts, and VRAM hashes
 matched between BIOS revisions in all 15 title pairs.
 
-This extends the stream grammar beyond the previously inspected callers, but it covers only the
-first authentic call in each title. The precise interleaving of control bytes and graphics-record
-reads, the repeated stream/base triples, and later invocation contexts remain open. The sweep used
-address-only traces and transient local ROM reads to derive counts; no stream or graphics payload
-was saved or published.
+This first-call sweep extended the grammar beyond the previously inspected callers. The executable
+model and broader later-call investigation below resolve its previously open ordering, returns,
+scratch effects and timing. The sweep used address-only traces and transient local ROM reads to
+derive counts; no stream or graphics payload was saved or published.
+
+#### `$F018` executable contract
+
+The diagnostic-only `gamatebiosf018` model reproduces the observed two-pass contract at LCD-port
+granularity. The rules below describe terminating streams whose reads use ordinary memory and do
+not alias the service's mutable scratch or stack. They are execution evidence from the emulator,
+not independent physical measurements.
+
+Inputs and stream:
+
+- `$000-$001` is the little-endian stream pointer. `$006-$007` and `$008-$009` are the plane-0
+  and plane-1 tile bases. `$015` is the cached LCD control byte. Entry A, X, Y and C are not
+  inputs to the graphics operation.
+- The stream consists of rows. A row starts with a row selector, then zero or more
+  `(tile_index, count)` pairs, followed by `$FF`. The next byte is another row selector; `$FE`
+  in that position ends the entire stream. `$FF` is a valid row selector, and `$FE` is a valid
+  tile index; `$FF` is reserved when a tile index is expected.
+- Tile index zero is transparent: it advances the column by `count` and emits nothing. A zero
+  count therefore advances by zero. A nonzero index emits the selected tile `count` times; a zero
+  count emits it 256 times.
+- For each plane, the eight source bytes for tile `t` are read from `base + 8*t` through
+  `base + 8*t + 7`, with 16-bit address wrapping. They are fetched again for each repeated column,
+  not cached. Source graphics and the stream are supplied by the caller.
+- Cartridge reads follow that stream/tile order in each pass. Indexed page crossings add the
+  corresponding same-page dummy read before the effective read. A final cartridge read at the
+  pulled return address is the CPU's RTS dummy read, not stream or tile data.
+
+LCD port sequence:
+
+1. Write `$015 | $40` to LCD register 1, forcing increment-by-row mode.
+2. Process the complete stream once with the first tile base, then restart it with the second.
+   The initial eight-bit column is `$00` on the first pass and `$80` on the second, and it is reset
+   to that value at each row.
+3. For each nontransparent output column, write register 4 = column, register 5 = `(row << 3) &
+   $FF`, and then the tile's eight bytes to register 7. Increment the eight-bit column after each
+   tile. Transparent pairs add their count to the column without issuing LCD writes.
+
+The two passes normally select planes 0 and 1 via register 4 bit 7. This is not a clipping
+guarantee: columns past `$7F` can change that bit, and the column wraps modulo 256. Other register-4
+bits and the forced increment mode are interpreted by the LCD; the service does not constrain the
+stream to the visible 20 columns. With D set, the transparent-column addition uses NMOS decimal
+arithmetic; ordinary per-tile column increments remain binary.
+
+Returns and RAM:
+
+- A returns `$FE`; Y is the low byte of the terminator's stream index; S is restored. X returns
+  `$FF` if any nonzero tile was emitted, otherwise it retains its entry value.
+- `$000` is preserved, and `$001` is the entry high byte plus `terminator_index >> 8`, modulo
+  256. Both bytes are written even for an immediately terminating stream.
+- `$018` and `$019` are written when a row exists. At return they contain, respectively, the
+  final second-pass column and the final row selector.
+- `$002-$003`, `$01A` and `$01B` are written when a pair exists. At return, `$002-$003` is the
+  second tile base with its high byte incremented by `last_tile_index >> 5`, `$01A` is
+  `(last_tile_index << 3) & $FF`, and `$01B` is the last count for a transparent pair or zero
+  for an opaque pair. Bytes not written retain their entry values.
+- No other non-stack RAM is written in the tested calls. The largest observed masked stack depth
+  was six bytes below entry S, excluding the caller's return address. No AY or bank-register
+  writes or UART clocks were observed; UART transmit state and scroll registers were preserved.
+
+Status, using the emulator's stored status-byte representation:
+
+`P_out = (P_in & $1C) | $23 | V`
+
+I and D are preserved, N is clear, and Z and C are set. Bit 4 is the emulator's stored,
+non-physical B bit. V begins with entry V and is updated in stream order across both passes:
+
+- A transparent pair sets V to the NMOS signed-overflow result of adding its count to the current
+  column with carry clear. D selects decimal addition and its NMOS overflow behavior.
+- A nonzero tile index of `$20` or greater clears V. A nonzero index below `$20` leaves V
+  unchanged. Rows with no pairs do not change V.
+
+Timing, in master clocks, for a call without an interrupt:
+
+```text
+144 + 260*rows + 472*pairs + 64*sum(tile_index >> 5)
+    + 660*opaque_columns + 4*stream_crossings + 16*stream_wraps
+    + 2*tile_crossing_reads
+```
+
+`rows`, `pairs`, and `sum(tile_index >> 5)` count the stream once, not once per pass.
+`opaque_columns` sums nonzero-tile counts, interpreting zero as 256. `stream_wraps` is
+`terminator_index >> 8`; `stream_crossings` counts each stream index `i` through the terminator
+for which `(pointer & $FF) + (i & $FF) > $FF`. `tile_crossing_reads` counts, across both passes
+and every repeated tile, the individual source-byte indexes `j = 0..7` for which
+`(base & $FF) + ((tile_index << 3) & $FF) + j > $FF`. The high-byte tile adjustment does not
+change that crossing test. The decimal flag and `$015` do not independently change these clock
+terms.
+
+#### Validation and limits
+
+- The four standard 1,000-frame input campaigns covered all 62 cartridges under both BIOSes.
+  At every reached entry the checker replayed a snapshot with I set: 326 calls, 163 per BIOS, in
+  25 titles. All returned with zero ordered cartridge-read, LCD-port, register/status, non-stack
+  RAM, checked-peripheral, or clock mismatches. No entry had D set.
+- Replays with the original interrupt state also matched all port and return-state checks; 246
+  spanned an IRQ or NMI. Elapsed time was nonnegative relative to the masked model, and calls
+  without an interrupt had identical timing. This does not establish behavior when a handler
+  itself changes the stream, scratch memory or LCD ports.
+- Under both BIOSes and in two title contexts, `selftest` passed 1,373 cases covering all tile
+  indices, row selectors, LCD-control values, count bytes and source low bytes, plus zero-page and
+  other RAM sources and multi-page streams. `selftest-open` passed 1,280 cases covering all entry
+  status bytes with pending interrupts cleared for the short synthetic calls. `selftest-flags`
+  passed all 65,536 pairs of transparent counts in each of binary and decimal mode. An additional
+  1,200 seeded varied streams matched each BIOS in Tornado.
+- The model checks ordinary RAM, cartridge and BIOS reads; it explicitly rejects memory-mapped
+  I/O and mutable scratch or stack aliases as sources. No claim is made for those aliases,
+  unterminated streams, unobserved callback interference, or every possible future game path.
+  The BIOS/ROM files remained read-only; synthetic ROM contents existed only in a private copy.
+  Comparisons retained derived results rather than firmware, cartridge or graphics payload.
 
 ### Plane-0 row-run stream service: `$F01B`
 

@@ -1004,6 +1004,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 #### `$F018` cross-corpus command-stream structure
 
+The first-call findings below are extended by the executable model entry that follows; their stated
+open questions are addressed there for the tested memory domains.
+
 - Source and status: the local user-supplied collection of 15 titles with observed `$F018` calls and
   both authentic BIOS revisions, read in place. These are execution observations from the
   independently authored emulator, not physical-hardware measurements.
@@ -1025,6 +1028,43 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   no ROM/BIOS bytes, stream contents, or graphics payload were written to reports, files, or the
   repository. No BIOS or cartridge code was copied, and no external emulator source code was
   consulted or copied.
+
+#### `$F018` synthetic replay follow-up
+
+- Source and status: both authentic BIOS revisions and the local user-supplied cartridges, read in
+  place and executed by this project's independently authored emulator. These are emulator
+  observations, not physical measurements.
+- Method: `tests/gamatebiosf018.c`, linked only to the diagnostic library, replays entry snapshots
+  against an independently authored behavioral model. It compares ordered cartridge read addresses
+  including dummy reads, LCD port writes, register/status results, non-stack RAM write coverage
+  and values, selected peripheral effects and clocks.
+  `corpus` runs the four standard 1,000-frame campaigns on all 62 cartridges and both BIOSes;
+  three initial no-input probes were included without rerunning them. Every entry was replayed
+  with interrupts masked and with its authentic interrupt state. After address-order checking was
+  added, the observed caller/campaign combinations were replayed for that new comparison.
+  `selftest`, `selftest-open`, and `selftest-flags` generate purpose-written streams and tile
+  patterns, including in the private in-memory ROM copy, which is restored afterwards. The
+  previously documented Visual6502 and Bruce Clark decimal references informed the decimal-mode
+  model, which was checked against both BIOS revisions.
+- Result: 326 authentic calls in 25 titles (163 per BIOS) matched the masked model, including
+  elapsed clocks; 246 unmasked replays spanned interrupts, and all 326 matched port and return
+  state. The largest observed masked stack depth was six bytes below entry S. In two title
+  contexts, each BIOS passed 1,373 boundary cases, including zero-page sources, 1,280
+  status-byte/interrupt-mask cases, and
+  131,072 pairs of transparent counts across binary and decimal mode. Another 1,200 seeded,
+  varied streams matched each BIOS in Tornado. The resulting stream, memory, return, status and
+  timing specification is recorded in
+  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+- Corrections: the broader campaigns found more callers than the earlier first-call analysis.
+  Zero opaque count means 256 tiles; zero transparent count advances by zero. The LCD control
+  write forces bit 6, while columns beyond 127 can change the plane-select bit.
+- Limits and boundary: this is finite execution evidence using the emulator's CPU, bus and LCD
+  models, not a physical measurement. The model rejects side-effectful I/O and mutable scratch or
+  stack aliases as stream or tile sources. Nonterminating streams and asynchronous handlers that
+  interfere with the service are not specified by these tests. Synthetic patterns were placed only
+  in RAM or the checker's private ROM copy. Reports contain derived results, not BIOS, cartridge,
+  or graphics payloads. BIOS and ROM files remained read-only; no BIOS instructions, cartridge
+  code, or external emulator implementation were copied or reconstructed.
 
 #### `$F027` caller-dependent graphics service
 
