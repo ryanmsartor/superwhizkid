@@ -363,6 +363,75 @@ static void testVideoWindows(void) {
 	gamateFree(&g);
 }
 
+static void testProgressiveRows(void) {
+	static const struct {
+		unsigned line, scrollY;
+		bool window, swap, blank, fixedX;
+	} cases[] = {
+		{ 0, 0, false, false, false, false },
+		{ 149, 199, false, true, false, false },
+		{ 15, 17, true, false, false, true },
+		{ 16, 17, true, true, false, false },
+		{ 0, 0xF0, false, true, false, true },
+		{ 7, 0xF0, false, false, false, true },
+		{ 8, 0xF0, false, false, false, false },
+		{ 0, 0xF8, false, true, false, false },
+		{ 0, 0, false, false, true, false },
+	};
+	struct Gamate g;
+	gamateInit(&g);
+	uint8_t bios[GAMATE_BIOS_SIZE] = { 0 }, rom[0x4000] = { 0 };
+	assert(gamateLoad(&g, rom, sizeof(rom), bios, sizeof(bios)));
+	for (size_t i = 0; i < sizeof(g.vram); i++) {
+		g.vram[i] = (uint8_t) (i * 37 + (i >> 5) * 13);
+	}
+	for (size_t c = 0; c < sizeof(cases) / sizeof(*cases); c++) {
+		for (unsigned x = 0; x < 256; x++) {
+			g.scrollX = x;
+			g.scrollY = cases[c].scrollY;
+			g.window = cases[c].window;
+			g.swapPlanes = cases[c].swap;
+			g.displayBlank = cases[c].blank;
+			gamateRenderSnapshot(&g);
+			size_t row = cases[c].line * GAMATE_WIDTH;
+			uint16_t expected[GAMATE_WIDTH];
+			memcpy(expected, &g.frameBuffer[row], sizeof(expected));
+			memset(&g.frameBuffer[row], 0xFF, sizeof(expected));
+			memset(&g.lcdAccum[row], 0xFF, GAMATE_WIDTH);
+			g.lcdRowEvent = cases[c].line * 3;
+			g.lcdClock = 0;
+			gamateResetVramDiagnostics(&g);
+			gamateRunClocks(&g, 162);
+			assert(g.frameBuffer[row] == 0xFFFF);
+			gamateRunClocks(&g, 162);
+			assert(g.frameBuffer[row] == 0xFFFF);
+			gamateRunClocks(&g, 162);
+			assert(!memcmp(expected, &g.frameBuffer[row], sizeof(expected)));
+			if (cases[c].blank) {
+				assert(g.diagnostics.vramDisplayReads == 0);
+			} else {
+				assert(g.diagnostics.vramDisplayReads == 3 * GAMATE_WIDTH);
+				assert(g.diagnostics.vramDisplayReadBeforeWrite == 3 * GAMATE_WIDTH);
+				assert(g.diagnostics.vramUniqueDisplayReadBeforeWrite ==
+					(cases[c].fixedX || !(x & 7) ? 40 : 42));
+			}
+		}
+	}
+	g.scrollX = 3;
+	g.scrollY = 0;
+	g.window = g.swapPlanes = g.displayBlank = false;
+	g.lcdRowEvent = g.lcdClock = 0;
+	gamateResetVramDiagnostics(&g);
+	gamateWrite(&g, 0x5004, 0);
+	gamateWrite(&g, 0x5005, 0);
+	gamateWrite(&g, 0x5007, 0xFF);
+	gamateRunClocks(&g, 486);
+	assert(g.diagnostics.vramDisplayReads == 480);
+	assert(g.diagnostics.vramDisplayReadBeforeWrite == 475);
+	assert(g.diagnostics.vramUniqueDisplayReadBeforeWrite == 41);
+	gamateFree(&g);
+}
+
 static void testTimingAndState(void) {
 	struct Gamate g;
 	gamateInit(&g);
@@ -845,6 +914,7 @@ int main(void) {
 	testUart();
 	testVideo();
 	testVideoWindows();
+	testProgressiveRows();
 	testTimingAndState();
 	testIrq();
 	testIrqMaskTiming();

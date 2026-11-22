@@ -1053,6 +1053,25 @@ into the repository, build output, tests, or releases.
   median times of 4.2326 versus 4.2012 seconds for Brick Blaster and 4.3087 versus 4.2623 for World
   Cup Soccer, improvements of 0.74% and 1.08%. These small gains are host-specific and do not
   establish ARM performance. This work used local experiments and no external emulator source.
+- A further local performance experiment grouped pixels by source byte within each existing LCD
+  row-latch event, without changing the three-pass timing or per-pixel diagnostic read accounting.
+  The existing physical LCD measurements above specify the row and plane behavior; no external
+  emulator implementation was consulted or copied. Synthetic progressive-row tests compare against
+  the independent snapshot renderer for all 256 horizontal scroll values in nine combinations of
+  row, vertical scrolling, window, plane swap, and blanking, including byte and row wrapping. They
+  also check diagnostic read counts and read-before-write coverage for unaligned scrolling. Sixteen
+  1,000-post-entry-frame comparisons across eight titles, both BIOSes, the 32/64/128/256/512 KiB
+  size classes, and the 4-in-1 matched full-frame video/audio hashes, activity counts, PC, and
+  serialized-state hashes. Baseline and optimized 1,000-frame sweep reports matched byte-for-byte
+  across all 62 titles and both BIOSes, with 124/124 cases passing in each. Three titles under both
+  BIOSes also produced identical 1,000-frame reports with VRAM coverage diagnostics enabled.
+  LCD-focused tests passed with undefined-behavior sanitization; an `-O1` full-unit sanitizer run
+  failed the indirect-JMP/open-bus assertion on both the original and modified cores without a
+  sanitizer diagnostic. The standard release tests passed. After correctness checks, seven alternating uninstrumented
+  5,000-post-entry-frame benchmark pairs with no input and the UMC BIOS measured median times of
+  4.1855 versus 3.8319 seconds for Brick Blaster and 4.2678 versus 3.9250 seconds for World Cup
+  Soccer, improvements of 8.45% and 8.03%. These local measurements do not establish ARM
+  performance or additional physical accuracy.
 - A frontend presentation pass used the purpose-written libretro integration workload, which cycles
   raw output, every ghosting level, every redraw-flicker level, live option transitions, palettes,
   and contrast states. The filtered renderer now has separate flicker-only and ghosting-only loops;

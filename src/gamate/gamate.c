@@ -580,17 +580,24 @@ static void lcdRefreshRow(struct Gamate* g) {
 	displayPosition(g, line, &sx, &sy);
 	int plane = pass != 0;
 	if (g->swapPlanes) plane ^= 1;
-	for (int x = 0; x < GAMATE_WIDTH; x++) {
+	// Each row pass is latched at one clock edge, so pixels within one source byte share its value.
+	for (int x = 0; x < GAMATE_WIDTH;) {
 		int px = (x + sx) & 0xFF;
 		int offset = (((sy & 0xFF) * 0x20) + (px >> 3)) << 1 | plane;
+		int count = 8 - (px & 7);
+		if (count > GAMATE_WIDTH - x) count = GAMATE_WIDTH - x;
+		uint8_t bits = g->displayBlank ? 0 : g->vram[offset];
+		int shift = 7 - (px & 7);
+		while (count--) {
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
-		if (!g->displayBlank) markVramRead(g, (uint16_t) offset, true);
+			if (!g->displayBlank) markVramRead(g, (uint16_t) offset, true);
 #endif
-		uint8_t bit = g->displayBlank ? 0 : (g->vram[offset] >> (7 - (px & 7))) & 1;
-		size_t pixel = (size_t) line * GAMATE_WIDTH + x;
-		if (pass == 0) g->lcdAccum[pixel] = bit;
-		else g->lcdAccum[pixel] += bit;
-		if (pass == 2) g->frameBuffer[pixel] = g->lcdAccum[pixel];
+			uint8_t bit = (bits >> shift--) & 1;
+			size_t pixel = (size_t) line * GAMATE_WIDTH + x++;
+			if (pass == 0) g->lcdAccum[pixel] = bit;
+			else g->lcdAccum[pixel] += bit;
+			if (pass == 2) g->frameBuffer[pixel] = g->lcdAccum[pixel];
+		}
 	}
 }
 
