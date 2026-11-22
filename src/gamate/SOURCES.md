@@ -738,7 +738,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   stream service; `$F01E` two-plane tile-literal stream service; `$F021` plane-0
   row-literal stream service; `$F024` strided RAM initializer; `$F02A`
   plane-0 fill; `$F02D` plane-1 fill; `$F030` pseudorandom service; and `$F033` packed-BCD formatter.
-  `$F027` remains caller-dependent, and `$F00C`'s bit-6 addressing mode remains unresolved.
+  `$F027` remains caller-dependent.
 - Used for: the replacement-ABI contracts, the 1,000-frame sweep default, and the conclusion that
   replacement firmware needs resident service and interrupt code, not just an entry-state jump.
   The linked analysis owns per-service matrices, exact behavior, and probe-specific caveats.
@@ -1118,21 +1118,47 @@ open questions are addressed there for the tested memory domains.
 
 #### `$F00C` two-plane VRAM zero-writer
 
+- Executable-model follow-up: both authentic BIOS revisions and the local user-supplied
+  cartridges were read in place and executed by this project's independently authored emulator.
+  `tests/gamatebiosf00c.c`, linked only to the diagnostic library, checks the ordered LCD writes,
+  scratch writes and reads, returned registers/status, cartridge-read addresses, peripheral state,
+  and elapsed clocks. The four standard 1,000-frame campaigns covered all 62 cartridges: 1,596
+  calls in 61 titles (798 per BIOS) matched the masked model, and 1,572 original-interrupt-state
+  replays spanned an IRQ or NMI. Two previously completed no-input jobs were included without
+  rerunning them. A further no-input pass checked every modeled LCD event time and final VRAM
+  byte for 258 calls (129 per BIOS). Both BIOSes also passed 768 synthetic cases covering all
+  cached-control bytes, all entry-status bytes at both output signs, varied entry registers,
+  stack positions, VRAM fills and scroll positions. IRQ delivery was suppressed for the
+  status-byte cases; authentic interrupt-state replays were checked separately.
+  Controlled host mutations between the two `$015` reads and during the second plane's `$01E`
+  reads confirmed those live dependencies. Paired first-call snapshots across 61 titles found
+  four BIOS-pair RAM differences, each in a pre-existing, unchanged stack byte, with no new RAM
+  differences caused by the calls. In the emulator, the previously observed bit-6 sparse writes
+  follow from the LCD's row-increment mode applied to the unchanged BIOS port sequence.
+  The contract and instruction-boundary timing are in
+  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+  These are emulator observations, not physical measurements or claims of exact hardware bus
+  edges. Synthetic mutations changed only in-memory state, and reports retained derived counts
+  and equality results rather than firmware, cartridge, graphics, or stack payload. The input
+  files remained read-only; no BIOS instructions, cartridge code, or external emulator
+  implementation were copied or reconstructed.
+
 - `$F00C` follow-up: `occurrence=1` probes covered 57 titles under both BIOSes with I set and VRAM
   seeded to `$FF`; controlled `$015` bit patterns and A/X/Y changes were tested in Baseball, and the
   bit-6 path was checked in Dino Ball and Volcano Panic. Time Warrior's authentic second occurrence
   was separately probed under both revisions. The tests found a 12,800-write two-plane zeroing path,
   LCD-control effects from `$015`, and a distinct sparse write pattern when bit 6 is set. Four
   paired whole-RAM hashes differed despite matching checked access sets and all other reported
-  outputs; their cause is unresolved. The probe streamed VRAM values into aggregate counters and
-  retained no payload. A Baseball matrix of combined `$015` values `$00`, `$3F`, `$40`, `$41`,
-  `$50`, `$60`, `$C0`, `$7F`, and `$FF` was expanded to a full `$00-$FF` sweep under both BIOSes
-  at the first Baseball occurrence (512 probes). All values matched the additive LCD-flag mapping,
+  outputs; the follow-up above localizes these to pre-existing stack differences. The probe streamed
+  VRAM values into aggregate counters and retained no payload. A Baseball matrix of combined `$015`
+  values `$00`, `$3F`, `$40`, `$41`, `$50`, `$60`, `$C0`, `$7F`, and `$FF` was expanded to a full
+  `$00-$FF` sweep under both BIOSes at the first Baseball occurrence (512 probes). All values
+  matched the additive LCD-flag mapping,
   returned-A rule, status/register signature, timing, write counts, final pointer, and the expected
   contiguous or sparse VRAM coverage; there were no cross-revision non-hash field or coverage
-  mismatches. Whole-RAM hashes also matched in this matrix. The bit-6 stride's hardware meaning
-  and its behavior across every caller context remain open. The probe retained only derived
-  results, not VRAM or ROM payload. Exact scopes and limits are in
+  mismatches. Whole-RAM hashes also matched in this matrix. The follow-up above explains the
+  bit-6 stride in the emulator; physical-hardware behavior remains open. The probe retained only
+  derived results, not VRAM or ROM payload. Exact scopes and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 
 #### `$F01B` ROM-driven graphics writer

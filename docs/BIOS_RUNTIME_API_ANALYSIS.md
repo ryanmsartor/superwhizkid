@@ -1802,11 +1802,92 @@ second `$F00C` call. Probing that authentic occurrence shows outgoing LCD flags 
 the authentic result. This confirms that `$015` is an active LCD-control input, not merely scratch.
 
 Four title pairs have different whole-RAM hashes between BIOS revisions, although their reported
-registers, counts, extents, and the checked read/write address sets match. The hash differences do
-not localize a service-output mismatch; their cause remains unresolved. The bit-6 stride's hardware
-meaning and physical-hardware behavior remain open. Controlled calls mask IRQs to isolate the
-service; this does not imply that a replacement should suppress the IRQs that occur during
-authentic calls.
+registers, counts, extents, and the checked read/write address sets match. The paired-snapshot
+follow-up below localizes the differences to pre-existing, unchanged stack bytes. The ordered-port
+analysis explains the bit-6 stride in the emulator; physical-hardware validation remains open.
+Controlled calls mask IRQs to isolate the service; this does not imply that a replacement should
+suppress the IRQs that occur during authentic calls.
+
+#### `$F00C` executable contract
+
+The diagnostic-only `gamatebiosf00c` checker models the complete ordered LCD write sequence,
+register/status results, scratch effects, and service-only timing:
+
+1. Read the cached LCD-control input from RAM `$015` and write that value OR `$80` to LCD register 1.
+2. Write `$00` to scratch `$01E`. For each row `r = 0..199` in ascending order, read `$01E`,
+   write that byte to register 4, write `r` to register 5, then write 32 zero bytes to register 7.
+3. Write `$80` to `$01E`. Repeat the same 200 rows.
+4. Read `$015` again, write that value OR `$40` to LCD register 1, and return.
+
+Without interference, each plane receives 6,400 zero writes; the service issues 13,602 LCD writes.
+The byte `$01E` is read once per row to obtain the value written to register 4 and, absent
+interference, ends at `$80`. No other non-stack RAM writes were observed; `$015` is the only
+non-stack byte read before any service write. The largest observed masked stack depth was two
+bytes below entry S. A cartridge read at the pulled return address is the CPU's RTS dummy read,
+not a graphics input.
+
+The service does not change bit 6 in the first register-1 write. In this emulator, that bit controls
+the LCD data-port increment, explaining the earlier sparse coverage without a separate BIOS
+clear algorithm: when bit 6 is clear, the writes cover `$0000-$18FF` in each plane. When it is
+set, each row's 32 data writes advance by `$20`; their union is the 231 addresses
+`$0000,$0020,...,$1CC0` in each plane, with repeated overwrites. Other VRAM bytes are preserved.
+The final pointer is `$1900` or `$1CE0`, respectively. The physical LCD behavior is not established
+by this emulator-based result.
+
+Returns and preserved state:
+
+- A is the second `$015` value OR `$40`, X=`$00`, Y=`$C8`; S is restored. Entry A, X, Y, C and the
+  existing VRAM and LCD addresses do not change the port sequence.
+- In the emulator's stored status-byte representation,
+  `P_out = (P_in & $5C) | $21 | (A & $80)`: I, D, V and the nonphysical B bit are preserved;
+  N follows A, Z clears, and C sets.
+- The final register-1 value is the second `$015` value OR `$40`; without interference, register 4
+  has selected plane 1. Scroll registers, bank selection, and UART transmit state are preserved.
+  No AY writes, UART clocks, or CPU VRAM reads were observed.
+
+Without interrupts the call takes exactly 247,326 master clocks in the emulator, independent of
+the tested control and status values. At the emulator's instruction-start diagnostic granularity,
+its LCD-write timeline from service entry is:
+
+```text
+initial register 1: 16
+plane p, row r: base = 56 + 123636*p + 618*r
+    read $01E:  base - 6
+    register 4: base
+    register 5: base + 8
+    register 7, byte j: base + 24 + 18*j       (j = 0..31)
+final register 1: 247306
+return: 247326
+```
+
+`p` is 0 or 1 and `r` is 0 through 199. The `$015` reads occur at clocks 10 and 247,300;
+the `$01E` writes occur at clocks 28 and 123,664.
+These event timestamps are instruction-boundary observations, not measured physical bus-cycle
+edges. The service does not mask interrupts; interrupt handlers can extend the call or interfere
+with `$015`, scratch state and LCD writes. Controlled mutations in both directions across bit 6
+confirmed that the initial write and clear use the first `$015` value, while the final write and
+returned A use the second. A separate mutation of `$01E` during the second plane affected
+subsequent row-select writes; the service does not restore the modified value after that plane begins.
+
+#### `$F00C` validation and limits
+
+- Four standard 1,000-frame campaigns covered all 62 cartridges under both BIOSes. Across 61
+  titles, all 1,596 calls (798 per BIOS) matched the masked port sequence, scratch effects,
+  return state, checked peripherals, and total time. All original-interrupt-state replays matched
+  the port and return-state checks; 1,572 spanned IRQ or NMI. No authentic entry had D set.
+  Two already completed no-input jobs were included without rerunning them.
+- An additional no-input pass checked every modeled LCD event time and final VRAM byte for 258
+  calls, 129 per BIOS, across 61 titles. Synthetic cases in Baseball covered all 256 `$015`
+  values and all 256 entry-status bytes at both possible A signs, with IRQ delivery suppressed
+  during those synthetic runs. Both BIOSes passed 768 cases each; register values, stack positions,
+  VRAM fills, and scroll positions were varied as well.
+- Paired first-call snapshots across those 61 titles found four with differing whole-RAM hashes:
+  Famous 7, Galaxy Invaders, One Million Whys, and QuizFighter. Each pair differed by one stack
+  byte already present at entry; those bytes stayed unchanged and no new RAM differences arose.
+  This localizes the earlier four paired hash discrepancies without publishing stack contents.
+- Controlled mid-call `$015` and `$01E` mutations confirmed the two separate control reads and
+  the per-row scratch dependency under both BIOSes. These are emulator observations, not physical
+  measurements; arbitrary interfering handlers and exact physical bus-cycle timing remain untested.
 
 ### Rectangle-fill contract: `$F02D`
 
