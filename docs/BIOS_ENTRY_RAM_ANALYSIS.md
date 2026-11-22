@@ -235,6 +235,24 @@ comparison. They are documented state variables, not a claim that replacement fi
 those constants: a clean implementation can derive the counter from its own elapsed IRQs and choose
 and document a nonzero random seed, with resulting phase differences tested separately.
 
+The whole 1 KiB was then constructed without copying entry RAM: fill it with `$FF`, clear
+`$000-$01F`, initialize the same named low-RAM fields and phases, and set `$021` to zero. This
+policy matched the authentic-entry execution signature, final video, and final VRAM across all 124
+cases with no input and all 124 with all buttons held. Whole-RAM hashes were excluded because the
+policy deliberately replaces other BIOS-written residue. This is a tested compatibility policy
+within the emulator, not evidence that physical RAM powers on as `$FF` or that every later game
+path is covered.
+
+The `$021` initialization was isolated rather than assumed. Without it, the full-RAM policy
+changed four cases: Galaxy Invaders and Mars Voyage under both BIOSes, with each input schedule.
+For these titles, independently restoring each of the 16 authentic 64-byte blocks localized the
+effect to `$020-$03F`; restoring each sixteen-byte chunk localized it to `$020-$02F`, and restoring
+each of the 32 individual bytes localized it to `$021` alone. These were diagnostic controls, not
+the constructed policy. Pre-entry watches across all 124 cases found that the BIOS's last write to
+`$021` set it to zero. In focused no-input traces, Galaxy Invaders first read the inherited zero in
+cartridge code; Mars Voyage first read it inside BIOS service `$F027`. Its precise runtime role
+remains unresolved.
+
 ### Counter- and random-phase sensitivity
 
 The semantic policy was rerun with independently varied counter and LFSR states across all 124
@@ -324,6 +342,10 @@ establish their software purpose or physical power-on values.
 from `00` through `3F`; `zero-byte-NNN` selects one physical byte, and `zero-quad-NN` selects an
 aligned four-byte group by index. `zero-low32` and its `keep-*` variants exercise inverse policies.
 `semantic-low32` constructs the documented low-RAM fields without copying an entry-RAM block.
+`semantic-ones` fills all RAM with `$FF` before constructing those fields;
+`semantic-ones-zero-021` also initializes `$021` to zero. The `semantic-ones-keep-block-NN`,
+`semantic-ones-keep-chunk-NN`, and `semantic-ones-keep-byte-NNN` controls retain one authentic
+range for isolation, but still construct `$000-$01F` independently.
 `GAMATEBOOT_ENTRY_IRQ_COUNTER` and `GAMATEBOOT_ENTRY_LFSR` optionally replace its hexadecimal
 32-bit counter and 16-bit random phases; the LFSR override rejects zero because the documented
 service requires nonzero state.

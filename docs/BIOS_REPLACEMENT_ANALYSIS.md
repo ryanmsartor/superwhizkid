@@ -125,15 +125,17 @@ address-derived pattern. Authentic and cleared runs were also compared with all 
 
 | Comparison | Cases | Execution differences | Final-video differences | Final-VRAM differences |
 | --- | ---: | ---: | ---: | ---: |
-| Authentic versus cleared, no input | 124 | 0 | 0 | 8 |
+| Authentic versus cleared, no input | 124 | 0 | 0 | 0 |
 | Authentic versus cleared, all buttons held | 124 | 0 | 0 | 0 |
 | All five patterns, no input | 124 | 14 (7 titles under both BIOSes) | 4 (2 titles under both BIOSes) | 124 |
 
 “Execution” compares final CPU/RAM/mapper/LCD-address state, audio and peripheral activity, controller
 behavior, and relevant counters while deliberately excluding video and VRAM hashes. Clearing VRAM
-produced no measured execution or final-video differences in either input condition. The final VRAM
-hash differed in eight no-input cases but matched in all all-buttons-held cases, so the clear policy
-is behaviorally equivalent over these tested windows, not byte-for-byte equivalent at frame 1,000.
+produced no measured execution, final-video, or final-VRAM hash differences in either input condition.
+The no-input matrix was repeated after an earlier report of eight final-VRAM differences; that
+count could not be reproduced, and the original temporary reports are no longer available to
+resolve the discrepancy. Hash equality at frame 1,000 does not imply identical entry VRAM or
+intermediate displays.
 
 The broader perturbations establish an important limit. Sixteen titles in the unattended run made
 CPU VRAM reads before writing every byte they read; input-driven coverage found fifteen such titles.
@@ -154,13 +156,20 @@ Entry RAM cannot be replaced with a blanket fill. Zeroing or filling it with `$F
 110 of 124 executions. The page, byte, inverse, and phase matrices are in
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md).
 
-That analysis identifies a tested semantic initialization policy: establish `$004=$47`,
-`$005-$00A=$FF`, `$000C=$01`, the periodic-IRQ counter, and a nonzero `$F030` state. Constructing
-those fields after clearing `$000-$01F` matched all 124 cases in both no-input and all-buttons-held
-1,000-frame runs. For authentic-BIOS use, preserve WRAM; for a replacement, initialize named fields
-rather than copy a captured RAM image. This is tested sufficiency, not proof of all later gameplay
-paths or a complete BIOS-free boot contract. It does not validate a blanket fill of the entire 1 KiB
-WRAM or exhaustive gameplay. Targeted perturbations found effects from clearing `$00CE` in 13 titles
+That analysis identifies a tested initialization policy: fill the 1 KiB WRAM with `$FF`, clear
+`$000-$01F`, establish `$004=$47`, `$005-$00A=$FF`, `$000C=$01`, the periodic-IRQ counter and
+nonzero `$F030` state, and set `$021=$00`. Using the authentic observed counter and LFSR phases,
+this independently constructed RAM matched the authentic-entry execution signature, final video,
+and final VRAM in all 124 no-input cases and all 124 all-buttons-held cases over 1,000 frames.
+Whole-RAM hashes are deliberately excluded. Combining this RAM policy with cleared VRAM likewise
+matched the measured execution signature and final video/VRAM hashes in both schedules.
+
+For authentic-BIOS use, preserve WRAM; for a replacement, initialize state deliberately rather than
+copy a captured RAM image. This candidate is tested sufficiency, not proof of all later gameplay
+paths, a physical power-on guarantee, or a complete BIOS-free boot contract: all other machine
+state and the resident BIOS remain authentic in these experiments. `$021` is BIOS-initialized in
+all cases and is an observed `$F027` input, but its full runtime meaning is unresolved. Targeted
+perturbations found effects from clearing `$00CE` in 13 titles
 and `$021F` in two titles. Neither byte is accessed before entry in the 124 tested cases, so both
 retain the emulator's `$FF` reset fill rather than a BIOS-written value. Cartridge IRQ traces
 identify countdown-like use of `$00CE`, but the software purposes and physical power-on values
@@ -195,8 +204,8 @@ The following work remains necessary:
 4. ~~Test a clean RAM policy while preserving only documented callback/checksum state.~~ Complete:
    blanket fills and callback/checksum-only initialization are insufficient across the corpus.
 5. ~~Test clearing or independently drawing VRAM instead of inheriting authentic startup graphics.~~
-   Complete: cleared VRAM matches authentic entry exactly across unattended and automated-input
-   matrices; arbitrary nonzero contents are unsafe.
+   Complete: cleared VRAM matches the measured execution signature and final video/VRAM hashes
+   across the unattended and automated-input matrices; arbitrary nonzero contents are unsafe.
 6. Compare both authentic entry phases with a canonical replacement phase across the complete corpus.
 7. Verify reset, save-state, NMI, IRQ, UART, and frontend intro-skip behavior under replacement boot.
 8. Keep replacement-firmware tests purpose-written and free of authentic byte sequences or assets.

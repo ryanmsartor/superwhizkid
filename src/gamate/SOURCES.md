@@ -623,8 +623,10 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   VRAM/video changes from execution comparisons; focused tests verify CPU/display read-before-write
   accounting and that display blanking does not count a VRAM fetch.
 - Result and use: authentic and cleared VRAM matched execution and final video in all 124 cases for
-  both input conditions. Final VRAM differed in eight no-input cases and matched in every
-  all-buttons-held case. Across the five no-input patterns, nonzero patterns changed execution for
+  both input conditions, as did their final VRAM hashes. The 124-case no-input comparison was
+  repeated after an earlier recorded count of eight final-VRAM differences could not be reproduced;
+  its temporary reports are no longer available to resolve the discrepancy.
+  Across the five no-input patterns, nonzero patterns changed execution for
   seven titles and final video for two; every case had a different final VRAM hash under at least one
   pattern. The replacement policy is clear VRAM, not arbitrary VRAM; details and limits are in
   [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md).
@@ -643,6 +645,12 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   BIOS/cartridge cases; 1,000-frame no-input watches compared authentic and individually zeroed
   bytes in the 14 titles affected by either perturbation. Derived access counts, first-access
   metadata, and write-delta categories were compared across BIOSes without retaining access values.
+  A further local experiment constructed all WRAM using `$FF` fill and the named low-RAM fields.
+  Both input schedules were tested across the corpus, with and without a separate `$021=$00`
+  initialization, and with that initialization combined with cleared entry VRAM. A pre-entry
+  `$021` watch covered all 124 cases. In Galaxy Invaders and Mars Voyage, restoring each 64-byte
+  block, each chunk in `$020-$03F`, and each byte in `$020-$03F` isolated the policy discrepancy;
+  both revisions and both input schedules were used for each control.
   Focused tests cover owner attribution and read/write accounting; production objects remained
   unchanged.
   `tools/gamate-ram-perturbation-summary.py` compares aggregate observations while excluding only
@@ -665,6 +673,12 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   IRQ-context writes. Witty Apee also read the inherited value before writing it. Both BIOSes
   produced identical derived watch results in these selected cases. This supports preserving the
   emulator's reset-fill policy for compatibility, not attributing it to the BIOS.
+  The all-WRAM constructed policy differed from authentic entry in four cases for each input
+  schedule until `$021` was initialized to zero. The BIOS last wrote zero there in every pre-entry
+  watch; restoring only this byte removed the discrepancy in the two affected titles. With `$021`
+  constructed as zero, the policy and the combined clear-VRAM policy matched measured execution,
+  final video, and final VRAM hashes across all 124 cases in both input schedules. Expected whole-RAM
+  hash differences were excluded. All other machine state and the resident BIOS remained authentic.
 - Limits and legal boundary: the experiments establish tested sufficiency, not exhaustive gameplay
   coverage or physical RAM behavior. The software meanings of these bytes and later input-driven
   use remain unknown. Local BIOS/ROM inputs remained read-only; no memory images, firmware-derived
@@ -711,8 +725,11 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   by caller and occurrence; this supports retaining the caller-dependent label rather than inventing
   a shared format. Address watches found `$006/$007` read twice as often as `$008/$009`, with equal
   counts within each pair; `$023/$028/$030` were read 1/2/2 times. This is consistent with two
-  caller-supplied 16-bit cartridge-address words, but not a common data grammar. Exact results,
-  call scopes, and limits are in
+  caller-supplied 16-bit cartridge-address words, but not a common data grammar. A separate
+  IRQ-masked Galaxy Invaders first-call probe varied `$021` among `$00`, `$40`, and `$FF` under
+  both revisions. The service read it once without writing it; output VRAM hashes and coverage
+  differed, and `$FF` also changed timing. This is a caller-specific observation, not a decoded
+  field format. Exact results, call scopes, and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - `$F00C` follow-up: `occurrence=1` probes covered 57 titles under both BIOSes with I set and VRAM
   seeded to `$FF`; controlled `$015` bit patterns and A/X/Y changes were tested in Baseball, and the

@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later */
 #include "gamate/gamate.h"
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -100,12 +101,46 @@ static bool perturbEntryVram(struct Gamate* g) {
 static bool perturbEntryRam(struct Gamate* g) {
 	const char* pattern = getenv("GAMATEBOOT_ENTRY_RAM");
 	if (!pattern || !*pattern || !strcmp(pattern, "authentic")) return true;
-	if (!strcmp(pattern, "semantic-low32")) {
+	const char* keepPrefix = "semantic-ones-keep-";
+	bool keepRange = !strncmp(pattern, keepPrefix, strlen(keepPrefix));
+	bool zero021 = !strcmp(pattern, "semantic-ones-zero-021");
+	if (!strcmp(pattern, "semantic-low32") || !strcmp(pattern, "semantic-ones") ||
+			keepRange || zero021) {
 		const char* counterText = getenv("GAMATEBOOT_ENTRY_IRQ_COUNTER");
 		const char* lfsrText = getenv("GAMATEBOOT_ENTRY_LFSR");
 		char* end;
 		unsigned long long counter = 0x00000394;
 		unsigned long long lfsr = 0x358A;
+		unsigned start = 0, count = 0;
+		uint8_t preserved[0x40];
+		if (keepRange) {
+			const char* text = pattern + strlen(keepPrefix);
+			unsigned digits;
+			if (!strncmp(text, "block-", 6)) {
+				text += 6;
+				count = 0x40;
+				digits = 2;
+			} else if (!strncmp(text, "chunk-", 6)) {
+				text += 6;
+				count = 0x10;
+				digits = 2;
+			} else if (!strncmp(text, "byte-", 5)) {
+				text += 5;
+				count = 1;
+				digits = 3;
+			} else {
+				fprintf(stderr, "invalid semantic-ones range: %s\n", text);
+				return false;
+			}
+			bool valid = strlen(text) == digits;
+			for (unsigned i = 0; valid && i < digits; i++)
+				valid = isxdigit((unsigned char) text[i]) != 0;
+			if (!valid || (start = (unsigned) strtoul(text, &end, 16) * count) >= sizeof(g->ram)) {
+				fprintf(stderr, "invalid semantic-ones range: %s\n", text);
+				return false;
+			}
+			memcpy(preserved, g->ram + start, count);
+		}
 		if (counterText && *counterText) {
 			counter = strtoull(counterText, &end, 16);
 			if (*end || counter > UINT32_MAX) {
@@ -120,6 +155,9 @@ static bool perturbEntryRam(struct Gamate* g) {
 				return false;
 			}
 		}
+		if (strcmp(pattern, "semantic-low32")) memset(g->ram, 0xFF, sizeof(g->ram));
+		if (keepRange) memcpy(g->ram + start, preserved, count);
+		if (zero021) g->ram[0x021] = 0;
 		memset(g->ram, 0x00, 0x20);
 		g->ram[0x004] = 0x47;             // Accepted protection reply.
 		memset(g->ram + 0x005, 0xFF, 6); // Modeled reset/runtime sentinels through $00A.

@@ -34,6 +34,11 @@ target_include_directories(gamate-6502test PRIVATE src)
 add_executable(gamateboot tests/gamateboot.c)
 target_link_libraries(gamateboot superwhizkid_diagnostics)
 
+add_executable(gamatebootpolicytest tests/gamatebootpolicytest.c)
+target_link_libraries(gamatebootpolicytest superwhizkid_diagnostics)
+target_compile_options(gamatebootpolicytest PRIVATE -UNDEBUG)
+add_test(NAME gamate-boot-policy COMMAND gamatebootpolicytest)
+
 add_executable(gamatebioscalls tests/gamatebioscalls.c)
 target_link_libraries(gamatebioscalls superwhizkid)
 

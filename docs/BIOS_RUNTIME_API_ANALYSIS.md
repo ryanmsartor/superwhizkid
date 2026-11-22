@@ -824,6 +824,15 @@ schema. It does not resolve their per-title meanings or stream grammar. The anal
 derived counts, hashes, coverage, and ROM addresses; RAM-watch final values and source payloads are
 omitted.
 
+For Galaxy Invaders' first `$F027` call, a separate IRQ-masked probe established that `$021` is
+read once and not written by the service. Setting it to `$00`, `$40`, or `$FF` changed the final
+VRAM hash in each case; the `$00/$40/$FF` cases touched 576/544/576 unique VRAM bytes, while all
+performed 1,248 VRAM writes. `$FF` took 183,374 master clocks versus 172,762 for `$00` and `$40`.
+Both BIOSes agreed, and no IRQ or NMI occurred. This is one caller context, not a general `$021`
+encoding. Galaxy Invaders reads its inherited `$021` before later setting it for the first service
+call; the entry-state implications are in
+[`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md).
+
 ### IRQ-gated counter wait: `$F003`
 
 The validated report contains 7,424 `$F003` calls. Its 60 uninterrupted calls are evenly split
