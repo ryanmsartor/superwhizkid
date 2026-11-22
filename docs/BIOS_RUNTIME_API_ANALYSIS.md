@@ -973,26 +973,26 @@ preserved, and C/Z are set, N is clear, and B/D/I/V are preserved.
 | Observable | Contract |
 | --- | --- |
 | Entry A | Ignored; A returns zero. |
-| Entry RAM `$00B` | Values `$00-$17` wait `24 - n` IRQs (`n` is the numeric entry value); `$18` and tested larger values return immediately. |
+| Entry RAM `$00B` | Values `$00-$17` wait `24 - n` IRQs (`n` is the numeric entry value); `$18-$FF` take the ready path. |
 | RAM `$00B` on return | Written as zero. |
 | Registers | X, Y, and S are preserved. |
 | Status | C and Z set; N clear; B, D, I, and V preserved. |
 | Ready-path timing | 42 master clocks when the wait condition is already satisfied. |
 | Other hardware | No peripheral effects in uninterrupted calls. IRQ-spanning calls include callback effects. |
 
-Controlled probes used first-call contexts from Dino Bibo under both BIOS revisions to test every
-entry value `$00-$18`. Values `$00-$17` took exactly 24 through 1 periodic IRQs, respectively;
-`$18` took none. Values `$19`, `$1F`, `$20`, `$7F`, `$80`, and `$FF` also returned on the ready path.
-Boundary probes with `$00`, `$17`, `$18`, and `$19` in Brick Blaster, Pipemania, and Legend of Dragon
-Knight reproduced the same threshold under both BIOS revisions. The counter was set only in the
-probe's in-memory RAM, and every controlled call returned with `$00B=0`.
+An exhaustive entry-byte matrix tested all 256 `$00B` values in the first authentic call context
+of every title observed using `$F009`: 38 titles under both BIOS revisions (19,456 probes). Values
+`$00-$17` took exactly `24 - n` periodic IRQs, where `n` is the entry value; every value `$18-$FF`
+returned on the 42-master-clock ready path without an IRQ, wrote only `$00B`, and produced no VRAM,
+LCD, scroll, AY, mapper, or UART effects. Every probe returned with `$00B=0`, A=`$00`, X/Y/S
+preserved, C/Z set, N clear, and B/D/I/V preserved; none raised an NMI. The counter was changed only
+in the probe's private in-memory machine state.
 
-The threshold behavior is consistent with waiting until `$00B` reaches 24 decimal (`$18`), distinct
-from the thresholds measured for `$F003` and `$F006`. The callback's intermediate counter updates
-were not traced directly. Wait-path elapsed clocks vary with title-specific IRQ callback work; RAM and
-peripheral changes in IRQ-spanning calls must not be attributed to `$F009`. Selected values above
-`$20` were tested, but the full range `$21-$7E` was not exhaustive. These are emulated observations,
-not physical timing measurements.
+This establishes the complete byte-domain contract across every observed caller's first call
+context. Later call contexts in each title were not individually perturbed. The callback's
+intermediate counter updates were not traced directly. Wait-path elapsed clocks vary with
+title-specific IRQ callback work; RAM and peripheral changes in IRQ-spanning calls must not be
+attributed to `$F009`. These are emulated observations, not physical timing measurements.
 
 ### Two-plane VRAM zero-writer and LCD-control service: `$F00C`
 

@@ -748,6 +748,22 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   caller-specific or timing details remain open. No external emulator implementation was consulted
   or copied.
 
+#### `$F009` IRQ-gated counter wait
+
+- Method and result: `gamatebiosprobe` set RAM `$00B` in its private machine copy and invoked the
+  first authentic `$F009` call of each of the 38 titles observed using the service, under both BIOS
+  revisions. All 256 byte values were tested in every context (19,456 probes, zero mismatches).
+  Values `$00-$17` waited exactly `24 - n` IRQs; `$18-$FF` returned in 42 master clocks without an
+  IRQ, wrote only `$00B`, and had no peripheral effects. Every probe zeroed the counter, returned
+  A=`$00` with X/Y/S preserved, set C/Z, cleared N, and preserved B/D/I/V. Probe outputs retained
+  only derived access counts and result summaries; ROM and BIOS inputs remained read-only and no
+  payload was retained.
+- Use and limits: this closes the full input-byte threshold map across every observed `$F009`
+  caller's first call context; later call contexts were not individually perturbed. Wait-path
+  elapsed clocks still include title-specific IRQ callback work, whose intermediate counter updates
+  were not traced. This is local emulator evidence, not a physical timing measurement; no external
+  emulator source was used or copied.
+
 #### `$F027` caller-dependent graphics service
 
 - `$F027` follow-up: IRQ-masked `occurrence=1` probes covered 14 additional titles under both BIOS
