@@ -843,7 +843,8 @@ all 256 `$021` values were tested under both BIOSes: the same decomposition held
 master-clock count was respectively
 `172762 + 1516 * ($021 & 7)` and `46796 + 1516 * ($021 & 7)`. The ten-value matrix exhibited the
 same timing increment in all 12 coverage-sensitive contexts and no increment in the other 20.
-These are context-specific measurements, not a general service timing formula.
+These are context-specific measurements with the inherited VRAM contents, not a general service
+timing formula.
 
 The same 32 contexts and ten-value matrix were tested independently for `$022` under both BIOSes.
 All 640 probes read it once without writing it; coverage changed in the same 12 contexts and
@@ -858,8 +859,8 @@ contexts under both BIOSes (384 probes). All matched a fixed set plus the 96-byt
 by `$021 >> 3` columns modulo 32 and `$022` rows modulo 256. Recovering the moving region from a
 non-overlapping position also explains the earlier Mars Voyage coverage ambiguity. ROM address
 sequences and write counts stayed unchanged, and timing was the context's zero-position time plus
-`1516 * ($021 & 7)` throughout this matrix. These observations bound two positioning inputs in
-these paths, not the full command or timing grammar.
+`1516 * ($021 & 7)` throughout this matrix with inherited VRAM. These observations bound two
+positioning inputs in these paths, not the full command or timing grammar.
 
 In Time Warrior's first call with VRAM seeded to zero, direct in-memory equality comparisons
 verified that each moving three-byte row in both planes equals the zero-offset row shifted right
@@ -871,6 +872,31 @@ eleven vertical values `$00,$01,$07,$0F,$10,$20,$40,$E0,$F0,$F8,$FF`, checking a
 planes under both BIOSes. All 4,224 row/plane comparisons matched the translated, horizontally
 shifted zero-position output, including row and column wrap. Positions overlapping fixed writes
 were not included in this pixel comparison.
+
+For the same Time Warrior call, further I-masked probes used uniform VRAM fills `$00`, `$FF`, each
+single-bit value, `$55`, `$AA`, `$5A`, and `$A5`. With `$021=$00-$07, $022=$20` or
+`$021=$F8-$FF, $022=$FF`, all 224 paired comparisons between BIOSes agreed on every written
+output byte (448 probes). For each fixed context and written address, the tested fills matched
+`output(fill) = output($00) | (fill & output($FF))`, including the 96-byte moving region and the
+other written addresses. These comparisons used bytes only in memory. Uniform fills cannot establish
+whether an individual destination bit depends only on that bit, nor do they identify the source
+format or prove a general blending rule.
+
+The same proposed equation was checked with 12 uniform fills (`$00`, `$FF`, the eight single-bit
+values, `$55`, and `$AA`) at inherited positions in the 32 contexts above, with P set to `$24` and
+both BIOSes: 768 probes. Of the 32 contexts, 26 wrote VRAM. Coverage was independent of the tested
+fills, and the paired revisions agreed on written output and checked return/hardware fields.
+However, 28,906 of 139,296 byte comparisons failed the equation, and timing varied with fill in
+some contexts. A six-fill localization (`$00`, `$FF`, `$01`, `$80`, `$55`, `$AA`) found failures
+in ten contexts with the Bit BIOS (192 probes): first calls in Box Forum, Brick Blaster, Dino Ball,
+Enchanted Bricks, Galaxy Invaders, Mini Golf, and Tough Guy, and second calls in Kill Shot,
+Pipemania, and Witty Apee. Only timing varied among the checked non-pixel observables in this
+localization. For example, Box Forum's first call took 96,206, 99,534, 104,526, and 108,686 clocks
+for fills `$00`, `$55`, `$AA`, and `$FF`, respectively, under both revisions. In that call some output bits changed
+even when the corresponding input bit was the same in the compared fills. Thus neither the simple
+per-bit model nor background-independent timing is universal, even though it holds in the selected
+Time Warrior probes. Uniform fills do not isolate the source of the cross-bit or cross-address
+dependence.
 
 These results identify horizontal and vertical position inputs for selected drawing paths, not a
 complete `$F027` grammar or a guarantee about all later calls. Galaxy Invaders reads its inherited

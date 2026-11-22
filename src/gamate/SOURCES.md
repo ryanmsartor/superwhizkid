@@ -742,10 +742,11 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   first Galaxy Invaders and Time Warrior calls under both revisions (1,024 probes). In those
   contexts coverage decomposed into fixed writes plus a 96-byte, two-plane region shifted by the
   high five bits with row wrapping; timing increased by 1,516 master clocks per low-bit offset.
-  Eleven of the 12 sensitive contexts had the same address-set decomposition for the ten tested
-  values; it did not explain the twelfth, possibly because of overlapping writes. Zero-filled
-  Time Warrior probes at 13 selected values compared pixel rows in memory and found a corresponding right
-  shift by the low three bits; `$FF`-filled probes showed background-dependent output. No pixel,
+  Eleven of the 12 sensitive contexts initially had the same address-set decomposition for the ten
+  tested values; combined-position probes later resolved the twelfth by separating overlapping
+  writes. Zero-filled Time Warrior probes at 13 selected values compared pixel rows in memory and
+  found a corresponding right shift by the low three bits; `$FF`-filled probes showed
+  background-dependent output. No pixel,
   ROM, or BIOS payload was retained. The result supports a horizontal-position input in selected
   paths, not a universal grammar or blend rule; no external implementation was consulted or
   copied. An analogous ten-value matrix for `$022` covered the same 32 contexts and both BIOSes
@@ -757,8 +758,18 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   and the previously bounded horizontal timing increment, including the formerly ambiguous Mars
   Voyage coverage. In-memory, zero-filled Time Warrior output comparisons for six horizontal and
   eleven vertical values checked both planes and all 16 rows under both BIOSes (4,224 row/plane
-  comparisons), excluding positions overlapping fixed writes. These findings do not establish the
-  remaining stream grammar or a general blend rule. No payloads were retained. Exact results,
+  comparisons), excluding positions overlapping fixed writes. Subsequent no-input, I-masked
+  uniform-background experiments compared written VRAM bytes in memory. In Time Warrior's first
+  call, 16 shifted and wrapping positions, 14 fills, and both BIOSes (448 probes) matched an output
+  equation derived from the all-zero and all-one fills. Applying that equation to the same 32 caller contexts at
+  inherited positions, 12 fills, and both revisions (768 probes) yielded 28,906 mismatches in
+  139,296 byte comparisons; coverage stayed fixed, but timing could vary. Six-fill localization
+  with the Bit BIOS identified ten failing contexts, including Box Forum, where output bits changed
+  despite identical corresponding input bits and timing varied by background. These observations
+  reject a universal per-bit rule and background-independent timing; uniform fills do not locate
+  the dependence.
+  Findings do not establish the remaining stream grammar or a general blend rule. No pixel, ROM,
+  or BIOS payload was retained; no external implementation was consulted or copied. Exact results,
   call scopes, and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - `$F00C` follow-up: `occurrence=1` probes covered 57 titles under both BIOSes with I set and VRAM
