@@ -445,11 +445,11 @@ the VRAM pointer, or LCD flags leaves the measured output and ROM-read profile u
 values are preserved. These results establish a ROM-driven graphics writer, but not its data grammar.
 
 RAM `$000-$001` and `$015` are read in the controlled Baseball and Brick Blaster calls. In Baseball,
-`$001` is also rewritten; that write is not consistent across the other tested call contexts.
-Bit-0 XOR perturbations to either `$000` or `$001` in Baseball expand the output to the full plane-0
-address space and produce more than 300,000 clocks. This shows sensitivity to the caller-supplied
-pair, but is not a clean format probe and does not establish whether the pair is a pointer or a
-control structure.
+`$001` is also rewritten. The cross-title follow-up below found `$001` writes in 32 of 44 first-call
+contexts, while `$000` was not written in any of them. Earlier bit-0 XOR perturbations in Baseball
+expanded the output to the full plane-0 address space and took more than 300,000 clocks. These
+perturbations show sensitivity to the caller-supplied pair, but do not establish whether it is a
+pointer or a control structure.
 
 `$015` affects final LCD flags. The following values were tested in Baseball; values `$01` and
 `$40` were also confirmed in Brick Blaster under both BIOS revisions:
@@ -529,11 +529,32 @@ Controlled status tests in Witty Apee and all 34 completed-call summaries follow
 observed calls, not the physical significance of the CPU's unused status bits. The exact
 `$000-$001` format, ROM-source mapping, return-Y rule, and data-dependent timing remain unresolved.
 ROM traces retained addresses only; no BIOS/ROM or VRAM payload was retained. These are emulator
-observations, not physical-hardware measurements. The `$015` mapping is established across the
-22 observed title contexts above; `$000-$001` format, ROM-source mapping, return-Y rule, and
-data-dependent timing remain unresolved. Selected single-byte XORs in a private ROM copy produced
-a mixture of no output change, localized and broad output changes, and expanded work; they did not
-resolve a source-data format. No ROM bytes or graphics payload were retained.
+observations, not physical-hardware measurements. Selected single-byte XORs in a private ROM copy
+produced no output change at some offsets and localized, broad, or expanded work at others; they
+did not resolve a source-data format. No ROM bytes or graphics payload were retained.
+
+#### Cross-title `$000-$001` low-bit perturbations
+
+The same four 1,000-frame campaigns identified first authentic `$F01B` calls in 22 titles. For each
+title and BIOS, an I-masked baseline and independent XOR-1 perturbations to `$000` and `$001` were
+run using that campaign's input schedule (132 probes total). All probes returned. Both bytes were
+read before being written in all 44 title/BIOS contexts; `$000` was never written, while `$001` was
+written in 32 contexts.
+
+Each perturbation changed the address-only ROM-read sequence, elapsed clocks, VRAM hash and
+coverage, and VRAM/LCD write counts in all 44 contexts. The returned register signature changed in
+all 44 `$000` perturbations and 8 `$001` perturbations. Relative to each context's baseline, clock
+deltas ranged from -57,012 to +30,255,628 for `$000`, and -29,002 to +601,432 for `$001`. These
+large and caller-dependent changes show that both bytes influence execution, but are not a usable
+mapping formula or evidence of normal behavior for altered caller data.
+
+Baseline checked output signatures, captured address-sequence prefixes, and total read counts
+agreed between BIOS revisions in all 22 title pairs. The comparison excludes whole-RAM hashes and
+per-address RAM-write summaries. Perturbed `$001` results agreed in all 22 pairs; perturbed `$000`
+comparisons agreed in 20 pairs. Two `$000` sequences exceeded the diagnostic's capture limit, so
+full address-sequence equality is not claimed for those sequences. The probe retained derived
+summaries and address-only traces, not BIOS, ROM, RAM, or VRAM payload. This establishes cross-title
+input sensitivity only; the pair's format and source-address transformation remain unresolved.
 
 ### Caller-supplied two-plane graphics service: `$F01E`
 

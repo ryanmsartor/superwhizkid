@@ -962,6 +962,23 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   observed title; later invocation contexts and the physical meaning of the sparse mode remain
   open. The detailed methods, results, and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+- `$000-$001` follow-up: the four existing 1,000-frame campaign reports selected the first
+  authentic `$F01B` call in all 22 observed titles, under both BIOS revisions. A baseline and
+  separate XOR-1 perturbations to `$000` and `$001`, with I set and the campaign's frame-relative
+  input schedule, produced 132 probes; all returned. Both bytes were read before write in all 44
+  contexts; `$000` was never written and `$001` was written in 32. Each perturbation changed the
+  address-only ROM-read sequence, timing, VRAM hash/coverage, and VRAM/LCD write counts in all 44
+  contexts. Returned registers changed in all `$000` probes and 8 `$001` probes. Clock deltas
+  ranged from -57,012 to +30,255,628 for `$000` and -29,002 to +601,432 for `$001`. Baselines
+  matched across all 22 paired BIOS contexts in checked output signatures, captured sequence
+  prefixes, and total read counts; whole-RAM hashes and per-address RAM-write summaries were
+  excluded. `$001` perturbations matched in 22 pairs, while `$000` comparisons matched in 20.
+  Two `$000` traces exceeded the diagnostic capture limit, so full sequence equality is not
+  claimed for them. These observations establish sensitivity, not a pointer or descriptor format;
+  the two `$000-$001` roles and source-address transformation remain unresolved. The independently
+  authored, diagnostic-only probe retained only derived results and address-only traces; no
+  payload or external emulator code was copied. This is emulator evidence, not physical
+  measurement.
 
 #### `$F01E` two-plane graphics service
 
