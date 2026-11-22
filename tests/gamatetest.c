@@ -16,7 +16,7 @@ struct RamAccessCapture {
 	unsigned count;
 	bool write;
 	uint16_t address;
-	uint8_t previous, value;
+	uint8_t previous, value, openBusBefore;
 };
 
 struct RomReadCapture {
@@ -34,6 +34,7 @@ static void captureRamAccess(void* context, const struct Gamate* g, bool write,
 	capture->address = address;
 	capture->previous = previous;
 	capture->value = value;
+	capture->openBusBefore = g->openBus;
 }
 
 static void captureRomRead(void* context, const struct Gamate* g,
@@ -123,6 +124,11 @@ static void testMemory(void) {
 	assert(gamateRead(&g, 0x4100) == 0x41); // write-only PSG: open bus
 	assert(gamateRead(&g, 0x5800) == 0x58);
 	assert(gamateRead(&g, 0x5A00) == 0x5B);
+	g.rom[0x3FFF] = 0x73;
+	g.bios[0] = 0xA6;
+	assert(gamateRead(&g, 0x5FFF) == 0x5F && g.openBus == 0x5F);
+	assert(gamateRead(&g, 0xDFFF) == 0x73 && g.openBus == 0x73);
+	assert(gamateRead(&g, 0xE000) == 0xA6 && g.openBus == 0xA6);
 	gamateFree(&g);
 }
 
@@ -726,6 +732,19 @@ static void testCpuBusAccesses(void) {
 	g.ram[0x1FC] = 0x23; g.ram[0x1FD] = 0xE1;
 	assert(gamateCpuStep(&g) == 6 && g.cpu.pc == 0xE124 && g.cpu.s == 0xFD);
 	assert(g.openBus == 0x6D);
+
+	// Both zero-page indirect forms read the low pointer byte before the wrapped high byte.
+	g.bios[0] = 0x81; g.bios[1] = 0xFF; // STA ($FF,X)
+	g.cpu.pc = 0xE000; g.cpu.x = 0; g.cpu.a = 0x5C;
+	g.ram[0xFF] = 0x20; g.ram[0] = 0x01;
+	assert(gamateCpuStep(&g) == 6 && g.ram[0x120] == 0x5C && g.openBus == 0x01);
+	g.bios[0] = 0xB1; // LDA ($FF),Y
+	g.cpu.pc = 0xE000; g.cpu.y = 0;
+	struct RamAccessCapture pointerRead = { 0 };
+	gamateSetRamDiagnosticWatch(&g, 0, captureRamAccess, &pointerRead);
+	assert(gamateCpuStep(&g) == 5 && g.cpu.a == 0x5C);
+	assert(pointerRead.count == 1 && !pointerRead.write && pointerRead.openBusBefore == 0x20);
+	gamateSetRamDiagnosticWatch(&g, 0, NULL, NULL);
 
 	// NMOS JMP indirect wraps the vector's high-byte read within the pointer's original page.
 	g.bios[0] = 0x6C; g.bios[1] = 0xFF; g.bios[2] = 0x10; // JMP ($10FF)

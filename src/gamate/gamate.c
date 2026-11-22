@@ -339,6 +339,20 @@ uint8_t gamateRead(struct Gamate* g, uint16_t address) {
 		value = g->ram[offset];
 		goto done;
 	}
+	if (address >= 0x6000) {
+		if (address >= 0xE000) {
+			value = g->bios[address & 0x0FFF];
+		} else if (g->protectionPassed && g->rom) {
+			size_t offset = romOffset(g, address);
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+			markRomRead(g, address, offset);
+#endif
+			value = g->rom[offset];
+		} else {
+			value = protectionRead(g) << 1;
+		}
+		goto done;
+	}
 	if ((address & 0xFC00) == 0x4000) {
 		// The PSG is write-only. Undriven reads expose the high address byte.
 		value = address >> 8;
@@ -370,20 +384,6 @@ uint8_t gamateRead(struct Gamate* g, uint16_t address) {
 	}
 	if ((address & 0xFF00) == 0x5A00) {
 		value = (address >> 8) | 3;
-		goto done;
-	}
-	if (address >= 0x6000 && address < 0xE000) {
-		if (g->protectionPassed && g->rom) {
-			size_t offset = romOffset(g, address);
-#ifdef GAMATE_ACCESS_DIAGNOSTICS
-			markRomRead(g, address, offset);
-#endif
-			value = g->rom[offset];
-		} else value = protectionRead(g) << 1;
-		goto done;
-	}
-	if (address >= 0xE000) {
-		value = g->bios[address & 0x0FFF];
 		goto done;
 	}
 	value = address >= 0x5400 && address < 0x5800 ? 0xFF : address >> 8;

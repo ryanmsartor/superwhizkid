@@ -424,9 +424,13 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Also used for: completing the official NMOS bus-sequence audit. Power-on reset now performs two
   discarded PC reads, three non-writing stack reads/decrements, and two vector reads; a focused test
   verifies the resulting PC, S, cycle count, untouched stack memory, and open bus. The existing NMOS
-  indirect-JMP page-wrap read now has an explicit regression test. All documented official NMOS
-  instruction/addressing classes are represented; undocumented opcodes, an externally asserted warm
-  reset, and NCR-specific deviations remain outside this evidence-backed audit.
+  indirect-JMP page-wrap read now has an explicit regression test. Indirect-JMP and both zero-page
+  indirect modes explicitly sequence the pointer's low-byte read before its high-byte read, retaining
+  NMOS page and zero-page wrapping. Previously, unspecified C operand evaluation order could reverse
+  these accesses; focused tests check wrapping and observable open-bus order. This is the documented
+  NMOS baseline, not a new physical NCR measurement. All documented official NMOS instruction/
+  addressing classes are represented; undocumented opcodes, an externally asserted warm reset, and
+  NCR-specific deviations remain outside this evidence-backed audit.
 
 ### Masswerk 6502 instruction set
 
@@ -1067,11 +1071,32 @@ into the repository, build output, tests, or releases.
   BIOSes also produced identical 1,000-frame reports with VRAM coverage diagnostics enabled.
   LCD-focused tests passed with undefined-behavior sanitization; an `-O1` full-unit sanitizer run
   failed the indirect-JMP/open-bus assertion on both the original and modified cores without a
-  sanitizer diagnostic. The standard release tests passed. After correctness checks, seven alternating uninstrumented
-  5,000-post-entry-frame benchmark pairs with no input and the UMC BIOS measured median times of
+  sanitizer diagnostic. The later CPU bus-order correction described above resolves this
+  compiler-dependent ordering issue. The standard release tests passed. After correctness checks,
+  seven alternating uninstrumented 5,000-post-entry-frame benchmark pairs with no input and the UMC
+  BIOS measured median times of
   4.1855 versus 3.8319 seconds for Brick Blaster and 4.2678 versus 3.9250 seconds for World Cup
   Soccer, improvements of 8.45% and 8.03%. These local measurements do not establish ARM
   performance or additional physical accuracy.
+- A local `gprof` profile of 5,000 unattended post-entry Brick Blaster frames with the UMC BIOS
+  attributed approximately 53.6% of sampled time to `gamateRunClocks`, 24.3% to `gamateCpuStep`, and
+  14.7% to `gamateRead`; sampling and inlining limit attribution. The read dispatcher now checks
+  cartridge and BIOS ranges before the lower-address peripheral ranges, retaining RAM first and
+  preserving protection, mapper, diagnostic, open-bus, and peripheral effects. Focused synthetic
+  tests cover the affected region boundaries, and the CPU pointer-read ordering correction above
+  fixes a separate compiler-dependent bus-order issue. Sixteen 1,000-post-entry-frame comparisons
+  across eight titles, both BIOSes, the 32/64/128/256/512 KiB size classes, and the 4-in-1 matched
+  video and audio hashes accumulated for every frame, activity counts, PC, and final serialized-state
+  hashes. Baseline and candidate 1,000-frame sweep reports matched byte-for-byte across all 62
+  titles and both BIOSes, with 124/124 cases passing in each; three titles with both BIOSes also
+  matched with RAM and VRAM coverage enabled. The standard tests, the external 6502 functional test,
+  and the full `-O1` undefined-behavior sanitizer unit run passed. After correctness checks, seven
+  alternating uninstrumented 5,000-post-entry-frame benchmark pairs with no input and the UMC BIOS
+  measured median times of 3.8327 versus 3.6208 seconds for Brick Blaster and 3.9225 versus 3.6934
+  for World Cup Soccer, improvements of 5.53% and 5.84%. The local experiments used read-only
+  user-supplied BIOS and cartridges without retaining their payloads, and no external emulator
+  source was consulted or copied. These results do not establish ARM performance, exhaustive
+  compatibility, or new physical hardware accuracy.
 - A frontend presentation pass used the purpose-written libretro integration workload, which cycles
   raw output, every ghosting level, every redraw-flicker level, live option transitions, palettes,
   and contrast states. The filtered renderer now has separate flicker-only and ghosting-only loops;

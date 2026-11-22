@@ -19,6 +19,11 @@ static uint16_t read16(struct Gamate* g, uint16_t address) {
 	uint8_t lo = read8(g, address), hi = read8(g, address + 1);
 	return lo | (uint16_t) hi << 8;
 }
+static uint16_t read16ZeroPage(struct Gamate* g, uint8_t address) {
+	uint8_t lo = read8(g, address);
+	uint8_t hi = read8(g, (uint8_t) (address + 1));
+	return lo | (uint16_t) hi << 8;
+}
 static void push(struct Gamate* g, uint8_t value) { write8(g, 0x100 | g->cpu.s--, value); }
 static uint8_t pull(struct Gamate* g) { return read8(g, 0x100 | ++g->cpu.s); }
 
@@ -158,11 +163,11 @@ static unsigned group1(struct Gamate* g, uint8_t opcode) {
 	bool crossed = false, store = operation == 4;
 	switch (mode) {
 	case 0: { uint8_t zp = fetch(g); read8(g, zp); zp += c->x;
-		address = read8(g, zp) | (uint16_t) read8(g, (uint8_t) (zp + 1)) << 8; cycles = 6; break; }
+		address = read16ZeroPage(g, zp); cycles = 6; break; }
 	case 1: address = fetch(g); cycles = 3; break;
 	case 2: value = fetch(g); cycles = 2; break;
 	case 3: address = fetch16(g); cycles = 4; break;
-	case 4: { uint8_t zp = fetch(g); uint16_t base = read8(g, zp) | (uint16_t) read8(g, (uint8_t) (zp + 1)) << 8;
+	case 4: { uint8_t zp = fetch(g); uint16_t base = read16ZeroPage(g, zp);
 		address = indexed(base, c->y, &crossed);
 		if (store || crossed) read8(g, uncorrectedPage(base, address));
 		cycles = store ? 6 : 5 + crossed; break; }
@@ -316,7 +321,8 @@ unsigned gamateCpuStep(struct Gamate* g) {
 	case 0x60: { read8(g, c->pc); read8(g, 0x100 | c->s); uint8_t lo = pull(g);
 		uint16_t ret = lo | (uint16_t) pull(g) << 8; read8(g, ret); c->pc = ret + 1; cycles = 6; break; }
 	case 0x68: read8(g, c->pc); read8(g, 0x100 | c->s); c->a = pull(g); zn(c, c->a); cycles = 4; break;
-	case 0x6C: { uint16_t p = fetch16(g); c->pc = read8(g, p) | (uint16_t) read8(g, (p & 0xFF00) | (uint8_t) (p + 1)) << 8; cycles = 5; break; }
+	case 0x6C: { uint16_t p = fetch16(g); uint8_t lo = read8(g, p);
+		c->pc = lo | (uint16_t) read8(g, (p & 0xFF00) | (uint8_t) (p + 1)) << 8; cycles = 5; break; }
 	case 0x70: cycles = branch(g, c->p & V); break;
 	case 0x78: c->p |= I; break;
 	case 0x84: write8(g, fetch(g), c->y); cycles = 3; break;
