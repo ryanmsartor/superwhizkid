@@ -1066,14 +1066,14 @@ open questions are addressed there for the tested memory domains.
   or graphics payloads. BIOS and ROM files remained read-only; no BIOS instructions, cartridge
   code, or external emulator implementation were copied or reconstructed.
 
-#### `$F027` caller-dependent graphics service
+#### `$F027` sprite and background compositor
 
 - `$F027` follow-up: IRQ-masked `occurrence=1` probes covered 14 additional titles under both BIOS
   revisions; both authentic occurrences in Incantational Couple were also compared. A controlled
   matrix toggled `$006-$009` and zeroed `$023/$028/$030` in five varied titles and both Incantational
   calls. The fields were read-before-write and unwritten in these contexts, but their effects varied
-  by caller and occurrence; this supports retaining the caller-dependent label rather than inventing
-  a shared format. Address watches found `$006/$007` read twice as often as `$008/$009`, with equal
+  by caller and occurrence; at that stage they did not justify inventing a shared format. Address
+  watches found `$006/$007` read twice as often as `$008/$009`, with equal
   counts within each pair; `$023/$028/$030` were read 1/2/2 times. This is consistent with two
   caller-supplied 16-bit cartridge-address words, but not a common data grammar. A separate
   IRQ-masked Galaxy Invaders first-call probe varied `$021` among `$00`, `$40`, and `$FF` under
@@ -1111,10 +1111,39 @@ open questions are addressed there for the tested memory domains.
   despite identical corresponding input bits and timing varied by background. These observations
   reject a universal per-bit rule and background-independent timing; uniform fills do not locate
   the dependence.
-  Findings do not establish the remaining stream grammar or a general blend rule. No pixel, ROM,
+  Those initial findings did not establish a shared format or blend rule; the record-model follow-up
+  below resolves those questions in the tested binary-mode cases. No pixel, ROM,
   or BIOS payload was retained; no external implementation was consulted or copied. Exact results,
   call scopes, and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+- Record-model follow-up: the two local, legally obtained BIOS revisions were executed in this
+  project's emulator after booting Time Warrior from the read-only local collection. Diagnostic
+  probes initialized the 128-byte table, varied fields and backgrounds, and recorded only access
+  counts, addresses, hashes, and synthetic-output comparisons. Opt-in probe views report VRAM
+  read-before-write coverage and LCD register ordering without exposing pixel data. They revealed
+  the off-screen plane-0 tile map,
+  explaining the previously observed cross-bit dependence. Isolated records identified separate
+  redraw and object-draw gates, coordinates and graphics selectors, two record sizes, and the
+  two-plane transparent object blend. Controlled overlaps established the tested pass and priority
+  order. The diagnostic-only `tests/gamatebiosf027.c` independently models these observations:
+  per BIOS, 1,024 isolated object cases, 1,024 redraw cases, 256 overlapping multi-record cases,
+  and 2,052 selector and sentinel cases matched final VRAM and access counts. The latter two sets
+  also checked the complete ordered LCD writes and cartridge read addresses, varied cached LCD
+  control and entry flags, page-crossing dummy reads, and an additive timing formula. The checker
+  replayed 496 cartridge/BIOS/campaign combinations with the four established 1,000-frame input
+  schedules: 28,516 of 28,518 service entries matched final VRAM, access counts, registers and
+  exact timing with IRQs masked; the same Mini Golf long-Start call under each revision had a modeled
+  graphics tile range ending in the BIOS window at `$E0E7` and was skipped rather than modeling
+  BIOS-sourced data. The ordered LCD writes and cartridge read addresses, allowed RAM-write
+  region and final `$300-$307` record cache, and selected peripheral and final LCD states were
+  subsequently checked across the same runs with zero mismatches among the same 28,516 eligible
+  calls. Inputs included purpose-written RAM
+  graphics and temporary synthetic overlays in the emulator's private cartridge copy, never the
+  source files. Controlled decimal-mode comparisons did not follow the binary-mode model.
+  These are emulator observations, not physical measurements or a complete ABI: individual bus-event
+  timing, remaining scratch values, decimal mode, side-effectful source aliases and interrupt
+  interference remain open. No BIOS instructions or external emulator implementations were copied
+  or reconstructed; no commercial BIOS, ROM or graphics payload is retained or published.
 
 #### `$F00C` two-plane VRAM zero-writer
 

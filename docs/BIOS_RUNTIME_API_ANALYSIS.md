@@ -1494,11 +1494,11 @@ Excluding 394 interrupt-spanning calls leaves 9,020 uninterrupted calls. An adde
 reports zero mismatches for timing, register/status behavior, and unrelated AY/bank/UART activity.
 The only measured ROM read is the stacked cartridge `RTS` dummy address, not a semantic data read.
 
-### Caller-dependent blitter: `$F027`
+### Sprite and background compositor: `$F027`
 
 The validated completed-call report contains 7,026 `$F027` calls, evenly split between BIOS revisions.
-Of those, 2,366 do not span an IRQ or NMI. A controlled first occurrence in Baseball resolves the
-caller pointer effects but not a title-independent ABI.
+Of those, 2,366 do not span an IRQ or NMI. Early controlled calls exposed caller-dependent effects;
+the later isolated-record model below resolves their shared graphics structure.
 
 The controlled comparison covers first authentic occurrences in four titles and both BIOS revisions:
 Baseball, Fortune 'n Luck, Nightmare of Santa Claus, and Time Warrior. The first three each perform
@@ -1514,8 +1514,8 @@ at `$008` shifts a different eight-byte span. XOR at `$007` and `$009` moves the
 observed spans to another 256-byte page. These effects support address inputs in Baseball's call context. They do not generalize as fixed
 one-span pointers: XOR of `$006` shifts one address span in Baseball and Nightmare, shifts both spans
 in Fortune 'n Luck, and changes several read spans in the other tested callers. XOR of `$008` shifts
-one span in Baseball and Nightmare, while in Time Warrior it adds a read and two clocks. The exact
-shared roles of `$006-$009` therefore remain unresolved.
+one span in Baseball and Nightmare, while in Time Warrior it adds a read and two clocks. Those
+probes alone did not establish the shared roles of `$006-$009`, which are identified below.
 
 The table gives VRAM/LCD write counts for baseline and selected RAM perturbations. Each perturbation
 was applied independently; the `$023/$028/$030` columns show setting that byte to zero.
@@ -1533,13 +1533,12 @@ was applied independently; the `$023/$028/$030` columns show setting that byte t
 | Devil Castle | 96/303 | 96/303 | 240/478 | 240/478 |
 | Kill Shot | 1,488/2,930 | 1,584/3,233 | 1,632/3,105 | 1,632/3,105 |
 
-Thus these RAM bytes affect the operation in caller-dependent ways, not as a recovered title-independent
-geometry format. Both BIOS revisions matched for every measured title/perturbation pair.
+Thus these early probes showed caller-dependent effects, without yet recovering the record format.
+Both BIOS revisions matched for every measured title/perturbation pair.
 
 Entry A, X, Y, and S are preserved in these ten selected baseline calls. The ten-title evidence
-supports a caller-RAM-driven blitter family, not a single recovered text or graphics format. Exact
-pointer roles, control-field meanings, encoding, terminator grammar, and timing remain open. The
-addresses `$023`, `$028`, and `$030` are empirical perturbation sites, not semantic field names.
+initially suggested a caller-RAM-driven blitter family without a recovered graphics format. The
+record fields and their effects are now identified below.
 
 #### Expanded caller comparison
 
@@ -1568,13 +1567,13 @@ read-count shape under both BIOSes: `$006/$007` are each read twice as often as 
 equal counts within each byte pair; `$023`, `$028`, and `$030` are read once, twice, and twice,
 respectively. None of these seven addresses is written by the service in those calls. Together with
 the independent address perturbations, this is consistent with `$006-$007` and `$008-$009` serving
-as two caller-supplied 16-bit cartridge-address words. Their precise data roles remain
-caller-dependent; the three single-byte inputs still have no established shared meaning.
+as two caller-supplied 16-bit cartridge-address words. Their graphics-plane roles and the record gates
+are established by the subsequent synthetic tests.
 
-This confirms these bytes are caller-owned inputs in the tested calls, not a universal parameter
-schema. It does not resolve their per-title meanings or stream grammar. The analysis uses only
-derived counts, hashes, coverage, and ROM addresses; RAM-watch final values and source payloads are
-omitted.
+These probes alone established caller-owned inputs but not a common parameter schema. The isolated
+record experiments below now identify a shared graphics-table structure and the two pointer roles.
+The analysis uses only derived counts, hashes, coverage, and ROM addresses; RAM-watch final values
+and source payloads are omitted.
 
 An IRQ-masked matrix varied `$021` through `$00`, each single-bit value, and `$FF` for the first
 call in each of the 25 titles observed to call `$F027` in the 1,000-frame unattended inventory.
@@ -1650,8 +1649,137 @@ per-bit model nor background-independent timing is universal, even though it hol
 Time Warrior probes. Uniform fills do not isolate the source of the cross-bit or cross-address
 dependence.
 
-These results identify horizontal and vertical position inputs for selected drawing paths, not a
-complete `$F027` grammar or a guarantee about all later calls. Galaxy Invaders reads its inherited
+#### Isolated record and rendering model
+
+Further I-masked experiments isolate the table at `$021-$0A0` into 16 consecutive eight-byte
+records. The first eight records draw 16-by-16-pixel objects; the remaining eight draw
+8-by-8-pixel objects. With every table byte set to `$FF`, there are no VRAM or LCD accesses.
+Setting individual bytes to zero identified two independent activity gates in each record. In the
+tested cases the record fields are:
+
+| Offset | Observed role |
+| --- | --- |
+| `+0`, `+1` | Current pixel X and Y. |
+| `+2` | Current graphics selector; `$FF` disables current-object drawing. |
+| `+3`, `+4` | No effect on the isolated rendering cases tested so far. |
+| `+5`, `+6` | Background-redraw pixel X and Y. |
+| `+7` | `$FF` disables background redraw; other tested values enable it. |
+
+RAM `$006-$007` and `$008-$009` are little-endian bases for plane-0 and plane-1 graphics,
+respectively. In the tested binary-mode cases, selector `s` supplies the eight rows at
+`base + 8*s`. A small object uses one selector. A large object uses the two-by-two selector
+arrangement `s, s+1` on the top and `s+2, s+3` on the bottom, with selector arithmetic wrapping
+at 256. For current-object drawing, `$FF` is a disable marker rather than a drawable selector;
+`$FF` remains a valid background-map selector.
+
+An enabled background redraw covers a fixed 3-by-3 tile rectangle for a large record or a 2-by-2
+tile rectangle for a small one, regardless of the low position bits. Its selector map is in VRAM
+plane 0: for tile offset `(c,r)`, the map coordinate is column `((X >> 3) + c) & 31` and row
+`($E6 + (Y >> 3) + r) & $FF`. The destination is the corresponding tile at column
+`((X >> 3) + c) & 31` and pixel row `((Y & $F8) + 8*r) & $FF`. Both planes are overwritten
+with all eight source rows. Selectors are captured before that record's redraw, including tested
+cases where the destination overlaps the map.
+
+For current-object drawing, the two source planes are shifted right by `X & 7` and written over
+the existing destination at byte column `X >> 3` and pixel row Y, wrapping columns and rows.
+For each destination bit, two zero source bits leave both background bits unchanged; otherwise
+the two source bits replace the background bits. Equivalently, with shifted source bytes
+`s0,s1` and destination bytes `d0,d1`, each output plane is
+`sN | (dN & ~(s0 | s1))`. A large object reads and writes three bytes per row in each plane
+(96 reads and 96 writes); a small object reads and writes two bytes per row in each plane
+(32 reads and 32 writes), even when the horizontal shift is zero.
+
+Controlled overlaps indicate background redraws run in record order before current-object draws,
+which also run in record order. This explains why the earlier uniform-background equation failed:
+background redraw interprets plane-0 map bytes as tile selectors, rather than blending each output
+bit independently.
+
+#### LCD and cartridge accesses
+
+The following ordered LCD-write sequence has been checked against the behavioral model in
+synthetic cases and eligible authentic replays. The placement of register-6 reads is inferred
+from access counts, coverage and output comparisons, not an ordered read trace. `C` is RAM
+`$015 | $40`; `x` and `y` are the relevant record coordinates; `q` is 3 for a large record and
+2 for a small one. A register-6
+read obtains a VRAM byte and a register-7 write stores one. Column register values below are raw
+eight-bit values; the LCD uses their low five bits for the column and bit 7 for the plane.
+
+1. For each enabled background redraw, write `C` to register 1. In column-major order, select map
+   row `$E6 + (y >> 3) + r` in register 5 and column `(x >> 3) + c` in register 4, then read
+   register 6, for `c,r = 0..q-1`. Rows wrap at 256.
+2. For each plane and then column, write register 4 = `(x >> 3) + c + $80*plane` and
+   register 5 = `y & $F8`, then write the `8*q` source rows to register 7, in increasing tile
+   row and pixel-row order.
+3. For each enabled current object, write `C` to register 1. For each plane, column, and pixel
+   row, select the destination using register 5 = `y + row` and register 4 =
+   `(x >> 3) + column + $80*plane`, then read register 6. Rows wrap at 256.
+4. Write `C` to register 1 twice for a large object or once for a small one. For each plane and
+   column, write register 5 = `y`, register 4 = `(x >> 3) + column + $80*plane`, then the
+   16 or 8 composited rows to register 7.
+
+The redraw pass precedes the object pass. Each pass visits records in ascending order. Within
+each operation, source reads are plane-major, then column-major, then tile-row-major, with eight
+rows per tile. A page-crossing indexed source read is preceded by a dummy read 256 bytes below
+its final CPU address. The `RTS` also makes a dummy read at the stacked return address when it
+falls in the cartridge window. These describe the tested emulator bus, not a physical measurement.
+
+#### Binary-mode timing and returns
+
+For uninterrupted calls with safe graphics sources, define `T(s)` as 64 times `s >> 5`, plus two
+master clocks for each source-row read that crosses an indexed page. For each plane base `B`, row
+`r = 0..7` crosses when `(B & $FF) + 8*(s & 31) + r > $FF`. Count both planes.
+
+Start at 6,326 master clocks and add, for every enabled operation:
+
+| Operation | Additional clocks |
+| --- | --- |
+| Large background redraw | `9,084 + sum(T(s))` over its nine captured map selectors |
+| Small background redraw | `4,270 + sum(T(s))` over its four captured map selectors |
+| Large current object | `23,326 + 1,516*(X & 7) + sum(T(s))` over its four wrapped selectors |
+| Small current object | `7,556 + 540*(X & 7) + T(s)` |
+
+This formula accounts for the previously observed background-dependent timing: map selectors
+determine both the graphics and the indexed-page costs. The all-`$FF` table takes 6,326 clocks
+and issues no LCD accesses.
+
+In the checked calls A, X, and Y are preserved, and S is restored to the caller. With D clear,
+N and Z reflect the restored A, C is set, V is clear, and I and the stored B bit are preserved.
+The checked calls leave scroll, AY registers and address, mapper registers, and UART clock accesses
+unchanged. LCD state remains unchanged for an empty table; otherwise the final LCD control is
+`$015 | $40` and the final address/plane follows the last register-7 write in the sequence above.
+Observed non-stack RAM writes are confined to `$000-$003`, `$018-$01F`, and `$300-$3C7`;
+the final `$300-$307` bytes matched the final table record in the eligible replays and synthetic
+cases. The
+remaining scratch-byte values and their live access timing are not yet modeled.
+
+`tests/gamatebiosf027.c` checks these models using purpose-written RAM graphics and private
+in-memory cartridge overlays, without publishing source or output bytes. Under each BIOS revision,
+1,024 isolated sprite cases and 1,024 isolated background cases covered every record, all horizontal
+bit offsets at ordinary and wrapped columns, two vertical positions, and varied synthetic data.
+Another 256 combined cases tested multiple records, overlapping operations and map/destination
+aliasing. A further 2,052 cases exercised all 256 selectors in records 0, 7, 8 and 15, including
+the current-object disable marker and background selector `$FF`. All compared complete final VRAM
+and access counts; the combined and selector cases additionally checked ordered LCD writes, ordered
+cartridge reads, returned status and exact timing with varied LCD controls and source-page offsets.
+No mismatches were found.
+
+The four standard 1,000-frame campaigns covered 62 cartridges and both BIOSes. Of 28,518 service
+entries, 28,516 matched the predicted final VRAM, access counts, ordered LCD writes, ordered
+cartridge reads, registers, bounded RAM side effects, selected peripheral state, and exact
+masked-replay timing; two accesses beyond the cartridge window were conservatively excluded from
+the model.
+Both exclusions are the same Mini Golf long-Start call under the two BIOS revisions; a modeled
+tile range extends into the BIOS window, ending at `$E0E7`. Its BIOS-sourced output was not
+reproduced or modeled.
+The replay masks IRQs and is not a measurement of interrupt-spanning call timing. Controlled
+decimal-mode probes did not follow this binary-mode model, including an apparently disabled table
+that still performed VRAM writes. D-clear entry is therefore a requirement for this specification,
+not an assertion that decimal mode behaves identically.
+
+The complete ABI is still open: individual bus-event timestamps, remaining scratch values, live
+input dependencies, unsupported decimal-mode behavior and interrupt interference require further
+work. The model does not yet establish behavior for side-effectful graphics sources.
+Galaxy Invaders reads its inherited
 `$021` before later setting it for its first service call; the entry-state implications are in
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md).
 
