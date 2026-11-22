@@ -274,8 +274,26 @@ BIOS reads of inherited bytes before their first post-entry write occurred in 11
 tracking with controller input added no addresses to either owner union. These counts describe
 observed accesses, not which values are required; perturbation results above provide the dependency
 evidence. The `$00CE` and `$021F` tests show software sensitivity in 13 and two titles respectively,
-but do not by themselves establish the bytes' meaning, initialization source, or physical power-on
-values. No common BIOS initialization requirement is inferred from them.
+but do not by themselves establish the bytes' meaning or physical power-on values. Separate
+pre-entry watches across all 124 cases found no CPU reads or writes to either byte. Both therefore
+retain this emulator's `$FF` reset fill at entry; this is an emulator policy, not a physical RAM
+measurement or a BIOS-generated initialization value.
+
+For the 13 titles sensitive to `$00CE`, 1,000-frame no-input watches under both BIOSes first read
+the inherited `$FF` in cartridge IRQ context before any post-entry write. All observed writes
+either preserved the byte or decremented it modulo 256; the watch includes the unchanged write-back
+of read-modify-write bus sequences. Starting the byte at zero instead produced no writes in 12 of
+the 13 titles, consistent with a zero-gated countdown. Money Maze continued to decrement it even
+from zero, so that gating must not be generalized to every title. The same derived watch counts and
+first-access metadata were observed under both BIOS revisions, but the variable's purpose and any
+later input-dependent uses remain unknown.
+
+Mighty Boxer and Witty Apee likewise first read the inherited `$FF` at `$021F` before any
+post-entry write. In Mighty Boxer, the no-input baseline made 2,222 reads in cartridge IRQ context
+and no writes during the window; zeroing the byte caused 255 cartridge IRQ-context writes instead.
+Witty Apee's first observed read was in frame 903 and its trace also changed after zeroing. These
+are title-specific observations, not a shared BIOS service contract. They support preserving the
+emulator reset-fill behavior for compatibility until a broader initialization policy is tested.
 
 ## Interpretation
 
@@ -296,8 +314,8 @@ The earlier page sweep is now substantially narrower:
   in all later gameplay.
 
 The 62-cartridge results leave other title-specific `$0CC-$0DF` and page-2 dependencies for
-static/runtime correlation. The effects at `$00CE` and `$021F` are documented as observed
-perturbation sensitivity; their semantics and physical power-on values remain unresolved.
+static/runtime correlation. The observed `$00CE` countdown behavior and `$021F` sensitivity do not
+establish their software purpose or physical power-on values.
 
 ## Reproduction and limits
 

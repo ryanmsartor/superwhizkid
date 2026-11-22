@@ -639,8 +639,12 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   low-RAM policy was checked with no input and all buttons held (`GAMATEBOOT_PRESS="1:255:1000"`).
   Filtered watches traced selected RAM accesses without retaining RAM values. Diagnostic-only hooks
   classify reads before each byte's first write by cartridge, BIOS, or other instruction without
-  recording RAM values. Focused tests cover owner attribution and read/write accounting; production
-  objects remained unchanged.
+  recording RAM values. Additional pre-entry watches of `$00CE` and `$021F` covered all 124
+  BIOS/cartridge cases; 1,000-frame no-input watches compared authentic and individually zeroed
+  bytes in the 14 titles affected by either perturbation. Derived access counts, first-access
+  metadata, and write-delta categories were compared across BIOSes without retaining access values.
+  Focused tests cover owner attribution and read/write accounting; production objects remained
+  unchanged.
   `tools/gamate-ram-perturbation-summary.py` compares aggregate observations while excluding only
   the expected final-RAM hash change.
 - Result and use: clearing all WRAM or filling it with `$FF` changed 114 and 110 of 124 executions.
@@ -654,11 +658,18 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md).
   Clearing `$00CE` changed 26 cases, with final-video and final-VRAM differences in two and three
   cases; clearing `$021F` changed four cases without final-video or final-VRAM differences. Their
-  meanings and initialization sources remain unresolved.
+  pre-entry watches found no CPU access in any case: both retain the emulator's `$FF` reset fill.
+  All 13 `$00CE`-sensitive titles first read that value in cartridge IRQ context; writes preserved or
+  decremented it. Zeroing prevented writes in 12 titles, while Money Maze continued decrementing.
+  At `$021F`, Mighty Boxer read but did not write in the baseline window; zeroing led to
+  IRQ-context writes. Witty Apee also read the inherited value before writing it. Both BIOSes
+  produced identical derived watch results in these selected cases. This supports preserving the
+  emulator's reset-fill policy for compatibility, not attributing it to the BIOS.
 - Limits and legal boundary: the experiments establish tested sufficiency, not exhaustive gameplay
-  coverage or physical RAM behavior. Local BIOS/ROM inputs remained read-only; no memory images,
-  firmware-derived initialization template, or payload data were published. Reports retain derived
-  counts and hashes, not ROM, BIOS, VRAM, framebuffer, or RAM payloads.
+  coverage or physical RAM behavior. The software meanings of these bytes and later input-driven
+  use remain unknown. Local BIOS/ROM inputs remained read-only; no memory images, firmware-derived
+  initialization template, or payload data were published. Reports retain derived counts and
+  hashes, not ROM, BIOS, VRAM, framebuffer, or RAM payloads; no BIOS or cartridge code was copied.
 
 ### Post-entry BIOS runtime API analysis
 

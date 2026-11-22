@@ -161,7 +161,11 @@ those fields after clearing `$000-$01F` matched all 124 cases in both no-input a
 rather than copy a captured RAM image. This is tested sufficiency, not proof of all later gameplay
 paths or a complete BIOS-free boot contract. It does not validate a blanket fill of the entire 1 KiB
 WRAM or exhaustive gameplay. Targeted perturbations found effects from clearing `$00CE` in 13 titles
-and `$021F` in two titles; their semantics and initialization sources remain unresolved. See
+and `$021F` in two titles. Neither byte is accessed before entry in the 124 tested cases, so both
+retain the emulator's `$FF` reset fill rather than a BIOS-written value. Cartridge IRQ traces
+identify countdown-like use of `$00CE`, but the software purposes and physical power-on values
+remain unresolved. Preserving that reset-fill policy is a compatibility choice, not a measured
+hardware requirement. See
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md) for scope and limits.
 
 ## What should not be copied
