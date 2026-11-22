@@ -748,6 +748,46 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   caller-specific or timing details remain open. No external emulator implementation was consulted
   or copied.
 
+#### `$F030` pseudorandom transition and interrupts
+
+- Source and method: local user-supplied BIOS revisions and cartridges read in place; the existing
+  1,000-frame no-input, long-Start, menu-action, and controller-cycle reports identify 27 caller
+  cartridge images (26 titles, including both Bomb Blaster dumps). At the first call context in
+  each image under both BIOSes, the independently authored
+  diagnostic `gamatebiosf030` exercised every 16-bit state with two entry profiles, plus every
+  A/X/Y/scratch byte and all 64 status combinations at seven selected states. It checked the
+  independently formulated state, scratch, register, flag, RAM-access, stack-access, timing,
+  ROM-read, and hardware-effect hypotheses. All 7,489,152 calls matched (138,688 per context).
+  Seven states across every stack pointer passed another 1,792 calls per revision in one context.
+  Those tests use a synthetic return after reaching the authentic context.
+- Result: for `s = input ? input : $FFFF`, `next = ((s << 1) | (bit(s,4) XOR bit(s,10))) & $FFFF`,
+  `$014 = bit(s,10) << 7`, A receives the low byte, and carry receives bit 15 of `s`. X/Y/S and
+  I/D/V are preserved; N/Z describe A. The zero-input path costs 188 master clocks, other inputs
+  174. Input `$8000` produces zero, correcting the earlier nonzero-output assertion. Enumerating
+  the derived transition yields cycles of lengths 7, 85, 85, 85, 595, 595, and 595, with maximum
+  transient 10; the observed entry seed lies on a 595-state cycle.
+- Interrupt method and result: address watches on seven synthetic inputs under both BIOSes
+  identified state/scratch access ordering. Purpose-written callbacks installed only in private
+  in-memory cartridge copies demonstrated a half-updated state, scratch-byte interference, and a
+  late state mutation leaving A different from `$012`. A callback reentering `$F030` also produced
+  a different result from two sequential calls. All four scenarios matched across 27 caller
+  contexts and both BIOSes using direct IRQ and NMI injection (432 interrupted calls); NMI
+  injection did not simulate UART link traffic. An exploratory single-context matrix tested IRQ
+  injection at each modeled instruction boundary for three states and one `$80` write to each of
+  `$012-$014` (288 calls per BIOS); derived signatures matched between revisions and varied with
+  injection point. An independently derived event model then matched 813,240 IRQ/NMI tests covering
+  eight synthetic states, five byte values, three targets, every modeled instruction boundary,
+  all 27 caller contexts, and both BIOSes. The tests covered both D/V-clear and D/V-set entry;
+  the latter NMI profile also set I. A second matrix matched all 20,818,944 cases covering those
+  states, targets, available boundaries, contexts, BIOSes, IRQ/NMI, and all 256 callback byte values,
+  with entry P=`$20`. A separate 27,108-case matrix matched a model of one uninterrupted reentrant
+  `$F030` call inside the callback, across eight input states, every outer boundary, IRQ/NMI, all
+  27 contexts, and both BIOSes; entry P was `$20`. This does not establish arbitrary nested
+  interrupts, callback programs, or link-driven NMI delivery. Read-only BIOS/ROM files were not
+  modified; no firmware, commercial cartridge, or graphics payload was retained or published, and
+  no external emulator code was consulted or copied. Results are emulator observations, not
+  physical measurement.
+
 #### `$F003` IRQ-gated counter wait
 
 - Method and result: `gamatebiosprobe` set RAM `$00B` in its private machine copy and invoked the

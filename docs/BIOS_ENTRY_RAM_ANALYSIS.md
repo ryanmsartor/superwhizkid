@@ -215,7 +215,7 @@ functional description:
 | `$00A` | Explicit `$FF` runtime sentinel | Both BIOSes write `$FF` immediately before enabling callbacks and jumping to `$6020`. Treasure Hunter reaches it through an indirect read on an input-driven IRQ-callback path. |
 | `$00C` | Cartridge-callback enable flag | Zero disables BIOS dispatch; any observed nonzero value enables it. Successful boot writes `$01`. |
 | `$00E-$011` | 32-bit periodic-IRQ counter | `$011` increments each IRQ and propagates carry toward `$00E`; fourteen titles directly access `$011`, and Kill Shot reads `$010` on an input-driven path. |
-| `$012-$013` | BIOS pseudorandom/LFSR state | Service `$F030` ensures a nonzero state, advances a 16-bit feedback shift register, preserves X/Y, and returns the new low byte in A. `$014` is overwritten scratch feedback and need not be inherited. |
+| `$012-$013` | BIOS pseudorandom/feedback state | Service `$F030` repairs a zero input before advancing the state, preserves X/Y, and returns the new low byte in A; a nonzero input can produce zero. `$014` is overwritten scratch feedback and need not be inherited. |
 
 The authentic entry state leaves the LFSR at `$358A` (high byte `$013`, low byte `$012`) after the
 startup sequence. That exact seed is useful for authentic phase comparison, but replacement firmware
@@ -356,8 +356,8 @@ aligned four-byte group by index. `zero-low32` and its `keep-*` variants exercis
 `semantic-ones-keep-chunk-NN`, and `semantic-ones-keep-byte-NNN` controls retain one authentic
 range for isolation, but still construct `$000-$01F` independently.
 `GAMATEBOOT_ENTRY_IRQ_COUNTER` and `GAMATEBOOT_ENTRY_LFSR` optionally replace its hexadecimal
-32-bit counter and 16-bit random phases; the LFSR override rejects zero because the documented
-service requires nonzero state.
+32-bit counter and 16-bit random phases. The LFSR override restricts this diagnostic policy to
+nonzero initial seeds; `$F030` itself accepts and repairs a zero input.
 `GAMATEBOOT_RAM_WATCH` selects a physical address for per-access tracing; the optional
 `GAMATEBOOT_RAM_WATCH_OWNER` filters `bios`, `cartridge`, `other`, or `all` execution owners.
 `tools/gamate-ram-perturbation-summary.py` compares aggregate reports against an authentic-entry

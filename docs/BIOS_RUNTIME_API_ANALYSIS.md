@@ -83,9 +83,10 @@ in Tornado during this baseline; `$F030` appeared in eight titles. This directly
 the standard compatibility and BIOS-call sweep defaults to 1,000 frames.
 
 Subsequent RAM tracing identifies `$F030` as the BIOS pseudorandom service. It preserves X and Y,
-ensures that the 16-bit state at `$0012-$0013` is nonzero, advances a feedback shift register, and
-returns the new `$0012` low byte in A. `$0014` is scratch feedback overwritten by each call. This
-name is based on measured state transitions and cartridge use, not on another emulator's label.
+repairs a zero input state before advancing a 16-bit feedback state at `$0012-$0013`, and returns
+the new `$0012` low byte in A. A nonzero input can itself produce zero. `$0014` is scratch feedback
+overwritten by each call. This name is based on measured state transitions and cartridge use, not
+on another emulator's label.
 
 The table alone does not establish semantics for the other slots. Names such as drawing, delay,
 formatting, or input must not be assigned until register, RAM, and hardware effects are measured
@@ -174,27 +175,133 @@ distinguished from one whose writes merely occur while the prior configuration r
 Selected-slot summaries also report register preservation, status-bit behavior, timing grouped by
 input A, and the most frequent hardware-state transitions.
 
-### First resolved contract: `$F030`
+### Pseudorandom service: `$F030`
 
-The pseudorandom service is the first slot with a sufficiently narrow observed contract. The table
-combines 362 completed calls across both BIOS revisions; the two revisions have identical results.
+For an uninterrupted call, interpret RAM `$012` as the low byte and `$013` as the high byte of
+an unsigned 16-bit state. Let `s` be that input, except replace zero with `$FFFF` before applying
+the following transition. Bits are numbered from zero:
 
-| Property | Observed contract |
+```
+feedback = bit(s, 4) XOR bit(s, 10)
+next = ((s << 1) | feedback) & $FFFF
+RAM[$012] = next & $FF
+RAM[$013] = next >> 8
+RAM[$014] = bit(s, 10) << 7
+```
+
+The zero repair applies to the **input**, not the output. For example, `$8000` becomes `$0000`;
+the next call repairs that input and returns `$FFFE`. Thus the previously stated invariant that
+the service maintains a nonzero state was incorrect.
+
+| Property | Uninterrupted contract |
 | --- | --- |
-| State | Advances the nonzero 16-bit feedback state at `$012-$013`; `$014` is scratch feedback. |
-| Return | A receives the new `$012` value. |
-| Preserved registers | X, Y, and S in 362/362 calls. |
-| Status | I, D, and V are preserved. N and Z describe returned A. Controlled probes establish that carry receives the pre-advance state’s bit 15, independent of incoming carry. |
-| Uninterrupted timing | 174 master clocks (87 CPU cycles) for a nonzero state; 188 master clocks when the zero-state repair path is taken. |
-| Hardware effects | None in the 360 uninterrupted calls: no VRAM, LCD, AY, mapper, UART, scroll, or hardware-address-state change. |
-| Interrupt interaction | Two calls included a periodic IRQ, took 910 master clocks, and include callback-attributed effects. |
+| Inputs | RAM `$012-$013`; entry A, X, Y, carry, and the previous `$014` do not affect the transition. |
+| Return | A is the new `$012`; X, Y, and S are preserved. |
+| Status | C is bit 15 of `s` after zero repair; N and Z describe returned A; I, D, and V are preserved. Incoming N, Z, and C do not affect the result. |
+| Scratch | `$014` is overwritten with `$00` or `$80` as above and read during the call. No other non-stack RAM is written; only `$012-$013` are read before being written. |
+| Stack | For a normal JSR returning with S, the tested calls write stack locations `S-2` and `S-3` modulo 256 and read the stacked return address. The read-before-write map also includes `S-4`; stack contents are not a stable public interface and must not be copied as firmware data. |
+| Timing | 174 master clocks (87 CPU cycles) for nonzero input; 188 clocks when the input is zero. |
+| Hardware effects | No VRAM, LCD, AY-register, mapper, UART, scroll, or hardware-address-state changes. Time-dependent hardware continues to advance. |
 
-Observed input A values cover much of the byte range and do not correlate with the returned value,
-but this is not yet a controlled proof that A is ignored. A controlled state matrix varied incoming
-carry and selected states on either side of bit 15. Incoming carry had no effect; returned carry
-always matched the state’s original bit 15. A zero state took 14 extra master clocks and produced the
-same derived result as starting from `$FFFF`, establishing that the repair path seeds `$FFFF` before
-the ordinary advance.
+`gamatebiosf030` checks this equation for every one of the 65,536 input states, using two distinct
+register/status/scratch profiles, at the first `$F030` caller context of each of the 27 cartridge
+images observed in the four existing 1,000-frame campaigns, under both BIOSes. These are 26 distinct
+titles, including both Bomb Blaster dumps. In each context it also tests every A, X, Y, and prior
+`$014` byte and all 64 combinations of N, V, D, I, Z, and C for seven selected states. All
+7,489,152 calls matched (138,688 per context). Stack access and wrapping
+were checked separately at every S for those seven states in one synthetic return context per BIOS:
+1,792 calls per revision. The diagnostic uses an independently constructed return address after
+locating each authentic context; it does not preserve or publish firmware or cartridge payload.
+
+The selected campaigns were no input for Dino Ball, Dino Bibo, Fortune 'n Luck, Hot Hero, Magic
+Jigsaw, Tornado, Witty Apee, and World Cup Soccer; long Start for Baseball, both Bomb Blaster
+dumps, Cosmic Fighter, Devil Castle, Enchanted Bricks, Flipuzzle, Further Adventures of Hannibal
+The Cat, Insect War, Mighty Tank, Pipemania, Riddle of the Ancient Tomb, Snowman Legend, and
+Vindicators; menu actions for Brick Blaster, Nightmare of Santa Claus, and Tennis; and controller
+cycle for Fist of Thunder and QuizFighter. Each schedule's occurrence was selected from its existing
+1,000-frame campaign. The schedules use `frame:mask:duration` pulses:
+
+- Long Start: `90:0x40:60,400:0x40:60,750:0x40:60`.
+- Menu actions: `90:0x80:20,130:0x40:60,260:0x10:12,310:0x20:12,500:0x40:30,580:0x10:12,630:0x20:12`.
+- Controller cycle: `80:0x01:12,120:0x02:12,160:0x04:12,200:0x08:12,240:0x10:12,280:0x20:12,320:0x40:60,400:0x80:20,460:0x11:12,500:0x18:12,540:0x21:12,580:0x28:12,700:0x40:60,800:0x10:12,840:0x20:12`.
+
+Build the diagnostic with `cmake --build build --target gamatebiosf030`; invoke it as
+`build/gamatebiosf030 BIOS_FILE CARTRIDGE_FILE full` for the exhaustive matrix. `sample` selects a
+smaller state set, `stack` checks stack wrapping, and `irq` and `nmi` run synthetic-callback cases.
+`interleave-irq` and `interleave-nmi` compare a controlled single-write interrupt matrix with the
+event model below; `interleave-all-irq` and `interleave-all-nmi` extend the matrix to every byte
+value. `interleave-flags-irq` and `interleave-flags-nmi` test the D/V-set profiles described below.
+`nested-irq` and `nested-nmi` test a callback that calls `$F030` once before returning.
+An optional decimal occurrence argument selects an authentic call before testing; input schedules
+use `GAMATEBIOSCALLS_PRESS` as in the other BIOS diagnostics. These modes require local,
+user-supplied BIOS and cartridge files and are not part of the production core.
+
+Exhaustive enumeration of the resulting mathematical transition graph gives seven cycles of
+lengths 7, 85, 85, 85, 595, 595, and 595, with a maximum transient of 10 calls. The observed boot
+seed `$358A` lies on a 595-call cycle. This is a property of the specified transition, not a
+physical-hardware measurement or a claim that every possible title uses each state.
+
+#### Interrupt interaction
+
+The operation is not atomic. With input `$1234`, a deliberately injected IRQ after the low byte
+was updated allowed a purpose-written cartridge callback to observe the intermediate state
+`$1269`; the uninterrupted and eventual result was `$2469`. In a second experiment, an IRQ after
+the service wrote `$014` let a synthetic callback set `$014=$80` before it was read; the result
+changed from `$2469` to `$2468`. In a third, the callback set `$012=$80` after the service's final
+read: A returned `$69` while the final RAM state was `$2480`. In a fourth, a callback reentered
+`$F030` after the outer call wrote scratch for input `$0400`. The final state was `$1003`, rather
+than `$1002` from two uninterrupted sequential calls.
+
+Each scenario was reproduced at all 27 cartridge first-call contexts under both BIOSes, using either
+an injected IRQ or an injected NMI (432 interrupted calls). The callback was installed only in a
+private in-memory cartridge copy after the authentic call was reached. It is not commercial
+cartridge data; the NMI tests inject the interrupt directly and do not simulate UART link traffic.
+
+Separate address watches on seven synthetic state inputs under both BIOSes observed the low-byte
+update before the high-byte update, with `$014` written and then read before those updates. The
+zero-input path first writes `$FF` to both state bytes. An additional exploratory matrix injected
+one IRQ at each modeled instruction boundary for inputs `$0000`, `$1234`, and `$8000`, with a
+callback setting one of `$012-$014` to `$80`: 288 calls per BIOS in one context. Derived output
+signatures matched between revisions but varied with injection point, including cases where A and
+the final low byte differed. These observations identify real intermediate state and preclude an
+atomic read/modify/write substitute when callbacks can access these bytes. They do not define
+every possible IRQ/NMI injection point, callback mutation, nesting case, or instruction-level
+timing. A replacement must preserve the necessary interrupt-visible ordering; full equivalence for
+arbitrary asynchronous callbacks remains unverified.
+
+The following event model was derived independently from those watches and controlled callback
+writes. Times are emulator instruction-start offsets in master clocks, excluding interrupt work;
+they are **not** physical bus-cycle measurements. The zero-repair path uses the offsets in the
+second column.
+
+| Nonzero path | Zero-repair path | Observed event or modeled effect |
+| ---: | ---: | --- |
+| 26, 32 | 26, 32 | Sample `$012`, then `$013`; if both samples are zero, take the repair path. |
+| — | 46, 52 | Write `$FF` to `$012`, then `$013`. |
+| 44, 74 | 58, 88 | Sample `$013`; write its bit 2 as bit 7 of `$014`. |
+| 80, 102 | 94, 116 | Sample `$012` and then `$014`; XOR their bits 4 and 7 for feedback. |
+| 112, 122 | 126, 136 | Shift the then-current `$012` left with feedback; shift the then-current `$013` left with the former low byte's bit 7. |
+| 156 | 170 | Load A from the then-current `$012`; N/Z describe A and C is the former high byte's bit 7. |
+| 174 | 188 | Return, absent interrupt work. |
+
+The model describes the tested intervention class: one IRQ or NMI callback writes one of
+`$012-$014` once and otherwise returns normally, with the write applied at the interrupted
+instruction boundary. It was checked with eight synthetic input states, five callback byte values,
+each target byte, and every modeled instruction boundary in each of the 27 cartridge contexts
+under both BIOSes, using IRQ and NMI separately. Each combination was run with D/V clear and set;
+the D/V-set NMI profile also entered with I set. All 813,240 interrupted calls matched. A second
+matrix used the same eight states, three targets, boundaries, contexts, BIOSes, and IRQ/NMI, but
+exercised all 256 callback byte values with entry P=`$20`. All 20,818,944 cases matched. Neither
+matrix proves behavior for arbitrary callback programs, nested asynchronous interrupts, or bus-cycle
+timing. In particular, callbacks that inspect or alter the interrupted stack and CPU context,
+generate other interrupts, or affect other RAM or hardware have not been exhaustively modeled.
+
+A separate reentrancy matrix tested one callback that invokes `$F030` uninterrupted and returns,
+without further interrupt injection. The prediction applies the uninterrupted transition to
+`$012-$014` at the interrupted outer boundary, then resumes the event model. For the same eight
+synthetic states, every outer instruction boundary, entry P=`$20`, IRQ and NMI, 27 cartridge
+contexts, and both BIOSes, all 27,108 cases matched A, X, Y, S, P, and `$012-$014`. This covers
+one level of service reentry, not arbitrary asynchronous interrupt nesting.
 
 ### Second resolved contract: `$F000`
 
