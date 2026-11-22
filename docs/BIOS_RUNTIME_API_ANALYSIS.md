@@ -905,67 +905,68 @@ complete `$F027` grammar or a guarantee about all later calls. Galaxy Invaders r
 
 ### IRQ-gated counter wait: `$F003`
 
-The validated report contains 7,424 `$F003` calls. Its 60 uninterrupted calls are evenly split
-between the two BIOS revisions and span 18 titles. Every uninterrupted call takes 42 master clocks
+The validated report contains 7,424 `$F003` calls. Its 62 uninterrupted calls are evenly split
+between the two BIOS revisions and span 19 titles. Every uninterrupted call takes 42 master clocks
 and has the same register, RAM-write, status, and hardware-effect shape.
 
 | Observable | Contract |
 | --- | --- |
 | Entry A | Ignored; A returns zero. |
-| Entry RAM `$00B` | Values `$00-$07` wait (8 to 1 IRQs); tested values `>= $08` return immediately. |
+| Entry RAM `$00B` | Values `$00-$07` wait (8 to 1 IRQs); values `$08-$FF` return immediately. |
 | RAM `$00B` on return | Written as zero. |
 | Registers | X, Y, and S are preserved. |
 | Status | C and Z set; N clear; B, D, I, and V preserved. |
 | Ready-path timing | 42 master clocks when the wait condition is already satisfied. |
 | Other hardware | No VRAM, LCD, AY, mapper, or UART effects in uninterrupted calls. |
 
-Controlled probes used first-call contexts from World Cup Soccer and Dino Bibo under both BIOS
-revisions. Entry values `$00` through `$08` took respectively 8 through 0 periodic IRQs before
-returning. In World Cup Soccer, values `$09`, `$0A`, `$0F`, `$10`, `$17`, `$7F`, `$80`, `$F7`, `$F8`,
-and `$FF` also took the 42-clock ready path under both BIOS revisions. A/X/Y/P perturbations in
-World Cup Soccer and Dino Bibo confirmed the ready-path register and status behavior. Thus the
-tested behavior is consistent with a threshold of eight, distinct from `$F006`'s threshold of five.
+An exhaustive entry-byte matrix tested all 256 `$00B` values in the first authentic call context of
+each of the 30 titles observed using `$F003`, under both BIOS revisions (15,360 probes). Values
+`$00-$07` took exactly `8 - n` periodic IRQs, where `n` is the entry value; every value `$08-$FF`
+returned on the 42-master-clock ready path without an IRQ. All probes returned with `$00B=0`, A=`$00`,
+X/Y/S preserved, and status `(P_in & $7C) | $03`. Ready-path probes wrote only `$00B` and had no
+peripheral effects. The counter was changed only in the probe's private in-memory machine state.
 
-The corpus validates the ready path across 18 titles, while the controlled wait matrix covers two.
-Wait-path timing varies with IRQ callback work and is not specified by a fixed cycle equation. The
-correlation between the number of IRQs and the entry value of `$00B` does not identify the callback's
-exact update mechanism; RAM and peripheral changes during an IRQ-spanning call must not be attributed
-to `$F003` without separating callback effects. Values from `$18` through `$7E` were not directly
-tested, so the complete high-byte range is not exhaustively established.
+This establishes the complete byte-domain contract across every observed caller's first call
+context. Later call contexts were not individually perturbed. Wait-path timing varies with
+title-specific IRQ callback work; RAM and peripheral changes during IRQ-spanning calls must not be
+attributed to `$F003` without separating callback effects. The callback's intermediate counter
+updates were not traced directly. These are emulated observations, not physical timing measurements.
 
 ### IRQ-gated counter wait: `$F006`
 
-The validated report contains 6,326 `$F006` calls; 192 uninterrupted calls are evenly split between
+The validated report contains 6,454 `$F006` calls; 192 uninterrupted calls are evenly split between
 the two BIOS revisions and span 15 titles. Every uninterrupted call takes 42 master clocks and has
 the same register, RAM-write, status, and hardware-effect shape.
 
 | Observable | Contract |
 | --- | --- |
 | Entry A | Ignored; A returns zero. |
-| Entry RAM `$00B` | Values 0–4 wait; 5 and tested higher values return immediately. |
+| Entry RAM `$00B` | Values `$00-$04` wait (`5 - n` IRQs); values `$05-$FF` return immediately. |
 | RAM `$00B` on return | Written as zero. |
 | Registers | X, Y, and S are preserved. |
 | Status | C and Z set; N clear; I, D, and V preserved. |
 | Ready-path timing | 42 master clocks when the wait condition is already satisfied. |
 | Other hardware | No VRAM, LCD, AY, mapper, or UART effects in uninterrupted calls. |
 
-Controlled probes in Dinosaur Park and Witty Apee, under both BIOS revisions, set `$00B` to each
-value from 0 through 5. The calls took respectively 5, 4, 3, 2, 1, and 0 periodic IRQs before
-returning; `$00B=5` returned immediately. Values `$7E`, `$7F`, `$80`, `$81`, and `$FF` also took the
-42-clock ready path. With IRQs masked and `$00B=0`, the probe did not observe a clean return within
-its 10-million-instruction bound. These results imply that the IRQ path advances or otherwise
-satisfies a `$00B` threshold; the intermediate counter values were not traced directly, so the exact
-incrementing mechanism remains an inference.
+An exhaustive entry-byte matrix tested all 256 `$00B` values in the first authentic call context of
+each of the 26 titles observed using `$F006`, under both BIOS revisions (13,312 probes). Values
+`$00-$04` took exactly `5 - n` periodic IRQs, where `n` is the entry value; every value `$05-$FF`
+returned on the 42-master-clock ready path without an IRQ. All probes returned with `$00B=0`, A=`$00`,
+X/Y/S preserved, and status `(P_in & $7C) | $03`. Ready-path probes wrote only `$00B` and had no
+peripheral effects. The counter was changed only in the probe's private in-memory machine state.
 
-The corpus supports the 42-clock ready-path contract across 15 titles, while the controlled wait
-matrix covers two titles. Wait-path timing varies with the IRQ phase and callback work and is not
-specified by a fixed cycle equation. RAM and peripheral changes during an IRQ-spanning call must not
-be attributed to `$F006` without separating callback effects.
+This establishes the complete byte-domain contract across every observed caller's first call
+context; later call contexts were not individually perturbed. With IRQs masked and `$00B=0`, earlier
+probes in Dinosaur Park and Witty Apee did not observe a clean return within a 10-million-instruction
+bound. The IRQ path therefore depends on IRQ progress, but the callback's intermediate counter
+updates were not traced. Wait-path timing varies with IRQ phase and callback work; RAM and peripheral
+changes during IRQ-spanning calls must not be attributed to `$F006` without separating callback
+effects. These are emulated observations, not physical timing measurements.
 
 ### IRQ-gated counter wait: `$F009`
 
-The available completed-call report contains 3,696 balanced `$F009` calls across 38 titles, 1,848
-per BIOS revision. Of these, 3,680 span an IRQ or NMI; the 16 uninterrupted calls, from six titles,
+The available completed-call report contains 4,070 balanced `$F009` calls across 41 titles, 2,035
+per BIOS revision. Of these, 4,054 span an IRQ or NMI; the 16 uninterrupted calls, from six titles,
 are evenly split between BIOS revisions. All 16 take 42 master clocks and have the same register,
 RAM, status, and hardware-effect signature. Across all completed calls, A returns zero, X/Y/S are
 preserved, and C/Z are set, N is clear, and B/D/I/V are preserved.
@@ -981,7 +982,7 @@ preserved, and C/Z are set, N is clear, and B/D/I/V are preserved.
 | Other hardware | No peripheral effects in uninterrupted calls. IRQ-spanning calls include callback effects. |
 
 An exhaustive entry-byte matrix tested all 256 `$00B` values in the first authentic call context
-of every title observed using `$F009`: 38 titles under both BIOS revisions (19,456 probes). Values
+of every title observed using `$F009`: 41 titles under both BIOS revisions (20,992 probes). Values
 `$00-$17` took exactly `24 - n` periodic IRQs, where `n` is the entry value; every value `$18-$FF`
 returned on the 42-master-clock ready path without an IRQ, wrote only `$00B`, and produced no VRAM,
 LCD, scroll, AY, mapper, or UART effects. Every probe returned with `$00B=0`, A=`$00`, X/Y/S
