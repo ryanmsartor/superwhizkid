@@ -149,14 +149,15 @@ static bool lcdStateMatches(const struct Gamate* entry, const struct Gamate* res
 		result->displayStopped == stopped;
 }
 
-static bool invoke(struct Gamate* g, uint8_t p, struct LcdEvents* events, struct RomEvents* rom) {
+static bool invokeAtStack(struct Gamate* g, uint8_t p, uint8_t s,
+		struct LcdEvents* events, struct RomEvents* rom) {
 	uint8_t a = g->cpu.a, x = g->cpu.x, y = g->cpu.y;
 	uint8_t lastRecord[8];
 	memcpy(lastRecord, g->ram + 0x99, sizeof(lastRecord));
-	g->ram[0x1FF] = 0x60;
-	g->ram[0x1FE] = 0x1F;
+	g->ram[0x100 | (uint8_t) (s + 2)] = 0x60;
+	g->ram[0x100 | (uint8_t) (s + 1)] = 0x1F;
 	g->cpu.pc = 0xF027;
-	g->cpu.s = 0xFD;
+	g->cpu.s = s;
 	g->cpu.p = p;
 	g->cpu.irqMask = (p & 4) != 0;
 	g->irq = g->nmi = false;
@@ -176,7 +177,7 @@ static bool invoke(struct Gamate* g, uint8_t p, struct LcdEvents* events, struct
 		unsigned cycles = gamateCpuStep(g);
 		gamateRunClocks(g, cycles * 2);
 		g->irq = false;
-		if (g->cpu.pc == 0x6020 && g->cpu.s == 0xFF) {
+		if (g->cpu.pc == 0x6020 && g->cpu.s == (uint8_t) (s + 2)) {
 			uint8_t expectedP = (uint8_t) ((p & 0x1C) | 0x21 |
 				(a & 0x80) | (a == 0 ? 2 : 0));
 			returned = g->cpu.a == a && g->cpu.x == x && g->cpu.y == y &&
@@ -187,6 +188,10 @@ static bool invoke(struct Gamate* g, uint8_t p, struct LcdEvents* events, struct
 	if (events) gamateSetLcdDiagnosticWatch(g, NULL, NULL);
 	if (rom) gamateSetRomDiagnosticWatch(g, NULL, NULL);
 	return returned;
+}
+
+static bool invoke(struct Gamate* g, uint8_t p, struct LcdEvents* events, struct RomEvents* rom) {
+	return invokeAtStack(g, p, 0xFD, events, rom);
 }
 
 static bool spriteCase(struct Gamate* g, const struct Gamate* base, unsigned record,
@@ -311,10 +316,14 @@ static bool backgroundCase(struct Gamate* g, const struct Gamate* base, unsigned
 	bool pixels = !memcmp(g->vram, expected, sizeof(expected));
 	bool accesses = g->diagnostics.vramTrackedWrites == tiles * tiles * 16 &&
 		g->diagnostics.vramReads == tiles * tiles;
-	if (!returned || !pixels || !accesses) {
+	bool scratch = true;
+	for (unsigned col = 0; col < tiles; col++)
+		for (unsigned row = 0; row < tiles; row++)
+			if (g->ram[0x308 + col * tiles + row] != selectors[row][col]) scratch = false;
+	if (!returned || !pixels || !accesses || !scratch) {
 		fprintf(stderr, "background record=%u x=%02X y=%02X seed=%u returned=%u "
-			"pixels=%u accesses=%u reads=%llu writes=%llu\n", record, x, y, seed,
-			returned, pixels, accesses, (unsigned long long) g->diagnostics.vramReads,
+			"pixels=%u accesses=%u scratch=%u reads=%llu writes=%llu\n", record, x, y, seed,
+			returned, pixels, accesses, scratch, (unsigned long long) g->diagnostics.vramReads,
 			(unsigned long long) g->diagnostics.vramTrackedWrites);
 		return false;
 	}
@@ -357,10 +366,13 @@ static bool emptyScratchCase(struct Gamate* g, const struct Gamate* base, unsign
 	memset(g->ram + 0x21, 0xFF, 0x80);
 	for (unsigned address = 0; address < 0x400; address++)
 		if (address <= 3 || (address >= 0x18 && address <= 0x1F) ||
-				(address >= 0x308 && address <= 0x3C7))
+				(address >= 0x300 && address <= 0x3C7))
 			g->ram[address] = pattern(seed, address);
 	gamateResetRamDiagnostics(g);
 	bool returned = invoke(g, (uint8_t) ((seed & 0xD3) | 0x24), NULL, NULL);
+	for (unsigned address = 0x300; address <= 0x307; address++)
+		if (!(g->diagnostics.ramWritten[address >> 3] & (1u << (address & 7))))
+			returned = false;
 	for (unsigned address = 0; address < 0x400; address++) {
 		if (address <= 3 || (address >= 0x18 && address <= 0x1F) ||
 				(address >= 0x308 && address <= 0x3C7)) {
@@ -499,6 +511,41 @@ static bool liveRecordCase(struct Gamate* g, const struct Gamate* base) {
 	return matched;
 }
 
+static bool stackWritesMatch(const struct Gamate* g, uint8_t s, unsigned expected) {
+	for (unsigned i = 0; i < 256; i++) {
+		unsigned address = 0x100 | (uint8_t) (s - i);
+		bool written = (g->diagnostics.ramWritten[address >> 3] & (1u << (address & 7))) != 0;
+		if (written != (i < expected)) return false;
+	}
+	return true;
+}
+
+static bool stackCase(struct Gamate* g, const struct Gamate* base, unsigned record,
+		bool active, bool background, unsigned x, unsigned selector, uint8_t s) {
+	*g = *base;
+	memset(g->ram + 0x21, 0xFF, 0x80);
+	g->ram[6] = 0;
+	g->ram[7] = 0x80;
+	g->ram[8] = 0;
+	g->ram[9] = 0x90;
+	memset(g->vram, (uint8_t) selector, sizeof(g->vram));
+	if (active) {
+		unsigned entry = 0x21 + 8 * record;
+		g->ram[entry] = g->ram[entry + 5] = (uint8_t) x;
+		g->ram[entry + 1] = g->ram[entry + 6] = 0x20;
+		g->ram[entry + (background ? 7 : 2)] = (uint8_t) selector;
+	}
+	gamateResetRamDiagnostics(g);
+	bool returned = invokeAtStack(g, 0x64, s, NULL, NULL);
+	unsigned expected = !active ? 9 : background ? 11 : record < 8 ? 13 : 18;
+	bool writes = stackWritesMatch(g, s, expected);
+	if (!returned || !writes)
+		fprintf(stderr, "stack record=%u active=%u background=%u x=%02X selector=%02X "
+			"entry_s=%02X returned=%u writes=%u\n", record, active, background, x,
+			selector, s, returned, writes);
+	return returned && writes;
+}
+
 static unsigned tileClocks(unsigned selector, const unsigned low[2]) {
 	unsigned clocks = 64 * (selector >> 5);
 	for (unsigned plane = 0; plane < 2; plane++)
@@ -507,9 +554,70 @@ static unsigned tileClocks(unsigned selector, const unsigned low[2]) {
 	return clocks;
 }
 
+static const uint8_t zeroPageScratchAddresses[] = {
+	0x00, 0x01, 0x02, 0x03, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F
+};
+
+struct ZeroPageScratch {
+	uint8_t value[sizeof(zeroPageScratchAddresses)];
+	bool written[sizeof(zeroPageScratchAddresses)];
+};
+
+static void initZeroPageScratch(struct ZeroPageScratch* scratch, const struct Gamate* g) {
+	memset(scratch, 0, sizeof(*scratch));
+	for (unsigned i = 0; i < sizeof(zeroPageScratchAddresses); i++)
+		scratch->value[i] = g->ram[zeroPageScratchAddresses[i]];
+}
+
+static void modelZeroPageScratch(struct ZeroPageScratch* scratch, bool background,
+		unsigned record, unsigned x, unsigned y, unsigned selector, unsigned plane1Base) {
+	unsigned finalSelector = background || record >= 8 ? selector : (selector + 3) & 255;
+	uint8_t values[] = {
+		(uint8_t) (record < 8 ? 0xB0 : 0xA0), 3,
+		(uint8_t) plane1Base, (uint8_t) ((plane1Base >> 8) + (finalSelector >> 5)),
+		(uint8_t) (0x80 | (x >> 3)), (uint8_t) (background ? y & 0xF8 : y),
+		(uint8_t) finalSelector, (uint8_t) !background, 0, 0, (uint8_t) (x >> 3),
+		(uint8_t) (0xE6 + (y >> 3))
+	};
+	for (unsigned i = background ? 2 : 0; i < (background ? 12 : 9); i++) {
+		scratch->value[i] = values[i];
+		scratch->written[i] = true;
+	}
+}
+
+static bool zeroPageScratchMatches(const struct ZeroPageScratch* expected,
+		const struct Gamate* g, bool verbose) {
+	bool matched = true;
+	for (unsigned i = 0; i < sizeof(zeroPageScratchAddresses); i++) {
+		unsigned address = zeroPageScratchAddresses[i];
+		bool written = (g->diagnostics.ramWritten[address >> 3] & (1u << (address & 7))) != 0;
+		if (g->ram[address] != expected->value[i] || written != expected->written[i]) {
+			if (verbose) fprintf(stderr, "scratch address=%03X written=%u/%u\n",
+				address, written, expected->written[i]);
+			matched = false;
+		}
+	}
+	return matched;
+}
+
+static void seedScratch(struct Gamate* g, unsigned seed) {
+	for (unsigned i = 0; i < sizeof(zeroPageScratchAddresses); i++)
+		g->ram[zeroPageScratchAddresses[i]] = pattern(seed, zeroPageScratchAddresses[i]);
+	for (unsigned i = 0; i < 0xC0; i++)
+		g->ram[0x308 + i] = pattern(seed, 0x308 + i);
+}
+
+static unsigned finalBackgroundSelector(const uint8_t* vram, unsigned record, unsigned x,
+		unsigned y) {
+	unsigned last = record < 8 ? 2 : 1;
+	unsigned row = (0xE6 + (y >> 3) + last) & 255;
+	unsigned col = ((x >> 3) + last) & 31;
+	return vram[2 * ((row << 5) | col)];
+}
+
 static unsigned modelBackground(uint8_t* vram, const uint8_t* const graphics[2],
 		const unsigned base[2], bool* used, struct LcdEvents* events, struct RomEvents* rom,
-		uint8_t control,
+		uint8_t* scratch, uint8_t* scratchValid, uint8_t control,
 		unsigned record, unsigned x, unsigned y) {
 	unsigned tiles = record < 8 ? 3 : 2;
 	unsigned clocks = record < 8 ? 9084 : 4270;
@@ -523,6 +631,11 @@ static unsigned modelBackground(uint8_t* vram, const uint8_t* const graphics[2],
 			lcdEvent(events, 5, (uint8_t) mapRow);
 			lcdEvent(events, 4, (uint8_t) ((x >> 3) + col));
 			selectors[row][col] = vram[2 * ((mapRow << 5) | mapCol)];
+			if (scratch) {
+				unsigned index = col * tiles + row;
+				scratch[index] = selectors[row][col];
+				scratchValid[index] = 1;
+			}
 			if (used) used[selectors[row][col]] = true;
 			clocks += tileClocks(selectors[row][col], low);
 		}
@@ -626,6 +739,7 @@ static bool combinedCase(struct Gamate* g, const struct Gamate* base,
 	g->ram[8] = (uint8_t) low[1];
 	g->ram[9] = 0x90;
 	g->ram[0x15] = (uint8_t) seed;
+	seedScratch(g, seed + 71);
 	for (unsigned i = 0; i < sizeof(g->vram); i++) g->vram[i] = pattern(seed + 11, i);
 	for (unsigned record = 0; record < 16; record++) {
 		unsigned entry = 0x21 + 8 * record;
@@ -643,15 +757,24 @@ static bool combinedCase(struct Gamate* g, const struct Gamate* base,
 	memcpy(expected, g->vram, sizeof(expected));
 	struct LcdEvents events = { 0 };
 	struct RomEvents rom = { 0 };
-	uint8_t scratch[0xC0] = { 0 }, scratchValid[0xC0] = { 0 };
-	unsigned reads = 0, writes = 0, clocks = 6326;
+	uint8_t scratch[0xC0], scratchValid[0xC0] = { 0 };
+	memcpy(scratch, g->ram + 0x308, sizeof(scratch));
+	struct ZeroPageScratch zeroPage;
+	initZeroPageScratch(&zeroPage, g);
+	unsigned reads = 0, writes = 0, clocks = 6326, stackWrites = 9;
 	for (unsigned record = 0; record < 16; record++) {
 		unsigned entry = 0x21 + 8 * record;
 		if (g->ram[entry + 7] != 0xFF) {
+			if (stackWrites < 11) stackWrites = 11;
 			unsigned tiles = record < 8 ? 3 : 2;
+			unsigned selector = finalBackgroundSelector(expected, record,
+				g->ram[entry + 5], g->ram[entry + 6]);
+			modelZeroPageScratch(&zeroPage, true, record, g->ram[entry + 5],
+				g->ram[entry + 6], selector, bases[1]);
 			reads += tiles * tiles;
 			writes += tiles * tiles * 16;
 			clocks += modelBackground(expected, sources, bases, NULL, &events, &rom,
+				scratch, scratchValid,
 				g->ram[0x15], record,
 				g->ram[entry + 5], g->ram[entry + 6]);
 		}
@@ -659,10 +782,14 @@ static bool combinedCase(struct Gamate* g, const struct Gamate* base,
 	for (unsigned record = 0; record < 16; record++) {
 		unsigned entry = 0x21 + 8 * record;
 		if (g->ram[entry + 2] != 0xFF) {
+			unsigned depth = record < 8 ? 13 : 18;
+			if (stackWrites < depth) stackWrites = depth;
 			unsigned side = record < 8 ? 16 : 8;
 			unsigned count = side * (side / 8 + 1) * 2;
 			reads += count;
 			writes += count;
+			modelZeroPageScratch(&zeroPage, false, record, g->ram[entry], g->ram[entry + 1],
+				g->ram[entry + 2], bases[1]);
 			clocks += modelSprite(expected, sources, bases, NULL, &events, &rom,
 				scratch, scratchValid,
 				g->ram[0x15], record,
@@ -671,13 +798,19 @@ static bool combinedCase(struct Gamate* g, const struct Gamate* base,
 		}
 	}
 	uint64_t start = g->masterClocks;
+	gamateResetRamDiagnostics(g);
 	bool returned = invoke(g, 0x64, &events, &rom);
 	bool pixels = !memcmp(g->vram, expected, sizeof(expected));
 	bool accesses = g->diagnostics.vramTrackedWrites == writes && g->diagnostics.vramReads == reads;
 	bool timing = g->masterClocks - start == clocks;
-	bool scratchMatches = true;
-	for (unsigned i = 0; i < sizeof(scratch); i++)
-		if (scratchValid[i] && g->ram[0x308 + i] != scratch[i]) scratchMatches = false;
+	bool scratchMatches = stackWritesMatch(g, 0xFD, stackWrites);
+	scratchMatches &= zeroPageScratchMatches(&zeroPage, g, true);
+	for (unsigned i = 0; i < sizeof(scratch); i++) {
+		unsigned address = 0x308 + i;
+		bool written = (g->diagnostics.ramWritten[address >> 3] & (1u << (address & 7))) != 0;
+		if (g->ram[address] != scratch[i] || written != (scratchValid[i] != 0))
+			scratchMatches = false;
+	}
 	if (!returned || !pixels || !accesses || !timing || !scratchMatches ||
 			!lcdMatches(&events) || !romMatches(&rom)) {
 		fprintf(stderr, "combined seed=%u returned=%u pixels=%u accesses=%u scratch=%u timing=%lld "
@@ -707,6 +840,7 @@ static bool selectorCase(struct Gamate* g, const struct Gamate* base,
 	g->ram[8] = (uint8_t) low[1];
 	g->ram[9] = 0x90;
 	g->ram[0x15] = (uint8_t) selector;
+	seedScratch(g, selector + record * 256 + (background ? 4096 : 0));
 	g->cpu.a = (uint8_t) selector;
 	g->cpu.x = (uint8_t) (selector * 3);
 	g->cpu.y = (uint8_t) (selector * 5);
@@ -723,29 +857,47 @@ static bool selectorCase(struct Gamate* g, const struct Gamate* base,
 	memcpy(expected, g->vram, sizeof(expected));
 	struct LcdEvents events = { 0 };
 	struct RomEvents rom = { 0 };
+	uint8_t scratchBytes[0xC0], scratchValid[0xC0] = { 0 };
+	memcpy(scratchBytes, g->ram + 0x308, sizeof(scratchBytes));
+	struct ZeroPageScratch zeroPage;
+	initZeroPageScratch(&zeroPage, g);
 	unsigned reads = 0, writes = 0, clocks = 6326;
 	if (background && !disabled) {
 		unsigned tiles = record < 8 ? 3 : 2;
 		reads = tiles * tiles;
 		writes = reads * 16;
-		clocks += modelBackground(expected, sources, bases, NULL, &events, &rom, g->ram[0x15],
+		clocks += modelBackground(expected, sources, bases, NULL, &events, &rom,
+			scratchBytes, scratchValid, g->ram[0x15],
 			record, x, y);
+		modelZeroPageScratch(&zeroPage, true, record, x, y, selector, bases[1]);
 	} else if (!background && selector != 0xFF) {
 		unsigned side = record < 8 ? 16 : 8;
 		reads = writes = side * (side / 8 + 1) * 2;
-		clocks += modelSprite(expected, sources, bases, NULL, &events, &rom, NULL, NULL, g->ram[0x15],
+		clocks += modelSprite(expected, sources, bases, NULL, &events, &rom,
+			scratchBytes, scratchValid, g->ram[0x15],
 			record, x, y, selector);
+		modelZeroPageScratch(&zeroPage, false, record, x, y, selector, bases[1]);
 	}
 	uint64_t start = g->masterClocks;
+	gamateResetRamDiagnostics(g);
 	bool returned = invoke(g, (uint8_t) ((selector & 0xD7) | 0x20), &events, &rom);
 	bool pixels = !memcmp(g->vram, expected, sizeof(expected));
 	bool accesses = g->diagnostics.vramTrackedWrites == writes && g->diagnostics.vramReads == reads;
 	bool timing = g->masterClocks - start == clocks;
-	if (!returned || !pixels || !accesses || !timing || !lcdMatches(&events) || !romMatches(&rom)) {
+	bool scratch = zeroPageScratchMatches(&zeroPage, g, true);
+	for (unsigned i = 0; i < sizeof(scratchBytes); i++) {
+		unsigned address = 0x308 + i;
+		bool written = (g->diagnostics.ramWritten[address >> 3] & (1u << (address & 7))) != 0;
+		if (g->ram[address] != scratchBytes[i] || written != (scratchValid[i] != 0))
+			scratch = false;
+	}
+	if (!returned || !pixels || !accesses || !timing || !scratch ||
+			!lcdMatches(&events) || !romMatches(&rom)) {
 		fprintf(stderr, "selector record=%u selector=%02X background=%u disabled=%u "
-			"returned=%u pixels=%u accesses=%u p=%02X timing=%lld lcd=%u/%u/%u rom=%u/%u/%u\n",
+			"returned=%u pixels=%u accesses=%u scratch=%u p=%02X timing=%lld "
+			"lcd=%u/%u/%u rom=%u/%u/%u\n",
 			record, selector, background,
-			disabled, returned, pixels, accesses, g->cpu.p,
+			disabled, returned, pixels, accesses, scratch, g->cpu.p,
 			(long long) (g->masterClocks - start) - clocks,
 			events.observed, events.count, events.mismatches, rom.observed, rom.count, rom.mismatches);
 		return false;
@@ -813,17 +965,26 @@ static int replay(struct Gamate* g, const struct Gamate* entry, bool biosSources
 	memcpy(expected, g->vram, sizeof(expected));
 	struct LcdEvents events = { 0 };
 	struct RomEvents rom = { 0 };
-	uint8_t scratch[0xC0] = { 0 }, scratchValid[0xC0] = { 0 };
-	unsigned reads = 0, writes = 0, clocks = 6326;
+	uint8_t scratch[0xC0], scratchValid[0xC0] = { 0 };
+	memcpy(scratch, g->ram + 0x308, sizeof(scratch));
+	struct ZeroPageScratch zeroPage;
+	initZeroPageScratch(&zeroPage, g);
+	unsigned reads = 0, writes = 0, clocks = 6326, stackWrites = 9;
 	unsigned bases[2] = { g->ram[6] | (unsigned) g->ram[7] << 8,
 		g->ram[8] | (unsigned) g->ram[9] << 8 };
 	for (unsigned record = 0; record < 16; record++) {
 		unsigned address = 0x21 + 8 * record;
 		if (g->ram[address + 7] != 0xFF) {
+			if (stackWrites < 11) stackWrites = 11;
 			unsigned count = record < 8 ? 9 : 4;
+			unsigned selector = finalBackgroundSelector(expected, record,
+				g->ram[address + 5], g->ram[address + 6]);
+			modelZeroPageScratch(&zeroPage, true, record, g->ram[address + 5],
+				g->ram[address + 6], selector, bases[1]);
 			reads += count;
 			writes += count * 16;
 			clocks += modelBackground(expected, graphics, bases, used, &events, &rom,
+				scratch, scratchValid,
 				g->ram[0x15], record,
 				g->ram[address + 5], g->ram[address + 6]);
 			if (!sourcesAvailable(valid, used, bases)) return 4;
@@ -832,10 +993,14 @@ static int replay(struct Gamate* g, const struct Gamate* entry, bool biosSources
 	for (unsigned record = 0; record < 16; record++) {
 		unsigned address = 0x21 + 8 * record;
 		if (g->ram[address + 2] != 0xFF) {
+			unsigned depth = record < 8 ? 13 : 18;
+			if (stackWrites < depth) stackWrites = depth;
 			unsigned side = record < 8 ? 16 : 8;
 			unsigned count = side * (side / 8 + 1) * 2;
 			reads += count;
 			writes += count;
+			modelZeroPageScratch(&zeroPage, false, record, g->ram[address],
+				g->ram[address + 1], g->ram[address + 2], bases[1]);
 			clocks += modelSprite(expected, graphics, bases, used, &events, &rom,
 				scratch, scratchValid,
 				g->ram[0x15], record,
@@ -860,7 +1025,7 @@ static int replay(struct Gamate* g, const struct Gamate* entry, bool biosSources
 		for (unsigned record = 0; record < 16; record++) {
 			unsigned address = 0x21 + 8 * record;
 			if (g->ram[address + 7] != 0xFF)
-				modelBackground(alternateVram, alternate, bases, NULL, NULL, NULL,
+				modelBackground(alternateVram, alternate, bases, NULL, NULL, NULL, NULL, NULL,
 					g->ram[0x15], record, g->ram[address + 5], g->ram[address + 6]);
 		}
 		for (unsigned record = 0; record < 16; record++) {
@@ -904,9 +1069,14 @@ static int replay(struct Gamate* g, const struct Gamate* entry, bool biosSources
 	uint8_t expectedP = (uint8_t) ((p & 0x18) | 0x25 | (a & 0x80) | (a == 0 ? 2 : 0));
 	bool registers = g->cpu.a == a && g->cpu.x == x && g->cpu.y == y && g->cpu.p == expectedP;
 	bool timing = g->masterClocks - start == clocks;
-	bool ram = !memcmp(g->ram + 0x300, entry->ram + 0x99, 8);
-	for (unsigned i = 0; i < sizeof(scratch); i++)
-		if (scratchValid[i] && g->ram[0x308 + i] != scratch[i]) ram = false;
+	bool ram = stackWritesMatch(g, s, stackWrites) &&
+		!memcmp(g->ram + 0x300, entry->ram + 0x99, 8) &&
+		zeroPageScratchMatches(&zeroPage, g, true);
+	for (unsigned i = 0; i < sizeof(scratch); i++) {
+		unsigned address = 0x308 + i;
+		bool written = (g->diagnostics.ramWritten[address >> 3] & (1u << (address & 7))) != 0;
+		if (g->ram[address] != scratch[i] || written != (scratchValid[i] != 0)) ram = false;
+	}
 	for (unsigned i = 0; i < sizeof(g->ram); i++) {
 		bool scratch = i <= 3 || (i >= 0x18 && i <= 0x1F) ||
 			(i >= 0x100 && i < 0x200) || (i >= 0x300 && i <= 0x3C7);
@@ -969,6 +1139,151 @@ static int corpus(struct Gamate* g, struct Gamate* copy, bool biosSources) {
 	if (biosSources) printf("bios_source_calls=%u output_changes_against_zero=%u\n",
 		biosReads, outputChanges);
 	return failures != 0;
+}
+
+static bool runOriginalCall(struct Gamate* g, bool maskIrq, uint64_t* elapsed,
+		unsigned* irqs, unsigned* nmis) {
+	uint8_t s = g->cpu.s;
+	uint16_t ret = (uint16_t) (1 + g->ram[0x100 | (uint8_t) (s + 1)] +
+		((unsigned) g->ram[0x100 | (uint8_t) (s + 2)] << 8));
+	uint64_t start = g->masterClocks, startIrqs = g->diagnostics.irqsTaken;
+	uint64_t startNmis = g->diagnostics.nmisTaken;
+	if (maskIrq) {
+		g->cpu.p |= 4;
+		g->cpu.irqMask = true;
+		g->irq = false;
+	}
+	while (g->masterClocks - start < 3000000) {
+		unsigned cycles = gamateCpuStep(g);
+		gamateRunClocks(g, cycles * 2);
+		if (maskIrq) g->irq = false;
+		if (g->cpu.pc == ret && g->cpu.s == (uint8_t) (s + 2)) {
+			*elapsed = g->masterClocks - start;
+			*irqs = (unsigned) (g->diagnostics.irqsTaken - startIrqs);
+			*nmis = (unsigned) (g->diagnostics.nmisTaken - startNmis);
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool lcdRegistersDiffer(const struct Gamate* a, const struct Gamate* b) {
+	return a->vramAddress != b->vramAddress || a->vramPlane != b->vramPlane ||
+		a->incrementRow != b->incrementRow || a->displayBlank != b->displayBlank ||
+		a->window != b->window || a->swapPlanes != b->swapPlanes ||
+		a->displayStopped != b->displayStopped;
+}
+
+enum CallDifference {
+	DIFF_VRAM = 1u << 0, DIFF_SCRATCH = 1u << 1, DIFF_INPUTS = 1u << 2,
+	DIFF_REGISTERS = 1u << 3, DIFF_LCD = 1u << 4, DIFF_MAPPER = 1u << 5,
+	DIFF_OTHER_RAM = 1u << 6
+};
+
+static unsigned callDifferences(const struct Gamate* a, const struct Gamate* b) {
+	unsigned differences = 0;
+	if (memcmp(a->vram, b->vram, sizeof(a->vram))) differences |= DIFF_VRAM;
+	for (unsigned address = 0; address < sizeof(a->ram); address++) {
+		if ((address >= 0x100 && address < 0x200) || a->ram[address] == b->ram[address])
+			continue;
+		if (address <= 3 || (address >= 0x18 && address <= 0x1F) ||
+				(address >= 0x300 && address <= 0x3C7)) differences |= DIFF_SCRATCH;
+		else if ((address >= 6 && address <= 9) || address == 0x15 ||
+				(address >= 0x21 && address <= 0xA0)) differences |= DIFF_INPUTS;
+		else differences |= DIFF_OTHER_RAM;
+	}
+	if (a->cpu.a != b->cpu.a || a->cpu.x != b->cpu.x || a->cpu.y != b->cpu.y ||
+			a->cpu.s != b->cpu.s || ((a->cpu.p ^ b->cpu.p) & (uint8_t) ~4))
+		differences |= DIFF_REGISTERS;
+	if (lcdRegistersDiffer(a, b)) differences |= DIFF_LCD;
+	if (a->bank != b->bank || a->firstBank != b->firstBank) differences |= DIFF_MAPPER;
+	return differences;
+}
+
+static bool callDifferencesSelfTest(const struct Gamate* base, struct Gamate* a, struct Gamate* b) {
+	*a = *base;
+	*b = *base;
+	b->cpu.p ^= 4;
+	b->ram[0x100] ^= 1;
+	if (callDifferences(a, b)) return false;
+	b->vram[0] ^= 1;
+	if (callDifferences(a, b) != DIFF_VRAM) return false;
+	b->vram[0] ^= 1;
+	b->ram[0x308] ^= 1;
+	if (callDifferences(a, b) != DIFF_SCRATCH) return false;
+	b->ram[0x308] ^= 1;
+	b->ram[6] ^= 1;
+	if (callDifferences(a, b) != DIFF_INPUTS) return false;
+	b->ram[6] ^= 1;
+	b->ram[4] ^= 1;
+	if (callDifferences(a, b) != DIFF_OTHER_RAM) return false;
+	b->ram[4] ^= 1;
+	b->cpu.a ^= 1;
+	if (callDifferences(a, b) != DIFF_REGISTERS) return false;
+	b->cpu.a ^= 1;
+	b->vramAddress ^= 1;
+	if (callDifferences(a, b) != DIFF_LCD) return false;
+	b->vramAddress ^= 1;
+	b->bank ^= 1;
+	return callDifferences(a, b) == DIFF_MAPPER;
+}
+
+static int interruptCompare(struct Gamate* g, struct Gamate* masked, struct Gamate* original) {
+	unsigned calls = 0, compared = 0, pendingNmi = 0, decimal = 0, timeouts = 0;
+	unsigned interrupted = 0, irqOnly = 0, nmi = 0, quietMismatch = 0;
+	unsigned vram = 0, scratch = 0, inputs = 0, registers = 0, lcd = 0;
+	unsigned cartridgeState = 0, otherRam = 0;
+	const char* press = getenv("GAMATEBIOSCALLS_PRESS");
+	for (unsigned frame = 1; frame <= 1000; frame++) {
+		g->buttons = gamateBiosButtonsForFrame(frame, press);
+		g->frameDone = false;
+		while (!g->frameDone) {
+			unsigned cycles = gamateCpuStep(g);
+			gamateRunClocks(g, cycles * 2);
+			if (g->cpu.pc != 0xF027) continue;
+			calls++;
+			if (g->cpu.p & 8) { decimal++; continue; }
+			if (g->nmi) { pendingNmi++; continue; }
+			*masked = *g;
+			*original = *g;
+			uint64_t maskedClocks, originalClocks;
+			unsigned maskedIrqs, maskedNmis, originalIrqs, originalNmis;
+			bool returnedMasked = runOriginalCall(masked, true, &maskedClocks,
+				&maskedIrqs, &maskedNmis);
+			bool returnedOriginal = runOriginalCall(original, false, &originalClocks,
+				&originalIrqs, &originalNmis);
+			if (!returnedMasked || !returnedOriginal) {
+				fprintf(stderr, "interrupt comparison timed out: masked=%u original=%u\n",
+					returnedMasked, returnedOriginal);
+				timeouts++;
+				continue;
+			}
+			compared++;
+			bool hadInterrupt = originalIrqs || originalNmis || maskedIrqs || maskedNmis;
+			unsigned differences = callDifferences(masked, original);
+			if (!hadInterrupt) {
+				if (differences || maskedClocks != originalClocks)
+					quietMismatch++;
+				continue;
+			}
+			interrupted++;
+			irqOnly += originalIrqs && !originalNmis && !maskedNmis;
+			nmi += originalNmis || maskedNmis;
+			vram += (differences & DIFF_VRAM) != 0;
+			scratch += (differences & DIFF_SCRATCH) != 0;
+			inputs += (differences & DIFF_INPUTS) != 0;
+			registers += (differences & DIFF_REGISTERS) != 0;
+			lcd += (differences & DIFF_LCD) != 0;
+			cartridgeState += (differences & DIFF_MAPPER) != 0;
+			otherRam += (differences & DIFF_OTHER_RAM) != 0;
+		}
+	}
+	printf("calls=%u compared=%u decimal_skips=%u pending_nmi_skips=%u timeouts=%u "
+		"interrupted=%u irq_only=%u nmi=%u quiet_mismatch=%u\n",
+		calls, compared, decimal, pendingNmi, timeouts, interrupted, irqOnly, nmi, quietMismatch);
+	printf("interrupted_differences: vram=%u scratch=%u inputs=%u registers=%u lcd=%u "
+		"mapper=%u other_ram=%u\n", vram, scratch, inputs, registers, lcd, cartridgeState, otherRam);
+	return timeouts != 0 || quietMismatch != 0;
 }
 
 static bool serviceScratch(unsigned address) {
@@ -1252,8 +1567,9 @@ static int scratchUse(struct Gamate* g) {
 int main(int argc, char** argv) {
 	if (argc < 3 || argc > 4 ||
 			(argc == 4 && strcmp(argv[3], "corpus") && strcmp(argv[3], "corpus-bios-source") &&
-			strcmp(argv[3], "scratch-use"))) {
-		fprintf(stderr, "usage: %s bios cartridge [corpus|corpus-bios-source|scratch-use]\n", argv[0]);
+			strcmp(argv[3], "scratch-use") && strcmp(argv[3], "interrupt-compare"))) {
+		fprintf(stderr, "usage: %s bios cartridge "
+			"[corpus|corpus-bios-source|scratch-use|interrupt-compare]\n", argv[0]);
 		return 2;
 	}
 	size_t biosSize, romSize;
@@ -1277,6 +1593,27 @@ int main(int argc, char** argv) {
 		return 1;
 	}
 	if (argc == 4) {
+		if (!strcmp(argv[3], "interrupt-compare")) {
+			struct Gamate* original = malloc(sizeof(*original));
+			if (!original) {
+				fprintf(stderr, "could not allocate interrupt comparison machine\n");
+				gamateFree(base);
+				free(base); free(g);
+				return 2;
+			}
+			if (!callDifferencesSelfTest(base, g, original)) {
+				fprintf(stderr, "interrupt comparison self-test failed\n");
+				free(original);
+				gamateFree(base);
+				free(base); free(g);
+				return 1;
+			}
+			int result = interruptCompare(base, g, original);
+			free(original);
+			gamateFree(base);
+			free(base); free(g);
+			return result;
+		}
 		if (!strcmp(argv[3], "scratch-use") && !scratchUseSelfTest(g, base)) {
 			fprintf(stderr, "scratch-use diagnostic self-test failed\n");
 			gamateFree(base);
@@ -1326,6 +1663,25 @@ int main(int argc, char** argv) {
 		for (unsigned i = 0; i < 0x900; i++)
 			writableGraphics[plane * 0x1000 + i] = pattern(51 + plane, i);
 	const uint8_t* graphics[2] = { writableGraphics, writableGraphics + 0x1000 };
+	static const unsigned stackRecords[] = { 0, 7, 8, 15 };
+	static const unsigned stackPositions[] = { 0, 1, 7, 255 };
+	static const unsigned stackSelectors[] = { 0, 31, 32, 254 };
+	static const uint8_t stackEntries[] = { 0xFD, 1, 0, 0xFF };
+	unsigned stackCases = 0, stackFailures = 0;
+	for (unsigned i = 0; i < sizeof(stackEntries); i++) {
+		stackFailures += !stackCase(g, base, 0, false, false, 0, 0, stackEntries[i]);
+		stackCases++;
+		for (unsigned r = 0; r < sizeof(stackRecords) / sizeof(stackRecords[0]); r++)
+			for (unsigned x = 0; x < sizeof(stackPositions) / sizeof(stackPositions[0]); x++)
+				for (unsigned selector = 0;
+						selector < sizeof(stackSelectors) / sizeof(stackSelectors[0]); selector++)
+					for (unsigned background = 0; background < 2; background++) {
+						stackFailures += !stackCase(g, base, stackRecords[r], true,
+							background != 0, stackPositions[x], stackSelectors[selector],
+							stackEntries[i]);
+						stackCases++;
+					}
+	}
 	unsigned combinedFailures = 0;
 	for (unsigned seed = 0; seed < 256; seed++)
 		combinedFailures += !combinedCase(g, base, graphics, seed);
@@ -1347,12 +1703,13 @@ int main(int argc, char** argv) {
 	printf("live_control_cases=2 failures=%u\n", liveControlFailures);
 	printf("live_pointer_cases=1 failures=%u\n", livePointerFailures);
 	printf("live_record_cases=1 failures=%u\n", liveRecordFailures);
+	printf("stack_cases=%u failures=%u\n", stackCases, stackFailures);
 	printf("combined_cases=256 failures=%u\n", combinedFailures);
 	printf("selector_cases=%u failures=%u\n", selectorCases, selectorFailures);
 	gamateFree(base);
 	free(base); free(g);
 	return failures != 0 || backgroundFailures != 0 || firstEventFailures != 0 ||
 		emptyScratchFailures != 0 || liveControlFailures != 0 || livePointerFailures != 0 ||
-		liveRecordFailures != 0 ||
+		liveRecordFailures != 0 || stackFailures != 0 ||
 		combinedFailures != 0 || selectorFailures != 0;
 }

@@ -1141,7 +1141,7 @@ open questions are addressed there for the tested memory domains.
   graphics and temporary synthetic overlays in the emulator's private cartridge copy, never the
   source files. Controlled decimal-mode comparisons did not follow the binary-mode model.
   These are emulator observations, not physical measurements or a complete ABI: individual bus-event
-  timing, remaining scratch values, decimal mode, side-effectful source aliases and interrupt
+  timing, then-unmodeled scratch values, decimal mode, side-effectful source aliases and interrupt
   interference remain open. No BIOS instructions or external emulator implementations were copied
   or reconstructed; no commercial BIOS, ROM or graphics payload is retained or published.
 - Scratch and timing follow-up: the two local, legally obtained BIOS revisions and the read-only
@@ -1186,7 +1186,48 @@ open questions are addressed there for the tested memory domains.
   files remained read-only; no BIOS instructions, cartridge code, graphics payloads or external
   emulator implementations were copied, reconstructed, retained or published. These are emulator
   observations, not physical measurements; decimal mode, side-effectful source aliases, full
-  interrupt interference and remaining scratch state remain open.
+  interrupt interference and intermediate scratch state remain open.
+- Scratch-state follow-up: both local, legally obtained BIOS revisions were executed in this
+  project's emulator using the read-only local collection and purpose-written synthetic graphics.
+  Isolated redraws with varied map selectors established a column-major selector cache at
+  `$308` for each record size. An independent final-state model now includes this cache, both
+  sprite buffers, and `$000-$003` and `$018-$01F`. It compares values and write sets throughout
+  those ranges, including varied initial values and preserved slots, across 256 overlapping-record
+  and 2,052 selector/sentinel cases per BIOS; 1,024 isolated redraw cases per BIOS also checked
+  selector ordering. All passed. The model assumes uninterrupted binary-mode execution, stable
+  inputs and safe sources; it does not predict intermediate scratch values or access times,
+  live mutation, or arbitrary interrupt effects. These are emulator experiments, not physical
+  measurements. Sixteen disabled-table cases per BIOS also confirmed writes to all eight
+  `$300-$307` record-cache bytes. In four 1,000-frame campaigns across 62 cartridges and both
+  BIOSes, all 28,518 masked replays matched the expanded model without skips or failures. The
+  two Mini Golf calls using BIOS-window graphics were included by private in-memory reads, and
+  each differed from an alternate zero-source model. Local BIOS and cartridge files were read
+  only; no firmware instructions, commercial data or external implementation were copied into
+  the project, reconstructed, retained or published. The derived contract and
+  further qualifications are in
+  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+- Stack-write follow-up: in the same emulator and with both local BIOS revisions, 516 synthetic
+  cases per BIOS checked stack write-set coverage without recording stack contents. They varied
+  operation size, record, position, selector and four entry stack pointers, including wrap. An
+  empty call wrote nine consecutive stack slots; isolated redraws wrote 11, large objects 13 and
+  small objects 18. The maximum applicable span also matched 256 multi-record cases per BIOS.
+  Across 62 cartridges and both BIOSes, all 7,196 masked replays in the 1,000-frame no-input
+  campaign matched that span without skips or failures. These are uninterrupted emulator
+  observations, not physical measurements, a stack-content model
+  or a prediction of interrupt-handler writes. Inputs were read only, synthetic graphics were
+  purpose-written, and no commercial data or BIOS instructions were retained or copied.
+- Paired interrupt follow-up: the same read-only collection and both legally obtained BIOS
+  revisions were executed in this project's emulator for four 1,000-frame campaigns across
+  62 cartridges. At each binary-mode entry, two machine copies preserved the authentic IRQ
+  phase; one retained its original interrupt state and the other suppressed IRQs. All 28,518
+  pairs returned without decimal or pending-NMI skips or timeouts. Of these, 19,880 original
+  copies took IRQs and none took NMIs; every IRQ-spanning pair matched in final VRAM, modeled
+  scratch, tracked inputs, registers apart from I, LCD register state and mapper registers, but
+  differed in other non-stack RAM. The 8,638 quiet pairs matched in those categories and elapsed
+  clocks. A synthetic self-test exercises the categories and stack/I exclusions. These comparisons
+  do not cover full AY/UART state, event-by-event timing, injected NMIs, arbitrary interrupt
+  handlers or physical hardware, and do not prove general interrupt safety. No commercial data
+  or BIOS instructions were copied, reconstructed, retained or published.
 
 #### `$F00C` two-plane VRAM zero-writer
 

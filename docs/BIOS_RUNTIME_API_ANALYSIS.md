@@ -1765,9 +1765,37 @@ Observed non-stack RAM writes are confined to `$000-$003`, `$018-$01F`, and `$30
 the final `$300-$307` bytes matched the final table record in the eligible replays and synthetic
 cases.
 For an all-disabled table in binary mode, 16 synthetic cases per BIOS also found no writes to
-`$000-$003`, `$018-$01F`, or `$308-$3C7`; `$300-$307` still receives the final record.
+`$000-$003`, `$018-$01F`, or `$308-$3C7`; all eight bytes of `$300-$307` were written and
+received the final record.
 
-#### Sprite scratch buffers and observed consumers
+#### Scratch state and observed consumers
+
+The following final-state model applies to uninterrupted binary-mode calls with stable inputs and
+graphics sources unaffected by service writes or read side effects. Start with the entry values;
+process enabled redraws in ascending record order, then enabled objects in ascending record order.
+Within `$000-$003` and `$018-$01F`, each operation changes only the listed locations. Let `B1`
+be the plane-1 graphics base, `x,y` the operation's coordinates, and `s` the last selector in that
+operation: the last captured map selector for a redraw, the object selector for a small sprite,
+or `(selector + 3) & $FF` for a large sprite.
+
+| RAM | Either operation | Redraw | Object |
+| --- | --- | --- | --- |
+| `$000-$001` | | unchanged | `$03B0` for large, `$03A0` for small, little-endian |
+| `$002` | `B1 & $FF` | | |
+| `$003` | `((B1 >> 8) + (s >> 5)) & $FF` | | |
+| `$018` | `$80 \| (x >> 3)` | | |
+| `$019` | | `y & $F8` | `y` |
+| `$01A` | `s` | | |
+| `$01B` | | `0` | `1` |
+| `$01C` | `0` | | |
+| `$01D` | | `0` | unchanged |
+| `$01E` | | `x >> 3` | unchanged |
+| `$01F` | | `($E6 + (y >> 3)) & $FF` | unchanged |
+
+For each redraw, the `q*q` captured map selectors also overwrite `$308 + c*q + r`, where `q` is
+3 or 2 for a large or small record and `c,r = 0..q-1`. The selection uses the map before that
+redraw writes VRAM. Later redraws and objects can overwrite the same slots; bytes not written by
+any operation retain their entry values.
 
 For each current-object draw in the checked cases, the service also stores the destination before
 and after compositing in RAM. Let `h` be the object's height, 16 or 8, and let `c` range over
@@ -1776,7 +1804,24 @@ destination byte is stored at `$308 + 48*p + h*c + r`; the composited byte is st
 `$368 + 48*p + h*c + r`. The destination coordinates wrap as in the rendering model above.
 If later sprites write the same buffer slot, the last such write determines its final value.
 In 28,516 eligible masked corpus replays, all buffer slots modeled for drawn sprites matched.
-These equations do not define every other scratch byte or the timing of the buffer accesses.
+The expanded model compares final values and write sets throughout `$000-$003`, `$018-$01F`
+and `$308-$3C7` in 256 overlapping and 2,052 selector/sentinel synthetic cases per BIOS,
+with varied initial scratch values.
+Another 1,024 isolated redraw cases per BIOS test the column-major selector layout. These
+equations describe final values and whether a byte was written, not the timing or intermediate
+values of the scratch accesses.
+The expanded model also matched all 28,518 masked replays across 62 cartridges, both BIOSes and
+four 1,000-frame campaigns, with no skips or mismatches. This run privately included BIOS-window
+graphics sources in the two Mini Golf calls discussed below.
+
+For an uninterrupted call, synthetic write-set checks also found contiguous stack writes beginning
+at entry S and descending with eight-bit wrap. The span was nine bytes for an empty table, 11
+for an isolated redraw of either size, 13 for an isolated large object, and 18 for an isolated
+small object. The greatest applicable span matched 256 multi-record cases per BIOS. The isolated
+tests covered four entry S values including wrap, four positions and four selectors in records
+0, 7, 8 and 15. The span also matched all 7,196 IRQ-masked replays from 62 cartridges and both
+BIOSes in the 1,000-frame no-input campaign. Stack contents and individual access times are not
+specified by this observation; interrupts can add further stack writes.
 
 The scratch-consumption probe observes bytes written during each authentic call and cartridge-code
 reads before an intervening write, until the next `$F027` entry or campaign end. Across the four
@@ -1814,6 +1859,21 @@ I-masked counterpart under both BIOSes. Whole-RAM hashes differed, so this is no
 equivalence. First calls in Pipemania and GP Race took no IRQ in the same setup and serve only
 as controls. These few reset-phase probes do not define general interrupt interference.
 
+A broader paired replay cloned each authentic binary-mode entry with its original IRQ phase:
+one copy retained its original interrupt state, while the other masked and suppressed IRQs.
+Across 62 cartridges, both BIOSes and four 1,000-frame campaigns, all 28,518 entries returned
+in both copies. Of these, 19,880 original-state copies took IRQs and none took an NMI. For every
+IRQ-spanning pair, final VRAM, compositor scratch, tracked inputs, A/X/Y/S and status other
+than I, LCD register state and mapper registers matched, while other non-stack RAM differed.
+The 8,638 pairs without an interrupt matched in these categories and elapsed time. There were
+no decimal or pending-NMI skips or timeouts. A diagnostic self-test checks the difference
+categories and their deliberate exclusion of stack and I.
+
+These are paired emulator replays, not evidence that interrupts are universally harmless: the
+comparison excludes stack contents and does not establish ordered access times, full AY/UART
+state, injected NMI behavior, altered handlers or physical-hardware behavior. An IRQ-aware
+replacement must still allow for live inputs and handler interference.
+
 `tests/gamatebiosf027.c` checks these models using purpose-written RAM graphics and private
 in-memory cartridge overlays, without publishing source or output bytes. Under each BIOS revision,
 1,024 isolated sprite cases and 1,024 isolated background cases covered every record, all horizontal
@@ -1844,8 +1904,9 @@ decimal-mode probes did not follow this binary-mode model, including an apparent
 that still performed VRAM writes. D-clear entry is therefore a requirement for this specification,
 not an assertion that decimal mode behaves identically.
 
-The complete ABI is still open: later bus-event timestamps, remaining scratch values, other live
-input dependencies, unsupported decimal-mode behavior and interrupt interference require further work.
+The complete ABI is still open: later bus-event timestamps, intermediate scratch and stack contents,
+other live input dependencies, unsupported decimal-mode behavior and interrupt interference
+require further work.
 The model does not yet establish behavior for side-effectful graphics sources.
 Galaxy Invaders reads its inherited
 `$021` before later setting it for its first service call; the entry-state implications are in
