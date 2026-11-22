@@ -4,6 +4,10 @@ This file records the sources used while developing superwhizkid, what each sour
 used for, and important disagreements between them. It should be updated whenever a new source
 influences implementation or tests.
 
+External hardware, implementation, frontend, build, audio, compatibility, and CPU references are
+followed by local cartridge and BIOS analysis, emulator validation, and performance experiments.
+Local hardware-behavior results are emulator observations unless identified as physical measurements.
+
 The code in this directory is an original C implementation for this project. Emulator source is
 used to cross-check observations and identify test cases, not as source text to translate. Primary
 hardware measurements take precedence where they conflict with an emulator.
@@ -168,6 +172,12 @@ hardware measurements take precedence where they conflict with an emulator.
   transitions across 236 frames. It caught every inspected full-paddle erase, including the 120-pixel
   events at frames 1123, 1132, 1141, and 1150. These counts describe this captured play session, not
   the entire software library.
+- Additional tuning: the core's own gitignored trace of a user-played Brick Blaster session showed
+  that 41 non-background pixels in the title-selection cursor region (raw LCD coordinates x=44-51,
+  y=104-111) were repeatedly absent for one or two frames between longer drawn runs. This evidence
+  was used only to choose the filter's one- and two-frame lightening-confirmation limits. It did
+  not change Gamate machine timing or LCD-controller output. No external emulator implementation
+  was consulted for this filter.
 - Model: a darker or equal two-bit shade is accepted immediately. A lighter shade becomes pending
   and is accepted only after the same value persists longer than the selected one-, two-, or
   three-frame suppression window. If the prior darker value returns first, the pending lightening is
@@ -321,7 +331,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   that averages the completed left and right samples with equal weights and sends that value to both
   output channels. Averaging rather than summing preserves headroom and prevents the downmix itself
   from clipping. It does not alter PSG state, filtering state, timing, or save states, and is intended
-  as the basis for a later built-in-speaker reproduction mode.
+  as the basis for the built-in-speaker reproduction mode described below.
 - Validation: the purpose-written libretro firmware enables channel A alone. Integration tests verify
   that the default and explicit `Stereo` output have unequal left/right samples, while changing the
   option live to `Mono` produces identical samples on both output channels.
@@ -457,6 +467,10 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Implementation impact: replaced a valid-BCD-oriented ADC shortcut that mishandled invalid digits
   and computed ADC N/V before the low-nibble carry. `gamatetest` now checks 262,144 decimal
   operations across every accumulator, operand, carry, and both arithmetic instructions.
+- Sanitizer follow-up: a local undefined-behavior sanitizer run identified a pre-existing signed
+  left shift in the decimal-SBC wrap calculation; it was replaced with an explicit eight-bit
+  conversion and the exhaustive decimal test's independent reference calculation was updated to
+  express the same defined wrap. Normal and debug suites retain the same exhaustive results.
 
 ### Visual6502 interrupt-timing research
 
@@ -481,7 +495,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Result: passed at the documented `$3469` success trap after 30,646,193 instructions. The first run
   failed in decimal `SBC`; that result led to correcting the nibble borrow/adjust implementation.
 
-## Local compatibility validation (files not distributed)
+## Local cartridge analysis and tools (files not distributed)
 
 ### Commercial cartridge header and boot-ABI analysis
 
@@ -543,6 +557,8 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Kevtris's “Gamate Inside” measurements were used to assign bit 7 to the leftmost pixel and combine
   plane 0 with weight one and plane 1 with weight two. The measurements describe framebuffer access,
   not ROM graphics storage; the tool and `docs/ROM_GRAPHICS_ANALYSIS.md` preserve that limitation.
+
+## Local BIOS analysis (files not distributed)
 
 ### Authentic BIOS revision comparison
 
@@ -698,6 +714,8 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 ### Post-entry BIOS runtime API analysis
 
+#### Corpus and general method
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.
@@ -729,6 +747,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   Finite corpus and input schedules do not establish exhaustive reachability; link/NMI paths and some
   caller-specific or timing details remain open. No external emulator implementation was consulted
   or copied.
+
+#### `$F027` caller-dependent graphics service
+
 - `$F027` follow-up: IRQ-masked `occurrence=1` probes covered 14 additional titles under both BIOS
   revisions; both authentic occurrences in Incantational Couple were also compared. A controlled
   matrix toggled `$006-$009` and zeroed `$023/$028/$030` in five varied titles and both Incantational
@@ -776,6 +797,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   or BIOS payload was retained; no external implementation was consulted or copied. Exact results,
   call scopes, and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+
+#### `$F00C` two-plane VRAM zero-writer
+
 - `$F00C` follow-up: `occurrence=1` probes covered 57 titles under both BIOSes with I set and VRAM
   seeded to `$FF`; controlled `$015` bit patterns and A/X/Y changes were tested in Baseball, and the
   bit-6 path was checked in Dino Ball and Volcano Panic. Time Warrior's authentic second occurrence
@@ -792,6 +816,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   and its behavior across every caller context remain open. The probe retained only derived
   results, not VRAM or ROM payload. Exact scopes and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+
+#### `$F01B` ROM-driven graphics writer
+
 - `$F01B` follow-up: the no-input 1,000-frame inventory records 18 entries per BIOS across 12
   titles. The paired balanced-call corpus contains 34 calls, 17 per BIOS across 12 titles, with 32
   calls spanning IRQs. Every paired report row matches across BIOS revisions; all calls return
@@ -823,6 +850,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   observed title; later invocation contexts and the physical meaning of the sparse mode remain
   open. The detailed methods, results, and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+
+#### `$F01E` two-plane graphics service
+
 - `$F01E` follow-up: the paired balanced-call corpus contains 216 calls across 18 titles. First-call
   probes in Famous 7, Time Warrior, Volcano Panic, and Robin Hood were compared under both BIOSes
   with I set; register changes, RAM XOR perturbations, and address-only ROM coverage were used to
@@ -832,6 +862,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   status behavior, and BIOS-specific whole-RAM hash differences remain unresolved. Exact results
   and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+
+#### `$F021` ROM-backed graphics service
+
 - `$F021` follow-up: the paired balanced-call corpus contains 92 calls, 46 per BIOS across 14
   titles; 66 calls span IRQs. Every call returns A=`$FE`, X=`$00`, and preserves S, while Y varies.
   Paired summaries match except for one IRQ-spanning Volcano Panic call from `$AF24` at frame 350,
@@ -847,12 +880,19 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   across BIOSes, but their whole-RAM hashes differ for unresolved reasons. Methods, measurements,
   and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+
+#### Shared clean-room boundary
+
 - Clean-room boundary: BIOS and cartridge files remained read-only. No BIOS/ROM bytes, listings,
   decoded graphics, RAM/VRAM payloads, or ROM-derived mapping tables were retained or published;
   only behavioral descriptions and derived addresses, counts, and comparisons were used.
 
-The following user-supplied files were read in place solely for boot validation. They are not copied
-into the repository, build output, tests, or releases.
+## Local emulator validation (files not distributed)
+
+### Boot and cartridge identification
+
+The following user-supplied files were read in place for the original boot validation. They are not
+copied into the repository, build output, tests, or releases.
 
 - UMC/NCR BIOS, SHA-1 `ea449dc607601f9a68d855ad6ab53800d2e99297`.
 - BIT BIOS, SHA-1 `4e9dfbfe916ca485530ef4221593ab68738e2217`.
@@ -870,10 +910,16 @@ into the repository, build output, tests, or releases.
   LCD/VRAM traffic, controller reads, and expected bank changes, with no unknown opcodes or persistent
   self-loop traps. Frame hashes are computed from four-shade pixel indices and contain no ROM or BIOS
   data. See `docs/COMPATIBILITY_SWEEP_ANALYSIS.md`.
+
+### Audio validation
+
 - Audio validation over the same representative set observed PSG register writes and nonzero output
   without clipping. `gamatetest` separately verifies tone timing/sample count, noise-LFSR advance,
   envelope restart/advance, register masks, A-left isolation, B-right isolation, and equal C routing
   to both sides. `gamateboot` records deterministic per-frame audio hashes without storing samples.
+
+### Progressive LCD validation
+
 - LCD execution now follows the measured 450 row-latch events per frame: 150 visible rows, three
   162-master-clock refresh passes per row, totaling 72,900 clocks. Plane 0 is sampled once and plane
   1 twice (reversed by plane-swap), reproducing the physical four-level accumulation described by
@@ -884,6 +930,9 @@ into the repository, build output, tests, or releases.
   from the former frame-end snapshot, as expected; the settled frame-300 hash remained `e324a485`.
   No local MAME executable or hardware capture was available for pixel-by-pixel external comparison,
   so those hashes are regression baselines rather than claims of independent visual equivalence.
+
+### Frontend and synthetic integration validation
+
 - An interactive RetroArch run of Bomb Blaster confirmed correct panel orientation, working audio,
   Start, and all four directions. The initial isolated frontend configuration did not produce an
   observable response from its implicit X/Z face-button bindings. Kevtris's physical controller
@@ -925,6 +974,9 @@ into the repository, build output, tests, or releases.
   input mappings, video/audio callbacks, fixed state size, serialization restoration, reset, unload,
   and a second content load. This scaffolding was authored for superwhizkid; no emulator source or
   commercial firmware, BIOS, or game-ROM bytes were used to create it.
+
+### Corpus sweep and title-specific validation
+
 - `tools/gamate-sweep.sh` and equivalent direct read-only invocations covered all 62 locally supplied
   cartridges under both validated BIOS revisions for 1,000 frames after `$6020`: 124/124 combinations
   booted and produced nonblank video with no unsupported opcode or persistent self-loop diagnosis.
@@ -968,6 +1020,9 @@ into the repository, build output, tests, or releases.
   because the diagnostic numbers frames from cartridge entry;
   normal emulation continues to preserve each real BIOS path's timing. Audio hashes for other games
   commonly differ for the same phase reason.
+
+### CPU interrupt validation
+
 - Focused IRQ tests now verify assertion at exactly 32,768 master clocks, persistence while masked,
   service only after the current instruction boundary, IRQ-vector and stack contents, I/B/U status
   handling, diagnostic counting, timer restart, pending-state serialization, BRK's distinct stacked
@@ -978,9 +1033,12 @@ into the repository, build output, tests, or releases.
   whether a BRK vector pull has identical timer side effects still require a Gamate trace or focused
   hardware test; the tests explicitly preserve this distinction rather than claiming cycle accuracy.
 - The NMOS interrupt-mask audit found and corrected delayed polling across CLI, SEI, and PLP; RTI
-  applies its restored mask immediately. The current 58-cartridge/two-BIOS/1,000-frame matrix is
+  applies its restored mask immediately. The then-current 58-cartridge/two-BIOS/1,000-frame matrix was
   116/116. This validates compatibility and the tested CPU boundary cases, but not
   the NCR 65CX02's unmeasured interrupt-vector bus cycle.
+
+### LCD boundary validation
+
 - LCD stop/blank boundary tests now distinguish LCDcon E from N using Kevtris's measured register
   behavior. E freezes the internal 162-clock pass and row-event position because the physical pixel,
   row, frame, and inversion clocks stop; clearing E resumes that position. N continues refresh while
@@ -994,6 +1052,9 @@ into the repository, build output, tests, or releases.
   value. Pixel-level tests cover these boundaries. The post-change 116-case sweep passed, and none
   of its frame-300 video/audio/PC lines changed, consistent with Kevtris's observation that known
   games may not use the special window behavior during ordinary execution.
+
+### UART validation
+
 - The UART now follows Kevtris's measured register behavior independently of any future frontend
   link transport. A write to `$4400-$47FF` loads the transmitter and immediately exposes bit 7.
   Every read or write at `$4C00-$4FFF` clocks one MSB-first transmit bit; after the eighth clock the
@@ -1007,12 +1068,11 @@ into the repository, build output, tests, or releases.
   serialization. State format version 4 includes in-flight transmit/receive state and a pending NMI.
   Standalone emulation still receives zero unless a caller injects link bits: peer transport,
   electrical timing, and exact NMI/IRQ collision timing are not yet modeled or claimed.
-- Redraw-flicker reduction was tuned from the core's own gitignored diagnostic trace, captured during
-  a user-played Brick Blaster session; no external emulator implementation was consulted for this
-  filter. In the title-selection cursor region (raw LCD coordinates x=44-51, y=104-111), its 41
-  non-background pixels were repeatedly absent for one or two frames between longer drawn runs.
-  This evidence was used only to choose the optional presentation filter's one- and two-frame
-  lightening-confirmation limits. It did not change Gamate machine timing or LCD-controller output.
+
+## Local performance experiments and validation
+
+### Clock and AY scheduling
+
 - The performance pass used local GNU `gprof` sampling of a 2,000-frame Brick Blaster run, not code
   from another emulator. It identified `gamateRunClocks` as roughly 75% of sampled runtime before
   optimization. A 5,000-frame run dropped from 6.32 to 4.72 seconds on the development system after
@@ -1034,13 +1094,10 @@ into the repository, build output, tests, or releases.
 - The same profile motivated an event-free fast path for the overwhelmingly common case where one
   CPU instruction crosses no AY, audio-sample, IRQ, LCD-row, or frame boundary. It advances exactly
   the same counters once and falls back to the ordered event loop at every boundary. Together with
-  cached AY periods, the current release build reduced the 5,000-frame Brick Blaster benchmark from
+  cached AY periods, the release build at the time reduced the 5,000-frame Brick Blaster benchmark from
   about 4.80 to 4.29 seconds (approximately 10.6%). The batched-versus-single-clock equivalence test,
   four byte-identical 1,000-frame game reports, and the complete 116-case/two-BIOS 1,000-frame sweep
-  all passed after this second pass. An undefined-behavior sanitizer run also identified a pre-existing
-  signed left shift in the decimal-SBC wrap calculation; it was replaced with an explicit eight-bit
-  conversion and the exhaustive decimal test's independent reference calculation was updated to
-  express the same defined wrap. Normal and debug suites retain the same exhaustive results.
+  all passed after this second pass.
 - A follow-up local `gprof` profile of the production machine core used 5,000 unattended frames
   including boot in Brick Blaster and World Cup Soccer with the UMC BIOS. `gamateRunClocks`
   accounted for approximately 61% and 55% of sampled time, respectively; sampling and compiler
@@ -1057,6 +1114,9 @@ into the repository, build output, tests, or releases.
   median times of 4.2326 versus 4.2012 seconds for Brick Blaster and 4.3087 versus 4.2623 for World
   Cup Soccer, improvements of 0.74% and 1.08%. These small gains are host-specific and do not
   establish ARM performance. This work used local experiments and no external emulator source.
+
+### LCD row expansion
+
 - A further local performance experiment grouped pixels by source byte within each existing LCD
   row-latch event, without changing the three-pass timing or per-pixel diagnostic read accounting.
   The existing physical LCD measurements above specify the row and plane behavior; no external
@@ -1078,6 +1138,9 @@ into the repository, build output, tests, or releases.
   4.1855 versus 3.8319 seconds for Brick Blaster and 4.2678 versus 3.9250 seconds for World Cup
   Soccer, improvements of 8.45% and 8.03%. These local measurements do not establish ARM
   performance or additional physical accuracy.
+
+### CPU and bus dispatch
+
 - A local `gprof` profile of 5,000 unattended post-entry Brick Blaster frames with the UMC BIOS
   attributed approximately 53.6% of sampled time to `gamateRunClocks`, 24.3% to `gamateCpuStep`, and
   14.7% to `gamateRead`; sampling and inlining limit attribution. The read dispatcher now checks
@@ -1097,6 +1160,9 @@ into the repository, build output, tests, or releases.
   user-supplied BIOS and cartridges without retaining their payloads, and no external emulator
   source was consulted or copied. These results do not establish ARM performance, exhaustive
   compatibility, or new physical hardware accuracy.
+
+### Frontend presentation
+
 - A frontend presentation pass used the purpose-written libretro integration workload, which cycles
   raw output, every ghosting level, every redraw-flicker level, live option transitions, palettes,
   and contrast states. The filtered renderer now has separate flicker-only and ghosting-only loops;
@@ -1113,4 +1179,5 @@ into the repository, build output, tests, or releases.
   reported bit-manipulation instructions.
 - Direct test ROMs or logic-analyzer traces for the within-sequence IRQ/BRK clearing clock and LCD
   mid-frame writes.
-- Identification data for the 4-in-1 cartridge that does not depend only on a filename/database.
+- Native hardware identification for the 4-in-1 cartridge, independent of the current whole-image
+  fingerprint policy.
