@@ -1723,6 +1723,20 @@ rows per tile. A page-crossing indexed source read is preceded by a dummy read 2
 its final CPU address. The `RTS` also makes a dummy read at the stacked return address when it
 falls in the cartridge window. These describe the tested emulator bus, not a physical measurement.
 
+In isolated probes, RAM `$015` was read once per background redraw, three times per large sprite
+and twice per small sprite, matching the respective register-1 write counts. For each sprite size
+under both BIOSes, changing `$015` at an instruction boundary immediately after its first control
+write changed the subsequent control writes. An interrupt-aware replacement cannot safely treat
+`C` as one entry-time snapshot for an entire sprite; the exact read timestamps remain open.
+The same isolated probes read each byte of the plane-0 graphics base twice per selected tile
+and each byte of the plane-1 base once per tile. In a separate synthetic small-redraw test,
+changing `$006` after the first VRAM write left the first tile sourced from the old base but
+made the next tile use the new base under both BIOSes. A whole-call pointer snapshot is therefore
+insufficient when those inputs can change concurrently; the exact pointer-read schedule is open.
+A further synthetic test enabled and positioned the second sprite record after the first sprite's
+first VRAM write; both revisions then drew that second sprite. Thus later sprite records also
+cannot generally be treated as an entry-time snapshot.
+
 #### Binary-mode timing and returns
 
 For uninterrupted calls with safe graphics sources, define `T(s)` as 64 times `s >> 5`, plus two
@@ -1749,8 +1763,56 @@ unchanged. LCD state remains unchanged for an empty table; otherwise the final L
 `$015 | $40` and the final address/plane follows the last register-7 write in the sequence above.
 Observed non-stack RAM writes are confined to `$000-$003`, `$018-$01F`, and `$300-$3C7`;
 the final `$300-$307` bytes matched the final table record in the eligible replays and synthetic
-cases. The
-remaining scratch-byte values and their live access timing are not yet modeled.
+cases.
+For an all-disabled table in binary mode, 16 synthetic cases per BIOS also found no writes to
+`$000-$003`, `$018-$01F`, or `$308-$3C7`; `$300-$307` still receives the final record.
+
+#### Sprite scratch buffers and observed consumers
+
+For each current-object draw in the checked cases, the service also stores the destination before
+and after compositing in RAM. Let `h` be the object's height, 16 or 8, and let `c` range over
+its three or two destination byte columns. For plane `p = 0,1` and row `r = 0..h-1`, the pre-draw
+destination byte is stored at `$308 + 48*p + h*c + r`; the composited byte is stored at
+`$368 + 48*p + h*c + r`. The destination coordinates wrap as in the rendering model above.
+If later sprites write the same buffer slot, the last such write determines its final value.
+In 28,516 eligible masked corpus replays, all buffer slots modeled for drawn sprites matched.
+These equations do not define every other scratch byte or the timing of the buffer accesses.
+
+The scratch-consumption probe observes bytes written during each authentic call and cartridge-code
+reads before an intervening write, until the next `$F027` entry or campaign end. Across the four
+1,000-frame campaigns, 62 cartridges and both BIOSes, it tracked 28,482 returns, including
+19,846 interrupt-spanning returns; 34 calls remained in flight at the end of their campaigns.
+Of 496 cartridge/BIOS/campaign combinations, 24 had apparent read-before-write accesses. Replaying
+those combinations distinguished indexed-store dummy reads from read-modify-write instructions:
+only Tough Guy's controller-cycle campaign consumed scratch values, at `$39C-$3A3`, once per
+address under each BIOS. The last writes to those bytes during the observed call were attributed
+to BIOS code outside the tracked interrupt context. At that return they matched rows 4–11 of
+plane 1, column 0 of the final large object, as predicted by the buffer model.
+
+This is bounded execution evidence, not a universal caller-clobber guarantee. Interrupt handlers
+and code outside the cartridge window are not independently covered as consumers; the recorded
+write set may include interrupt-handler writes; a window ends at the next `$F027` entry; and
+interrupt-context attribution is diagnostic rather than a proof about nested interrupts.
+
+#### Partial event timing
+
+In isolated I-masked tests with all other record gates disabled, a single enabled operation in
+record `r = 0..15` first writes LCD register 1 at the following emulator instruction-boundary
+master-clock offsets from service entry:
+
+- Background redraw: `166 + 44*r + (r >= 8 ? 6 : 0)`.
+- Current object: `1,132 + 340*r + (r >= 8 ? 44 : 0)`.
+
+The tests used X = 0, Y = `$20`, binary mode and synthetic RAM graphics, and both BIOS revisions
+agreed for all 32 cases. These are isolated first-event observations, not a schedule for later
+events, multiple active records or interrupt-spanning calls, and they are not physical bus timing.
+
+For the first observed calls in Tough Guy, Time Warrior and Box Forum, paired probes forced the
+same binary-mode status except for I and reset the periodic IRQ phase at entry. With I clear,
+each call took one or two IRQs and had the same final VRAM hash and VRAM-write count as its
+I-masked counterpart under both BIOSes. Whole-RAM hashes differed, so this is not machine-state
+equivalence. First calls in Pipemania and GP Race took no IRQ in the same setup and serve only
+as controls. These few reset-phase probes do not define general interrupt interference.
 
 `tests/gamatebiosf027.c` checks these models using purpose-written RAM graphics and private
 in-memory cartridge overlays, without publishing source or output bytes. Under each BIOS revision,
@@ -1770,15 +1832,21 @@ masked-replay timing; two accesses beyond the cartridge window were conservative
 the model.
 Both exclusions are the same Mini Golf long-Start call under the two BIOS revisions; a modeled
 tile range extends into the BIOS window, ending at `$E0E7`. Its BIOS-sourced output was not
-reproduced or modeled.
+included in that cartridge-only replay.
+An opt-in private-memory replay using the local BIOS bytes as graphics input subsequently matched
+all 65 Mini Golf long-Start calls per revision, including the formerly skipped call. In that call,
+an otherwise identical model with BIOS-window source bytes replaced by zero produced different
+final VRAM under each revision. Thus an independent replacement cannot assume BIOS-window source
+contents are immaterial in this observed context. The comparison does not expose firmware bytes
+or establish that a replacement must reproduce the authentic BIOS's contents.
 The replay masks IRQs and is not a measurement of interrupt-spanning call timing. Controlled
 decimal-mode probes did not follow this binary-mode model, including an apparently disabled table
 that still performed VRAM writes. D-clear entry is therefore a requirement for this specification,
 not an assertion that decimal mode behaves identically.
 
-The complete ABI is still open: individual bus-event timestamps, remaining scratch values, live
-input dependencies, unsupported decimal-mode behavior and interrupt interference require further
-work. The model does not yet establish behavior for side-effectful graphics sources.
+The complete ABI is still open: later bus-event timestamps, remaining scratch values, other live
+input dependencies, unsupported decimal-mode behavior and interrupt interference require further work.
+The model does not yet establish behavior for side-effectful graphics sources.
 Galaxy Invaders reads its inherited
 `$021` before later setting it for its first service call; the entry-state implications are in
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md).

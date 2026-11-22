@@ -30,16 +30,17 @@ struct RamTrace {
 
 struct LcdTrace {
 	uint8_t registers[ROM_TRACE_LIMIT], values[ROM_TRACE_LIMIT];
+	uint64_t ticks[ROM_TRACE_LIMIT], start;
 	size_t count, total;
 };
 
 static void captureLcdWrite(void* context, const struct Gamate* g,
 		uint8_t reg, uint8_t value) {
 	struct LcdTrace* trace = context;
-	(void) g;
 	if (trace->count < ROM_TRACE_LIMIT) {
 		trace->registers[trace->count] = reg;
-		trace->values[trace->count++] = reg == 1 || reg == 4 || reg == 5 ? value : 0;
+		trace->values[trace->count] = reg == 1 || reg == 4 || reg == 5 ? value : 0;
+		trace->ticks[trace->count++] = g->masterClocks - trace->start;
 	}
 	trace->total++;
 }
@@ -203,6 +204,14 @@ static void printLcdTrace(const struct LcdTrace* trace) {
 	putchar('\n');
 }
 
+static void printLcdTiming(const struct LcdTrace* trace) {
+	printf("# lcd_ticks: captured=%zu total=%zu events=", trace->count, trace->total);
+	for (size_t i = 0; i < trace->count; i++)
+		printf(" %u@%llu", trace->registers[i], (unsigned long long) trace->ticks[i]);
+	if (trace->count < trace->total) printf(" ...");
+	putchar('\n');
+}
+
 static uint8_t lcdFlags(const struct Gamate* g) {
 	return (g->vramPlane ? 0x01 : 0) | (g->incrementRow ? 0x02 : 0) |
 		(g->window ? 0x04 : 0) | (g->swapPlanes ? 0x08 : 0) |
@@ -275,7 +284,8 @@ static bool applyOption(struct Gamate* g, const char* option) {
 int main(int argc, char** argv) {
 	if (argc < 4) {
 		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin SERVICE "
-			"[occurrence=HEX] [rom_trace] [rom_sequence] [lcd_trace] [vram_bytes] [vram_reads] "
+			"[occurrence=HEX] [rom_trace] [rom_sequence] [lcd_trace] [lcd_timing] "
+			"[vram_bytes] [vram_reads] "
 			"[ram_watch=HEX] [NAME=HEX ...]\n",
 			argv[0]);
 		return 2;
@@ -291,6 +301,7 @@ int main(int argc, char** argv) {
 	bool romTraceEnabled = false;
 	bool romSequenceEnabled = false;
 	bool lcdTraceEnabled = false;
+	bool lcdTimingEnabled = false;
 	bool vramBytesEnabled = false;
 	bool vramReadsEnabled = false;
 	bool ramWatchEnabled = false;
@@ -305,6 +316,10 @@ int main(int argc, char** argv) {
 		}
 		if (!strcmp(argv[i], "lcd_trace")) {
 			lcdTraceEnabled = true;
+			continue;
+		}
+		if (!strcmp(argv[i], "lcd_timing")) {
+			lcdTimingEnabled = true;
 			continue;
 		}
 		if (!strcmp(argv[i], "vram_bytes")) {
@@ -383,6 +398,7 @@ int main(int argc, char** argv) {
 	for (int i = 4; i < argc; i++) {
 		if (!strncmp(argv[i], "occurrence=", 11) || !strcmp(argv[i], "rom_trace") ||
 				!strcmp(argv[i], "rom_sequence") || !strcmp(argv[i], "lcd_trace") ||
+				!strcmp(argv[i], "lcd_timing") ||
 				!strcmp(argv[i], "vram_bytes") ||
 				!strcmp(argv[i], "vram_reads") ||
 				!strncmp(argv[i], "ram_watch=", 10)) continue;
@@ -428,9 +444,9 @@ int main(int argc, char** argv) {
 	gamateResetRomDiagnostics(&g);
 	struct RomTrace romTrace = { 0 };
 	struct RamTrace ramTrace = { 0 };
-	struct LcdTrace lcdTrace = { 0 };
+	struct LcdTrace lcdTrace = { .start = startClocks };
 	if (romTraceEnabled) gamateSetRomDiagnosticWatch(&g, captureRomRead, &romTrace);
-	if (lcdTraceEnabled) gamateSetLcdDiagnosticWatch(&g, captureLcdWrite, &lcdTrace);
+	if (lcdTraceEnabled || lcdTimingEnabled) gamateSetLcdDiagnosticWatch(&g, captureLcdWrite, &lcdTrace);
 	if (ramWatchEnabled) gamateSetRamDiagnosticWatch(&g, (uint16_t) ramWatchAddress,
 		captureRamAccess, &ramTrace);
 	g.irqClocks = 0;
@@ -477,6 +493,7 @@ int main(int argc, char** argv) {
 	if (romTraceEnabled) printRomTrace(&romTrace);
 	if (romSequenceEnabled) printRomSequence(&romTrace);
 	if (lcdTraceEnabled) printLcdTrace(&lcdTrace);
+	if (lcdTimingEnabled) printLcdTiming(&lcdTrace);
 	if (vramBytesEnabled) printVramBytes(&g);
 	if (ramWatchEnabled) {
 		printf("# ram_watch: address=%03lX reads=%u writes=%u final=%02X\n",

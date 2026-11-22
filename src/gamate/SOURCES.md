@@ -1144,6 +1144,49 @@ open questions are addressed there for the tested memory domains.
   timing, remaining scratch values, decimal mode, side-effectful source aliases and interrupt
   interference remain open. No BIOS instructions or external emulator implementations were copied
   or reconstructed; no commercial BIOS, ROM or graphics payload is retained or published.
+- Scratch and timing follow-up: the two local, legally obtained BIOS revisions and the read-only
+  local cartridge collection were executed in this project's emulator. The diagnostic checker
+  tracks scratch bytes written during each authentic `$F027` call, then cartridge-code accesses
+  before an intervening write until the next entry or campaign end. Synthetic tests exercise owner
+  attribution, write-before-read exclusion, indexed-store dummy reads and read-modify-writes.
+  Four 1,000-frame campaigns across 62 cartridges and both BIOSes observed 28,482 returns, 19,846
+  interrupt-spanning returns and 34 in-flight calls. Among 24 initially flagged combinations,
+  targeted replays identified indexed-store dummy reads and one Tough Guy controller-cycle
+  window per BIOS with real read-modify-writes of `$39C-$3A3`. Last-writer and return-state
+  comparisons attribute these eight bytes to non-interrupt BIOS writes and match them to the
+  final large object's plane-1 output buffer. Synthetic object tests under both BIOSes establish
+  the pre-draw and post-compositing buffer layout for both object sizes; combined cases validate
+  overlapping sprites. A fresh replay of all 496 cartridge/BIOS/campaign combinations checked
+  modeled sprite-buffer slots in 28,516 eligible calls with zero mismatches; the same two
+  BIOS-window source cases were skipped in that cartridge-only run. Sixteen disabled-table
+  cases per BIOS found no writes to `$000-$003`,
+  `$018-$01F` or `$308-$3C7`. The caller scan cannot rule out other paths, consumers outside the
+  cartridge window, nested-interrupt attribution issues, or reads after a later `$F027` entry.
+  An opt-in LCD diagnostic records only register numbers and instruction-boundary clock offsets.
+  Isolated first-event checks cover all 16 records and both operation kinds under each BIOS;
+  they do not establish later event timing or physical bus timing. Isolated RAM-watch probes
+  counted one `$015` read per redraw, three per large sprite and two per small sprite. Synthetic
+  tests changed `$015` after the first sprite-control write and observed the changed value in
+  later control writes for both sprite sizes and BIOSes, establishing a live dependency without
+  assuming exact read timing. RAM watches counted repeated graphics-base reads in isolated
+  redraw and sprite cases; changing the plane-0 base after the first synthetic redraw write
+  changed the next tile's source under both BIOSes. This establishes another live dependency,
+  not its complete read schedule. Enabling a second synthetic sprite record after the first
+  sprite's first VRAM write caused both BIOSes to draw that later sprite. Paired first-call probes in
+  Tough Guy, Time Warrior and Box Forum compared forced binary-mode I-clear and I-set statuses
+  with IRQ phase reset at entry: one or two IRQs occurred with I clear, with unchanged final VRAM
+  hashes and write counts but changed whole-RAM hashes. Pipemania and GP Race were no-IRQ controls.
+  Both revisions were tested. These few emulator runs do not establish general interrupt behavior.
+- BIOS-window source follow-up: the same Mini Golf long-Start call previously excluded from the
+  cartridge-only replay was compared under both BIOSes using their bytes privately in memory as
+  graphics data. All 65 calls per revision matched the model. Replacing BIOS-window graphics data
+  with zero only in a separate in-memory model changed the excluded call's predicted final VRAM
+  under each revision. This establishes a source-content sensitivity in the tested emulator
+  context, not a requirement to distribute or reproduce firmware data. The local BIOS and ROM
+  files remained read-only; no BIOS instructions, cartridge code, graphics payloads or external
+  emulator implementations were copied, reconstructed, retained or published. These are emulator
+  observations, not physical measurements; decimal mode, side-effectful source aliases, full
+  interrupt interference and remaining scratch state remain open.
 
 #### `$F00C` two-plane VRAM zero-writer
 
