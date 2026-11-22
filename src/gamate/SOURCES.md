@@ -991,6 +991,36 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   status behavior, and BIOS-specific whole-RAM hash differences remain unresolved. Exact results
   and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+- `$F01E` cross-corpus source-byte matrix: the four existing 1,000-frame campaign reports supplied
+  first authentic call contexts for 24 titles under both BIOS revisions. I-masked baselines and
+  separate XOR-1 perturbations to `$006-$009` produced 240 probes; all returned. Each target byte
+  was read before write in all 48 contexts and never written. `$006` and `$007` changed only the
+  plane-0 output hash in 46 contexts each; `$008` and `$009` changed only plane 1 in 46 contexts
+  each. Coverage, write counts, and return registers
+  remained unchanged. Address-sequence summaries changed in 46 contexts per byte. Timing changed
+  for `$006` in 42 contexts and `$008` in 40, by -8 to +36 and -10 to +36 master clocks,
+  respectively; `$007` and `$009` did not change timing. Checked baseline and perturbation
+  signatures, per-plane hashes/coverage, access maps, and captured address-sequence summaries
+  matched across all 24 paired BIOS contexts, excluding whole-RAM hashes and changed-byte
+  summaries. Two sequence comparisons per byte included a trace over the capture limit; full
+  equality is not claimed for those traces. VRAM values were consumed directly into per-plane
+  hashes and counts and were not retained. This extends the two-plane input mapping beyond Time
+  Warrior but does not establish a general pointer formula or stream grammar.
+  The evidence is from the independently authored emulator, not physical hardware; no external
+  emulator code was consulted or copied.
+- `$F01E` control-byte follow-up: the same 24 first-call contexts were probed under both BIOSes
+  with I set, using baselines and separate XOR-1 perturbations to `$000` and `$001` (144 probes;
+  all returned). Each byte was read before write and rewritten in all 48 contexts. Both
+  perturbations changed ROM-address-sequence summaries and timing in all contexts. `$000` changed
+  both plane hashes and coverage in 44 contexts, write counts in 32, and returned registers in 48;
+  `$001` changed both plane hashes, coverage, and write counts in all 48, and returned registers in
+  28. Clock deltas were -453,616 to +1,084 for `$000` and -412,844 to +47,848,702 for `$001`.
+  Baseline checked outputs matched across all 24 BIOS pairs; perturbed `$000` comparisons matched
+  in 24, and `$001` in 23. Whole-RAM hashes and changed-byte summaries were excluded. Two `$000`
+  and 14 `$001` address-sequence comparisons involved traces over the diagnostic capture limit.
+  The tests establish input sensitivity and service rewrites, not pointer or descriptor semantics;
+  no payload was retained. The source is the project-authored diagnostic run over the existing
+  1,000-frame campaign contexts and read-only local BIOS/ROM inputs, not physical measurement.
 
 #### `$F021` ROM-backed graphics service
 

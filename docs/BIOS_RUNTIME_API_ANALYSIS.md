@@ -595,6 +595,52 @@ Controlled whole-RAM hashes differed between BIOS revisions in the four probed t
 matching access maps and measured operation fields; the cause is unresolved. These are emulator
 observations, not physical-hardware measurements.
 
+#### Cross-corpus source-byte perturbations
+
+The four existing 1,000-frame campaign reports identify `$F01E` calls in 24 titles. For each title,
+the earliest campaign with calls under both BIOS revisions supplied the first authentic call
+context. I-masked baselines and independent XOR-1 perturbations to `$006`, `$007`, `$008`, and
+`$009` produced 240 probes, all of which returned.
+
+Each tested byte was read before being written in all 48 title/BIOS contexts and was never written.
+Perturbing `$006` or `$007` changed the plane-0 output hash in 46 contexts and never changed the
+plane-1 hash. Perturbing `$008` or `$009` changed the plane-1 output hash in 46 contexts and never
+changed the plane-0 hash. No perturbation changed either plane's address coverage or the VRAM/LCD
+write counts, and returned registers were unchanged. The address-sequence summary changed in 46
+contexts for each byte. Timing changed in 42 contexts for `$006` (deltas -8 to +36 master clocks)
+and 40 for `$008` (deltas -10 to +36); `$007` and `$009` did not change timing.
+
+Baseline and perturbed checked output signatures, per-plane hashes and coverage, RAM access maps,
+and captured ROM-address sequence summaries agreed between BIOS revisions in all 24 title pairs.
+Whole-RAM hashes and changed-byte summaries were excluded from those comparisons. Two of the 48
+sequence comparisons per byte involved a trace over the diagnostic capture limit, so full sequence
+equality is not claimed for those comparisons. The results support `$006-$007` as plane-0 source
+inputs and `$008-$009` as plane-1 source inputs across this caller set, but the exact address
+transform and stream grammar remain unresolved. VRAM bytes were hashed as they streamed from the
+diagnostic and were not retained. These are emulator observations, not hardware measurements.
+
+#### Cross-corpus `$000-$001` perturbations
+
+The same 24 first-call contexts were probed with I set using a baseline and independent XOR-1
+perturbations to `$000` and `$001` (144 probes total). All returned. Each byte was read before
+being written and was rewritten by the service in all 48 title/BIOS contexts.
+
+Both perturbations changed the address-sequence summary and timing in all 48 contexts. XORing
+`$000` changed both plane hashes and both planes' coverage in 44 contexts, changed write counts in
+32, and changed the returned register signature in all 48. Its timing deltas ranged from -453,616
+to +1,084 master clocks. XORing `$001` changed both plane hashes, both coverages, and write counts
+in all 48 contexts; the returned register signature changed in 28. Its timing deltas ranged from
+-412,844 to +47,848,702 master clocks. These are deliberately perturbed inputs, not normal-call
+timing bounds.
+
+Baseline checked outputs and address-sequence summaries agreed between BIOS revisions in all 24
+title pairs. Perturbed `$000` comparisons agreed in all 24 pairs; `$001` comparisons agreed in 23.
+Whole-RAM hashes and changed-byte summaries were excluded. Two of the 48 `$000` sequence
+comparisons and 14 of the 48 `$001` comparisons involved a trace over the diagnostic capture limit;
+full address-sequence equality is not claimed for those comparisons. Both bytes are behaviorally
+influential and rewritten, but these low-bit tests do not establish whether they encode a pointer,
+descriptor, or mutable parser state. Their roles and the stream grammar remain unresolved.
+
 ### ROM-backed single-plane graphics service: `$F021`
 
 The 1,000-frame inventory records 46 `$F021` calls per BIOS across 14 titles. The paired
