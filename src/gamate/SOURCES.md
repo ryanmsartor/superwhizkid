@@ -805,24 +805,60 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   output for the first authentic `$F012` occurrence in each title under both BIOSes (78 contexts).
   One graphics-data byte per context was XOR-perturbed only in the probe's private in-memory ROM
   copy; baseline and perturbed traces, timing, VRAM coverage, and output were compared. No payload
-  values or lookup table were written to reports or repository files.
+  values or lookup table were written to reports or repository files. A separate RAM matrix toggled
+  each individual bit of `$000` and `$001` at service entry in the four one-tile contexts (64 probes).
 - Result: all 78 contexts parsed. The 794 tile runs yielded 6,352 source/output row observations;
   89 distinct graphics input-byte values had one consistent output globally and within each title.
   Repeated selectors used identical eight-byte address runs in observed repeats. The per-call
   `base + 8 * selector` address formula fit 14 of 74 descriptor-bearing contexts, with single-tile
   contexts unable to discriminate the formula. Four one-tile contexts from two titles exposed no
   width/selector reads in the cartridge-ROM trace; each showed eight contiguous graphics reads and
-  the return dummy read. RAM `$000` and `$001` were each read twice in those contexts, but their
-  values and role were not established. All 78 byte perturbations changed only their associated
-  output byte or bytes as predicted by the observed mapping, without changing address trace, timing,
-  or VRAM coverage. Address traces, timing, VRAM output and coverage, registers, and LCD activity
-  matched between BIOS revisions in all 39 title pairs.
+  the return dummy read. RAM `$000` and `$001` were each read twice in baseline contexts. All 78
+  graphics-byte perturbations changed only their associated output byte or bytes as predicted by the
+  observed mapping, without changing address trace, timing, or VRAM coverage. Baseline address
+  traces, timing, VRAM output and coverage, registers, and LCD activity matched between BIOS
+  revisions in all 39 title pairs.
+- RAM-perturbation result: all 64 single-bit probes returned without writing the toggled byte.
+  Every `$000` bit toggle changed the ROM-read trace, output, timing, write shape, returned registers,
+  and VRAM coverage. For `$001`, 20 of 32 toggles changed the trace, 20 changed output, 20 changed
+  timing, 20 changed returned registers, and 16 changed VRAM coverage and write shape. None of the
+  32 individual bit toggles produced the corresponding uniform shift in the first eight cartridge
+  reads expected of a direct 16-bit linear ROM pointer. For `$001` XOR `$01`, one title pair differed
+  between BIOSes only in read sequence and timing; output VRAM, returned registers, and write counts
+  matched. Baseline and toggled byte values each matched across the pair, and duplicate probes
+  reproduced the difference.
 - Limits and legal boundary: only one authentic first-call context per title and one graphics byte
-  per context were perturbed; 89 of 256 possible input-byte values were observed. The
-  selector-to-address transform, control-data source in the four one-tile contexts, and exact
-  timing remain unresolved. BIOS and cartridge files remained read-only; perturbations were confined
-  to private in-memory ROM copies. No BIOS/cartridge payload or code was copied or published, and no
-  external emulator source code was consulted or copied.
+  per context were tested; 89 of 256 possible graphics input-byte values were observed. The RAM
+  matrix toggled one bit at a time in only the four contexts that expose the one-tile path; combined
+  changes and later call contexts were not tested. The control-data source, any indirect or
+  table-mediated relationship to `$000-$001`, selector-to-address transform, and exact timing remain
+  unresolved. RAM byte values were not retained. BIOS and cartridge files remained read-only;
+  perturbations were confined to private in-memory copies. No BIOS/cartridge payload or code was
+  copied or published, and no external emulator source code was consulted or copied.
+
+#### `$F018` cross-corpus command-stream structure
+
+- Source and status: the local user-supplied collection of 15 titles with observed `$F018` calls and
+  both authentic BIOS revisions, read in place. These are execution observations from the
+  independently authored emulator, not physical-hardware measurements.
+- Method: `gamatebiosprobe` captured address-only ROM-read sequences for the first authentic call in
+  each title under both BIOSes, with I set to isolate the service (30 contexts). A local in-memory
+  parser interpreted cartridge bytes beginning at the first traced read using the previously
+  established row/run grammar; it reported only aggregate counts, write-formula results, and
+  BIOS-pair comparisons.
+- Result: the grammar parsed in all 30 contexts, and
+  `16 * sum(run_length for nonzero tile indices)` matched VRAM writes in every context. Across the 15
+  paired title streams there were 249 rows, 1,244 run pairs, 257 transparent pairs, 2,791 active
+  byte columns, and 5,238 total byte columns. Each stream contained 6-24 rows and 19-194 run pairs;
+  row spans were 11-32 columns, with no row selector above 31 or zero run length. Read traces,
+  stream structure, timing, returned registers, write counts, and VRAM hashes matched between BIOS
+  revisions in all 15 title pairs.
+- Limits and legal boundary: only the first authentic call in each observed title was parsed. This
+  sweep did not resolve the precise interleaving of control and graphics reads, repeated
+  stream/base triples, or later invocation contexts. BIOS and cartridge files remained read-only;
+  no ROM/BIOS bytes, stream contents, or graphics payload were written to reports, files, or the
+  repository. No BIOS or cartridge code was copied, and no external emulator source code was
+  consulted or copied.
 
 #### `$F027` caller-dependent graphics service
 

@@ -405,10 +405,26 @@ overwritten deterministically by every measured call and therefore serve as serv
 `$004-$005` are neither read nor written and remain caller-preserved. They are not required `$F018`
 inputs in the observed first-call population.
 
-The next analysis step is a structural sweep of authentic streams across calls and titles: count rows
-and runs, sum horizontal spans, identify repeated stream/base triples, and flag wrapping or out-of-range
-selectors. That can distinguish the ordinary contract from caller-specific edge cases before a
-clean-room replacement is designed.
+### Cross-corpus command-stream structure
+
+The completed-call inventory identifies 15 `$F018` caller titles. Their first authentic calls were
+probed under both BIOS revisions with I set to isolate the service (30 contexts). In every context,
+the stream parsed from the first cartridge-ROM read using the row/run grammar above, and the
+resulting active-column count predicted the measured VRAM writes exactly:
+`16 * sum(run_length for nonzero tile indices)`.
+
+Across the 15 per-title streams, there were 249 rows and 1,244 run pairs. Of those pairs, 257 used
+the transparent tile index; the streams described 2,791 active and 5,238 total byte columns. Each
+stream contained 6-24 rows and 19-194 run pairs. Row spans ranged from 11 through 32 columns; no row
+selector exceeded 31 and no run length was zero. All 30 contexts matched the write formula, and the
+measured address traces, stream structure, timing, returned registers, write counts, and VRAM hashes
+matched between BIOS revisions in all 15 title pairs.
+
+This extends the stream grammar beyond the previously inspected callers, but it covers only the
+first authentic call in each title. The precise interleaving of control bytes and graphics-record
+reads, the repeated stream/base triples, and later invocation contexts remain open. The sweep used
+address-only traces and transient local ROM reads to derive counts; no stream or graphics payload
+was saved or published.
 
 ### ROM-driven plane-0 graphics writer: `$F01B`
 
@@ -617,6 +633,21 @@ The other two callers each have a one-tile first-call context under both BIOSes.
 show eight contiguous graphics reads followed by the return dummy read, but no width or selector
 reads in the cartridge-ROM trace. RAM `$000` and `$001` are each read twice in these contexts; their
 values and role are unresolved.
+
+A targeted matrix toggled each individual bit of RAM `$000` and `$001` at service entry in all four
+contexts (64 probes); every probe returned, and neither byte was written. Every `$000` bit toggle
+changed the ROM-read trace, output, timing, write shape, returned registers, and VRAM coverage. For
+`$001`, 20 of 32 toggles changed the ROM-read trace, 20 changed output, 20 changed timing, 20 changed
+returned registers, and 16 changed VRAM coverage and write shape. These bytes are behaviorally
+influential, but this does not identify their ABI meaning. Treating them as a direct 16-bit pointer
+whose value linearly shifts the first eight cartridge reads was also tested; none of the 32
+individual bit toggles produced that shift, which does not rule out an indirect or table-mediated
+role.
+
+For `$001` XOR `$01`, baseline byte values matched across BIOS revisions in each title pair, as did
+the toggled values. One pair nevertheless differed between BIOS revisions in ROM-read sequence and
+timing; its VRAM output, returned registers, and write counts matched. Duplicate probes reproduced
+the difference, whose cause remains unresolved.
 
 Every tile unconditionally overwrites eight complete destination bytes. A controlled selector whose
 output was all zero still issued eight VRAM writes: an initially zero destination showed no changed
