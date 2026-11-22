@@ -651,6 +651,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   `$021` watch covered all 124 cases. In Galaxy Invaders and Mars Voyage, restoring each 64-byte
   block, each chunk in `$020-$03F`, and each byte in `$020-$03F` isolated the policy discrepancy;
   both revisions and both input schedules were used for each control.
+  A pre-entry `$022` watch covered all 124 cases; authentic and zero-byte entry runs were compared
+  for 1,000 frames across the full corpus under no input and all buttons held. Focused Galaxy
+  Invaders watches established the first post-entry access without retaining RAM values.
   Focused tests cover owner attribution and read/write accounting; production objects remained
   unchanged.
   `tools/gamate-ram-perturbation-summary.py` compares aggregate observations while excluding only
@@ -679,6 +682,10 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   constructed as zero, the policy and the combined clear-VRAM policy matched measured execution,
   final video, and final VRAM hashes across all 124 cases in both input schedules. Expected whole-RAM
   hash differences were excluded. All other machine state and the resident BIOS remained authentic.
+  No pre-entry writes to `$022` were observed; it retains the emulator's `$FF` reset fill. Clearing
+  it changed Galaxy Invaders' execution, final video, and final VRAM under both BIOSes and both
+  input schedules. Cartridge code read the inherited byte before writing it. This supports retaining
+  the modeled fill in the candidate policy, not a physical power-on claim.
 - Limits and legal boundary: the experiments establish tested sufficiency, not exhaustive gameplay
   coverage or physical RAM behavior. The software meanings of these bytes and later input-driven
   use remain unknown. Local BIOS/ROM inputs remained read-only; no memory images, firmware-derived
@@ -741,7 +748,18 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   shift by the low three bits; `$FF`-filled probes showed background-dependent output. No pixel,
   ROM, or BIOS payload was retained. The result supports a horizontal-position input in selected
   paths, not a universal grammar or blend rule; no external implementation was consulted or
-  copied. Exact results, call scopes, and limits are in
+  copied. An analogous ten-value matrix for `$022` covered the same 32 contexts and both BIOSes
+  (640 probes); all read it once without writing it, with coverage sensitive in the same 12
+  contexts. All 256 values were tested in the first Galaxy Invaders and Time Warrior calls under
+  both revisions (1,024 probes): coverage was a fixed set plus a 96-byte region translated by
+  `$022` rows modulo 256, with unchanged timing. A combined four-by-four `$021/$022` matrix across
+  the 12 sensitive contexts and both revisions (384 probes) matched horizontal/vertical translation
+  and the previously bounded horizontal timing increment, including the formerly ambiguous Mars
+  Voyage coverage. In-memory, zero-filled Time Warrior output comparisons for six horizontal and
+  eleven vertical values checked both planes and all 16 rows under both BIOSes (4,224 row/plane
+  comparisons), excluding positions overlapping fixed writes. These findings do not establish the
+  remaining stream grammar or a general blend rule. No payloads were retained. Exact results,
+  call scopes, and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - `$F00C` follow-up: `occurrence=1` probes covered 57 titles under both BIOSes with I set and VRAM
   seeded to `$FF`; controlled `$015` bit patterns and A/X/Y changes were tested in Baseball, and the

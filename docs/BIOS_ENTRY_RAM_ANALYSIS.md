@@ -77,12 +77,12 @@ least one additional broadly consumed field or counter.
 
 ## Byte and four-byte refinement
 
-All 32 individual bytes in `$000-$01F`, the four bytes in `$00CC-$00CF`, and the four bytes in
-`$021C-$021F` were independently cleared across the 62-cartridge corpus. The eight aligned
+All 32 individual bytes in `$000-$01F`, `$022`, the four bytes in `$00CC-$00CF`, and the four
+bytes in `$021C-$021F` were independently cleared across the 62-cartridge corpus. The eight aligned
 four-byte groups in `$0C0-$0DF` and four groups in `$0210-$021F` were also cleared. Each test covered
-both BIOS revisions and 1,000 post-entry frames, for 4,960 byte-address/case and 1,488 four-byte
+both BIOS revisions and 1,000 post-entry frames, for 5,084 byte-address/case and 1,488 four-byte
 group/case comparisons. “Execution” includes final VRAM; only the deliberately changed final RAM
-hash is excluded.
+hash is excluded. `$022` was also tested with all buttons held.
 
 | Address | Changed executions | Final-video changes | Final-VRAM changes | Affected titles or observation |
 | --- | ---: | ---: | ---: | --- |
@@ -109,6 +109,7 @@ hash is excluded.
 | `$01A` | 0 | 0 | 0 | No observed effect |
 | `$01B-$01D` | 0 each | 0 | 0 | No observed effect |
 | `$01E-$01F` | 0 each | 0 | 0 | No observed effect |
+| `$022` | 2 | 2 | 2 | Galaxy Invaders |
 | `$021C` | 0 | 0 | 0 | No observed effect |
 | `$021D` | 2 | 0 | 0 | Witty Apee |
 | `$021E` | 0 | 0 | 0 | No observed effect |
@@ -120,6 +121,13 @@ result, consistent with disabling BIOS dispatch to cartridge callbacks; other by
 still produce narrower title-specific changes. `$0011` similarly accounts for the second chunk's
 affected membership. The IRQ trace below identifies it as the low byte of the BIOS-maintained
 periodic-IRQ counter.
+
+For `$022`, the same two Galaxy Invaders cases differed in execution, final video, and final VRAM
+under both input schedules. A pre-entry watch found no writes to this byte in any of the 124
+cases, so it retains the emulator's `$FF` reset fill. In Galaxy Invaders, cartridge code first
+reads the inherited value before writing it: frame 15 without input, or frame 24 with all buttons
+held, under both BIOSes. The full-RAM candidate policy already sets `$022=$FF`; this finding does
+not establish the physical power-on value or require copying BIOS state.
 
 | Four-byte group | Changed executions | Final-video changes | Final-VRAM changes | Affected titles |
 | --- | ---: | ---: | ---: | --- |

@@ -836,23 +836,45 @@ did vary in Devil Castle's second call, so it is not generally preserved across 
 
 In 11 of the 12 coverage-sensitive contexts, the written-address set decomposes into a fixed set
 and 96 moving bytes: three byte columns for each of 16 rows in each plane. The moving columns
-advance by `$021 >> 3`, wrapping within the 32-byte VRAM row. The remaining context, Mars
-Voyage's second call, changes coverage but the same simple set decomposition does not reproduce
-its results; overlapping writes may obscure it. For Galaxy Invaders' and Time Warrior's first calls,
+advance by `$021 >> 3`, wrapping within the 32-byte VRAM row. In Mars Voyage's second call,
+overlap prevents the same simple decomposition at its original vertical position; the combined
+position probes below separate those writes. For Galaxy Invaders' and Time Warrior's first calls,
 all 256 `$021` values were tested under both BIOSes: the same decomposition held, and the
 master-clock count was respectively
 `172762 + 1516 * ($021 & 7)` and `46796 + 1516 * ($021 & 7)`. The ten-value matrix exhibited the
 same timing increment in all 12 coverage-sensitive contexts and no increment in the other 20.
 These are context-specific measurements, not a general service timing formula.
 
+The same 32 contexts and ten-value matrix were tested independently for `$022` under both BIOSes.
+All 640 probes read it once without writing it; coverage changed in the same 12 contexts and
+remained unchanged in the other 20. In all 32, the tested values left measured timing, ROM address
+sequence, VRAM/LCD write counts, and returned CPU registers/status unchanged. For each sensitive
+context, the coverage decomposed into a fixed set and 96 moving bytes, with the moving rows
+advanced by `$022` modulo 256. Galaxy Invaders' and Time Warrior's first calls were also tested at
+all 256 values under both BIOSes (1,024 probes), with no coverage-model or timing mismatches.
+
+A combined matrix used `$021={00,07,08,FF}` and `$022={00,01,80,FF}` in each of the 12 sensitive
+contexts under both BIOSes (384 probes). All matched a fixed set plus the 96-byte region translated
+by `$021 >> 3` columns modulo 32 and `$022` rows modulo 256. Recovering the moving region from a
+non-overlapping position also explains the earlier Mars Voyage coverage ambiguity. ROM address
+sequences and write counts stayed unchanged, and timing was the context's zero-position time plus
+`1516 * ($021 & 7)` throughout this matrix. These observations bound two positioning inputs in
+these paths, not the full command or timing grammar.
+
 In Time Warrior's first call with VRAM seeded to zero, direct in-memory equality comparisons
 verified that each moving three-byte row in both planes equals the zero-offset row shifted right
 by `$021 & 7`; its starting byte advances by `$021 >> 3` with row wrapping. This was checked for
 `$00-$09`, `$7F`, `$F8`, and `$FF` under both BIOSes. Seeding VRAM to `$FF` changed the resulting
 rows, so this is not evidence for unconditional replacement or a fully specified blending rule.
-These results identify a horizontal-position input for the selected drawing paths, not a complete
-`$F027` grammar or a guarantee about all later calls. Galaxy Invaders reads its inherited `$021`
-before later setting it for its first service call; the entry-state implications are in
+A further zero-filled comparison combined six horizontal values `$00,$03,$07,$08,$0F,$FF` with
+eleven vertical values `$00,$01,$07,$0F,$10,$20,$40,$E0,$F0,$F8,$FF`, checking all 16 rows and both
+planes under both BIOSes. All 4,224 row/plane comparisons matched the translated, horizontally
+shifted zero-position output, including row and column wrap. Positions overlapping fixed writes
+were not included in this pixel comparison.
+
+These results identify horizontal and vertical position inputs for selected drawing paths, not a
+complete `$F027` grammar or a guarantee about all later calls. Galaxy Invaders reads its inherited
+`$021` before later setting it for its first service call; the entry-state implications are in
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md).
 
 ### IRQ-gated counter wait: `$F003`

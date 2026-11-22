@@ -70,6 +70,7 @@ $018-$01A          Common BIOS service scratch
 $01B-$01D          Mixed service scratch, dimensions, and caller-control fields
 $01E-$01F          Common BIOS service loop/scratch fields
 $021               BIOS-initialized zero; horizontal-position input in selected $F027 calls
+$022               Reset-filled $FF at entry; vertical-position input in selected $F027 calls
 $023/$028/$030     Empirical parameter or scratch sites for some BIOS services
 $0CC-$0CF          Title-specific work areas; $0CE is a countdown-like variable in 13 titles
 $100-$13F          Stack-adjacent and title-specific sensitive work; $140-$3FF otherwise title work
