@@ -250,8 +250,9 @@ effect to `$020-$03F`; restoring each sixteen-byte chunk localized it to `$020-$
 each of the 32 individual bytes localized it to `$021` alone. These were diagnostic controls, not
 the constructed policy. Pre-entry watches across all 124 cases found that the BIOS's last write to
 `$021` set it to zero. In focused no-input traces, Galaxy Invaders first read the inherited zero in
-cartridge code; Mars Voyage first read it inside BIOS service `$F027`. Its precise runtime role
-remains unresolved.
+cartridge code; Mars Voyage first read it inside BIOS service `$F027`. Subsequent controlled probes
+identify it as a horizontal-position input in selected `$F027` drawing contexts, but do not define
+all of its runtime uses; see [`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md).
 
 ### Counter- and random-phase sensitivity
 

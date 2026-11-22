@@ -728,8 +728,20 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   caller-supplied 16-bit cartridge-address words, but not a common data grammar. A separate
   IRQ-masked Galaxy Invaders first-call probe varied `$021` among `$00`, `$40`, and `$FF` under
   both revisions. The service read it once without writing it; output VRAM hashes and coverage
-  differed, and `$FF` also changed timing. This is a caller-specific observation, not a decoded
-  field format. Exact results, call scopes, and limits are in
+  differed, and `$FF` also changed timing. Follow-up local experiments varied `$021` across ten
+  values in the first call of all 25 observed callers and seven further second-call contexts,
+  under both BIOSes with IRQs masked. Each of the 640 probes read the byte once without writing
+  it; 12 contexts changed coverage and 20 did not. All 256 byte values were then tested in the
+  first Galaxy Invaders and Time Warrior calls under both revisions (1,024 probes). In those
+  contexts coverage decomposed into fixed writes plus a 96-byte, two-plane region shifted by the
+  high five bits with row wrapping; timing increased by 1,516 master clocks per low-bit offset.
+  Eleven of the 12 sensitive contexts had the same address-set decomposition for the ten tested
+  values; it did not explain the twelfth, possibly because of overlapping writes. Zero-filled
+  Time Warrior probes at 13 selected values compared pixel rows in memory and found a corresponding right
+  shift by the low three bits; `$FF`-filled probes showed background-dependent output. No pixel,
+  ROM, or BIOS payload was retained. The result supports a horizontal-position input in selected
+  paths, not a universal grammar or blend rule; no external implementation was consulted or
+  copied. Exact results, call scopes, and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - `$F00C` follow-up: `occurrence=1` probes covered 57 titles under both BIOSes with I set and VRAM
   seeded to `$FF`; controlled `$015` bit patterns and A/X/Y changes were tested in Baseball, and the

@@ -824,13 +824,35 @@ schema. It does not resolve their per-title meanings or stream grammar. The anal
 derived counts, hashes, coverage, and ROM addresses; RAM-watch final values and source payloads are
 omitted.
 
-For Galaxy Invaders' first `$F027` call, a separate IRQ-masked probe established that `$021` is
-read once and not written by the service. Setting it to `$00`, `$40`, or `$FF` changed the final
-VRAM hash in each case; the `$00/$40/$FF` cases touched 576/544/576 unique VRAM bytes, while all
-performed 1,248 VRAM writes. `$FF` took 183,374 master clocks versus 172,762 for `$00` and `$40`.
-Both BIOSes agreed, and no IRQ or NMI occurred. This is one caller context, not a general `$021`
-encoding. Galaxy Invaders reads its inherited `$021` before later setting it for the first service
-call; the entry-state implications are in
+An IRQ-masked matrix varied `$021` through `$00`, each single-bit value, and `$FF` for the first
+call in each of the 25 titles observed to call `$F027` in the 1,000-frame unattended inventory.
+Seven second-call contexts were also tested: Devil Castle, Incantational Couple, Kill Shot, Mars
+Voyage, Money Maze, Pipemania, and Witty Apee. In all 640 probes, the service read `$021` once and
+did not write it; both BIOS revisions agreed on the recorded non-RAM-hash results. ROM address
+sequences, VRAM and LCD write counts, and returned CPU registers/status were unchanged by these
+variations in each context. Twelve of the 32 contexts changed VRAM coverage; the other 20 had
+unchanged coverage, final VRAM hash, and measured timing for these values. The final VRAM address
+did vary in Devil Castle's second call, so it is not generally preserved across this input matrix.
+
+In 11 of the 12 coverage-sensitive contexts, the written-address set decomposes into a fixed set
+and 96 moving bytes: three byte columns for each of 16 rows in each plane. The moving columns
+advance by `$021 >> 3`, wrapping within the 32-byte VRAM row. The remaining context, Mars
+Voyage's second call, changes coverage but the same simple set decomposition does not reproduce
+its results; overlapping writes may obscure it. For Galaxy Invaders' and Time Warrior's first calls,
+all 256 `$021` values were tested under both BIOSes: the same decomposition held, and the
+master-clock count was respectively
+`172762 + 1516 * ($021 & 7)` and `46796 + 1516 * ($021 & 7)`. The ten-value matrix exhibited the
+same timing increment in all 12 coverage-sensitive contexts and no increment in the other 20.
+These are context-specific measurements, not a general service timing formula.
+
+In Time Warrior's first call with VRAM seeded to zero, direct in-memory equality comparisons
+verified that each moving three-byte row in both planes equals the zero-offset row shifted right
+by `$021 & 7`; its starting byte advances by `$021 >> 3` with row wrapping. This was checked for
+`$00-$09`, `$7F`, `$F8`, and `$FF` under both BIOSes. Seeding VRAM to `$FF` changed the resulting
+rows, so this is not evidence for unconditional replacement or a fully specified blending rule.
+These results identify a horizontal-position input for the selected drawing paths, not a complete
+`$F027` grammar or a guarantee about all later calls. Galaxy Invaders reads its inherited `$021`
+before later setting it for its first service call; the entry-state implications are in
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md).
 
 ### IRQ-gated counter wait: `$F003`

@@ -168,8 +168,8 @@ For authentic-BIOS use, preserve WRAM; for a replacement, initialize state delib
 copy a captured RAM image. This candidate is tested sufficiency, not proof of all later gameplay
 paths, a physical power-on guarantee, or a complete BIOS-free boot contract: all other machine
 state and the resident BIOS remain authentic in these experiments. `$021` is BIOS-initialized in
-all cases and is an observed `$F027` input, but its full runtime meaning is unresolved. Targeted
-perturbations found effects from clearing `$00CE` in 13 titles
+all cases and is a horizontal-position input in selected `$F027` contexts, but its full runtime
+meaning is unresolved. Targeted perturbations found effects from clearing `$00CE` in 13 titles
 and `$021F` in two titles. Neither byte is accessed before entry in the 124 tested cases, so both
 retain the emulator's `$FF` reset fill rather than a BIOS-written value. Cartridge IRQ traces
 identify countdown-like use of `$00CE`, but the software purposes and physical power-on values
