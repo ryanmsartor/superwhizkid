@@ -2,7 +2,7 @@
 # Copyright (c) 2026 Ry
 # SPDX-License-Identifier: GPL-2.0-or-later
 
-"""Validate the measured F02A plane-0 rectangle-fill contract."""
+"""Validate measured F02A rectangle-fill counts, timing and register results."""
 
 import csv
 import sys

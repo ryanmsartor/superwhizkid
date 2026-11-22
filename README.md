@@ -56,7 +56,9 @@ focuses on targeted research on understanding the Gamate hardware and software.
 
 Current research revolves around implementing an open-source, clean room boot firmware replacement
 that is 100% compatible across the library. See the `docs/` folder for work that has been done
-so far in this area.
+so far in this area. A separately built, incomplete
+[experimental BIOS prototype](docs/EXPERIMENTAL_BIOS.md) currently targets standalone Cube Up;
+it is not used by the libretro core.
 
 Future lines of research and development will hopefully allow us to create tools to make homebrewing
 for this system more feasible.
@@ -74,7 +76,7 @@ The libretro core is produced as `build/superwhizkid_libretro.so`.
 For local compatibility testing with legally obtained images:
 
 ```sh
-tools/gamate-sweep.sh /path/to/gamate/files 300 build/gamateboot
+tools/gamate-sweep.sh /path/to/gamate/files 1000 build/gamateboot
 ```
 
 ## Releases

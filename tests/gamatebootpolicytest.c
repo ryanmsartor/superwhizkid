@@ -8,6 +8,12 @@
 #include <assert.h>
 
 int main(void) {
+	assert(!experimentalBiosTrap(0xF000));
+	assert(!strcmp(experimentalBiosTrap(0xF036), "unsupported BIOS service or link NMI"));
+	assert(!strcmp(experimentalBiosTrap(0xF039), "cartridge protection failed"));
+	assert(!strcmp(experimentalBiosTrap(0xF03C), "cartridge identity failed"));
+	assert(!strcmp(experimentalBiosTrap(0xF03F), "cartridge checksum failed"));
+	assert(!reportExperimentalBiosTrap(false, 0xF036, 0xF027));
 	struct Gamate* g = calloc(1, sizeof(*g));
 	assert(g);
 	memset(g->ram, 0xA5, sizeof(g->ram));

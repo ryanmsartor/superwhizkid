@@ -1464,11 +1464,12 @@ copy shape, baseline timing, bounded page-cross penalties, registers, status, st
 unrelated hardware effects. It reports zero mismatches across all 38,790 available non-interrupted
 calls.
 
-### Plane-0 rectangle-fill contract: `$F02A`
+### Rectangle-fill contract: `$F02A`
 
-A controlled Baseball call identifies `$F02A` as a column-major plane-0 rectangle fill with a caller
-supplied byte. RAM `$01C` supplies the horizontal pixel extent and RAM `$01D` supplies the vertical
-row count. The byte-column count is `$01C >> 3`; both BIOS revisions agree on the call.
+A controlled Baseball call identifies `$F02A` as a column-major rectangle fill with a caller
+supplied byte, normally in plane 0. RAM `$01C` supplies the horizontal pixel extent and RAM `$01D`
+supplies the vertical row count. The byte-column count is `$01C >> 3`; both BIOS revisions agree on
+the call.
 
 For `columns = $01C >> 3` and `rows = $01D`, with ordinary nonzero counts:
 
@@ -1486,7 +1487,11 @@ The baseline 1×1 call writes A once at `(X >> 3, Y)` and takes 202 master clock
 perturbations produce the corresponding column-major coverage and the LCD/write/timing equations
 above. As with the 8-bit loops in the neighboring fill services, a derived zero count is interpreted
 through 256 iterations; a 256×256 controlled probe therefore reaches 65,536 writes, but the general
-normal-dimension formula should remain the primary contract.
+normal-dimension formula should remain the primary contract. The plane-0 description applies to
+ordinary nonzero widths: a zero-derived 256-column probe beginning at X=`$F8`, Y=`$FE`, with one
+row, wrote all 32 byte columns on **both** planes under each BIOS revision. All 256 LCD column
+selectors followed the raw eight-bit counter across bit 7 and its wrap; describing that extreme case
+as plane-0-only is incorrect. This observation does not establish every zero-count combination.
 
 The validated completed-call corpus contains 9,414 `$F02A` calls, evenly split between BIOS revisions.
 Excluding 394 interrupt-spanning calls leaves 9,020 uninterrupted calls. An added
@@ -1977,15 +1982,16 @@ effects. These are emulated observations, not physical timing measurements.
 The available completed-call report contains 4,070 balanced `$F009` calls across 41 titles, 2,035
 per BIOS revision. Of these, 4,054 span an IRQ or NMI; the 16 uninterrupted calls, from six titles,
 are evenly split between BIOS revisions. All 16 take 42 master clocks and have the same register,
-RAM, status, and hardware-effect signature. Across all completed calls, A returns zero, X/Y/S are
-preserved, and C/Z are set, N is clear, and B/D/I/V are preserved.
+RAM, status, and hardware-effect signature. Across all 4,070 completed calls, A returns zero, X/Y/S are
+preserved, and C/Z are set, N is clear, and B/D/I/V are preserved. X preservation is an observed
+corpus result, not a guarantee when a callback changes X (see the synthetic probe below).
 
 | Observable | Contract |
 | --- | --- |
 | Entry A | Ignored; A returns zero. |
 | Entry RAM `$00B` | Values `$00-$17` wait `24 - n` IRQs (`n` is the numeric entry value); `$18-$FF` take the ready path. |
 | RAM `$00B` on return | Written as zero. |
-| Registers | X, Y, and S are preserved. |
+| Registers | X, Y, and S are preserved on the ready path and in observed corpus calls. A waiting call can expose a callback-modified X. |
 | Status | C and Z set; N clear; B, D, I, and V preserved. |
 | Ready-path timing | 42 master clocks when the wait condition is already satisfied. |
 | Other hardware | No peripheral effects in uninterrupted calls. IRQ-spanning calls include callback effects. |
@@ -2003,6 +2009,13 @@ context. Later call contexts in each title were not individually perturbed. The 
 intermediate counter updates were not traced directly. Wait-path elapsed clocks vary with
 title-specific IRQ callback work; RAM and peripheral changes in IRQ-spanning calls must not be
 attributed to `$F009`. These are emulated observations, not physical timing measurements.
+
+A purpose-written synthetic cartridge supplied an IRQ callback that changed A, X, and Y during a
+one-IRQ `$F009` wait. With both BIOS revisions, X returned as the callback's new value while Y was
+restored, A returned zero, and S was restored. The previous unconditional X-preservation statement
+therefore applies only to the uninterrupted/observed caller contexts, not arbitrary callbacks.
+The synthetic cartridge used the documented header identifier, but no commercial program or asset
+bytes.
 
 ### Two-plane VRAM zero-writer and LCD-control service: `$F00C`
 

@@ -68,6 +68,33 @@ target_link_libraries(gamatebiosf030 superwhizkid_diagnostics)
 add_executable(gamatebiosf033 tests/gamatebiosf033.c)
 target_link_libraries(gamatebiosf033 superwhizkid_diagnostics)
 
+option(SUPERWHIZKID_EXPERIMENTAL_BIOS "Build the independent experimental firmware" OFF)
+if(SUPERWHIZKID_EXPERIMENTAL_BIOS)
+	find_program(SUPERWHIZKID_CA65 ca65)
+	find_program(SUPERWHIZKID_LD65 ld65)
+	if(NOT SUPERWHIZKID_CA65 OR NOT SUPERWHIZKID_LD65)
+		message(FATAL_ERROR "Experimental firmware requires ca65 and ld65 from cc65")
+	endif()
+	set(EXPERIMENTAL_BIOS "${CMAKE_CURRENT_BINARY_DIR}/experimental-gamate-bios.bin")
+	set(EXPERIMENTAL_BIOS_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/experimental-gamate-bios.o")
+	add_custom_command(OUTPUT "${EXPERIMENTAL_BIOS}"
+		COMMAND "${SUPERWHIZKID_CA65}" -o "${EXPERIMENTAL_BIOS_OBJECT}"
+			"${CMAKE_CURRENT_SOURCE_DIR}/firmware/experimental/gamate_bios.s"
+		COMMAND "${SUPERWHIZKID_LD65}" -C
+			"${CMAKE_CURRENT_SOURCE_DIR}/firmware/experimental/gamate_bios.cfg"
+			-o "${EXPERIMENTAL_BIOS}" "${EXPERIMENTAL_BIOS_OBJECT}"
+		DEPENDS firmware/experimental/gamate_bios.s firmware/experimental/gamate_bios.cfg
+		BYPRODUCTS "${EXPERIMENTAL_BIOS_OBJECT}"
+		VERBATIM)
+	add_custom_target(gamate-experimental-bios DEPENDS "${EXPERIMENTAL_BIOS}")
+	add_executable(gamatebiosprototypetest tests/gamatebiosprototypetest.c)
+	target_link_libraries(gamatebiosprototypetest superwhizkid)
+	target_compile_options(gamatebiosprototypetest PRIVATE -UNDEBUG)
+	add_dependencies(gamatebiosprototypetest gamate-experimental-bios)
+	add_test(NAME gamate-bios-prototype
+		COMMAND gamatebiosprototypetest "${EXPERIMENTAL_BIOS}")
+endif()
+
 add_library(superwhizkid_libretro SHARED libretro/gamate.c)
 target_include_directories(superwhizkid_libretro PRIVATE shared/libretro)
 target_link_libraries(superwhizkid_libretro superwhizkid)

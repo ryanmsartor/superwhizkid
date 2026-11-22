@@ -82,6 +82,10 @@ A clean-room replacement now appears technically feasible. It can implement the 
 protection, header/checksum validation, entry point, callback ABI, and machine initialization from
 behavioral requirements rather than reproduce authentic instruction sequences.
 
+A separately built, limited resident prototype targeting standalone Cube Up is described in
+[`EXPERIMENTAL_BIOS.md`](EXPERIMENTAL_BIOS.md). It does not remove the authentic-BIOS requirement
+from the libretro core.
+
 It does not need a separate boot recipe for each cartridge. Cartridge-dependent entry RAM is limited
 to the header checksum, which the replacement can calculate or copy from the public header fields.
 Mapper selection remains a core/cartridge responsibility rather than firmware content.

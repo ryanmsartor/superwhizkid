@@ -1,0 +1,446 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
+/* Tests use a purpose-written synthetic cartridge, not commercial content. */
+#include "gamate/gamate.h"
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+enum {
+	ENTRY = 0x6020,
+	RETURN = 0x6100,
+	UNSUPPORTED = 0xF036,
+	BAD_PROTECTION = 0xF039,
+	BAD_IDENTITY = 0xF03C,
+	BAD_CHECKSUM = 0xF03F,
+};
+
+static void step(struct Gamate* g) {
+	unsigned cycles = gamateCpuStep(g);
+	gamateRunClocks(g, cycles * 2);
+}
+
+static void runUntil(struct Gamate* g, uint16_t address, unsigned limit) {
+	for (unsigned i = 0; i < limit; i++) {
+		if (g->cpu.pc == address) return;
+		assert(!g->cpu.stopped && !g->diagnostics.unsupportedOpcodes);
+		step(g);
+	}
+	fprintf(stderr, "did not reach $%04X; PC=$%04X\n", address, g->cpu.pc);
+	abort();
+}
+
+static void makeCartridge(uint8_t* rom, size_t size) {
+	memset(rom, 0, size);
+	memcpy(rom + 5, "COPYRIGHT BIT CORPORATION", 25);
+	for (unsigned i = 0x1000; i < 0x2000; i++) rom[i] = (uint8_t) (i * 73 + i / 7);
+	unsigned checksum = 0;
+	for (unsigned i = 0x1000; i < 0x2000; i++) checksum += rom[i];
+	rom[0] = (uint8_t) checksum;
+	rom[1] = (uint8_t) (checksum >> 8);
+	rom[0x20] = 0x4C;
+	rom[0x21] = 0x20;
+	rom[0x22] = 0x60;
+	rom[0x23] = 0x60;
+	rom[0x26] = 0x4C;
+	rom[0x27] = 0x30;
+	rom[0x28] = 0x60;
+	const uint8_t callback[] = { 0xA2, 0x44, 0xA0, 0x77, 0xA9, 0xB3, 0x60 };
+	memcpy(rom + 0x30, callback, sizeof(callback));
+}
+
+static void checkEntry(struct Gamate* g) {
+	assert(g->protectionPassed && !g->protectionFailed);
+	assert(g->cpu.pc == ENTRY && g->cpu.a == 0xFF && g->cpu.x == 0x28);
+	assert(g->cpu.y == 0xFF && g->cpu.s == 0xFF && g->cpu.p == 0xA1);
+	assert(!g->cpu.irqMask && !g->irq && !g->nmi);
+	for (unsigned i = 0; i < 0x20; i++) {
+		uint8_t expected = 0;
+		if (i == 4) expected = 0x47;
+		if (i >= 5 && i <= 0x0A) expected = 0xFF;
+		if (i == 0x0C) expected = 1;
+		if (i == 0x10) expected = 3;
+		if (i == 0x11) expected = 0x94;
+		if (i == 0x12) expected = 0x8A;
+		if (i == 0x13) expected = 0x35;
+		assert(g->ram[i] == expected);
+	}
+	assert(g->ram[0x20] == 0xFF && g->ram[0x21] == 0);
+	assert(g->ram[0xE0] == g->rom[0] && g->ram[0xE5] == g->rom[0]);
+	assert(g->ram[0xE1] == g->rom[1] && g->ram[0xE6] == g->rom[1]);
+	for (size_t i = 0; i < sizeof(g->vram); i++) assert(g->vram[i] == 0);
+	for (size_t i = 0; i < sizeof(g->ayRegisters); i++) assert(g->ayRegisters[i] == 0);
+	assert(g->scrollX == 0 && g->scrollY == 0x5F);
+	assert(g->vramAddress == 0x18CE && g->vramPlane && g->incrementRow);
+	assert(!g->window && !g->swapPlanes && !g->displayBlank && !g->displayStopped);
+}
+
+static void testBoot(struct Gamate* g) {
+	for (unsigned run = 0; run < 2; run++) {
+		gamateReset(g);
+		memset(g->ram, 0xA5, sizeof(g->ram));
+		memset(g->vram, 0xA5, sizeof(g->vram));
+		runUntil(g, ENTRY, 300000);
+		checkEntry(g);
+	}
+
+	gamateReset(g);
+	g->protectionFailed = true;
+	runUntil(g, BAD_PROTECTION, 100000);
+	assert(!g->protectionPassed);
+
+	g->rom[5] ^= 1;
+	gamateReset(g);
+	runUntil(g, BAD_IDENTITY, 100000);
+	assert(g->protectionPassed);
+	g->rom[5] ^= 1;
+
+	g->rom[0x1000] ^= 1;
+	gamateReset(g);
+	runUntil(g, BAD_CHECKSUM, 100000);
+	assert(g->protectionPassed);
+	g->rom[0x1000] ^= 1;
+
+	gamateReset(g);
+	runUntil(g, ENTRY, 300000);
+}
+
+static void prepareCallWithStack(struct Gamate* g, uint16_t slot, uint8_t a, uint8_t x,
+		uint8_t y, uint8_t p, uint8_t returnS) {
+	g->cpu.pc = slot;
+	g->cpu.a = a;
+	g->cpu.x = x;
+	g->cpu.y = y;
+	g->cpu.s = (uint8_t) (returnS - 2);
+	g->cpu.p = p;
+	g->cpu.irqMask = (p & 4) != 0;
+	g->cpu.stopped = false;
+	g->ram[0x100 | (uint8_t) (returnS - 1)] = (uint8_t) (RETURN - 1);
+	g->ram[0x100 | returnS] = (uint8_t) ((RETURN - 1) >> 8);
+	g->irq = g->nmi = false;
+	g->irqClocks = 0;
+}
+
+static void prepareCall(struct Gamate* g, uint16_t slot, uint8_t a, uint8_t x,
+		uint8_t y, uint8_t p) {
+	prepareCallWithStack(g, slot, a, x, y, p, 0xFF);
+}
+
+static void call(struct Gamate* g, uint16_t slot, uint8_t a, uint8_t x,
+		uint8_t y, uint8_t p, unsigned limit) {
+	prepareCall(g, slot, a, x, y, p);
+	runUntil(g, RETURN, limit);
+	assert(g->cpu.s == 0xFF);
+}
+
+static void testIrq(struct Gamate* g) {
+	for (unsigned enabled = 0; enabled <= 1; enabled++) {
+		g->cpu.pc = RETURN;
+		g->cpu.a = 0xC1;
+		g->cpu.x = 0x47;
+		g->cpu.y = 0x19;
+		g->cpu.s = 0xFF;
+		g->cpu.p = 0xA1;
+		g->cpu.irqMask = false;
+		g->ram[0x0B] = 23;
+		g->ram[0x0C] = (uint8_t) enabled;
+		g->ram[0x0E] = 0;
+		g->ram[0x0F] = g->ram[0x10] = g->ram[0x11] = 0xFF;
+		g->irq = true;
+		g->nmi = false;
+		step(g);
+		runUntil(g, RETURN, 1000);
+		assert(g->cpu.a == 0xC1 && g->cpu.y == 0x19 && g->cpu.p == 0xA1);
+		assert(g->cpu.x == (enabled ? 0x44 : 0x47) && g->cpu.s == 0xFF);
+		assert(g->ram[0x0B] == 24);
+		assert(g->ram[0x0E] == 1 && g->ram[0x0F] == 0);
+		assert(g->ram[0x10] == 0 && g->ram[0x11] == 0);
+	}
+	g->cpu.pc = RETURN;
+	g->nmi = true;
+	step(g);
+	assert(g->cpu.pc == UNSUPPORTED);
+	step(g);
+	assert(g->cpu.pc == UNSUPPORTED);
+}
+
+static void testWait(struct Gamate* g) {
+	static const uint8_t counters[] = { 0, 23, 24, 0xFF };
+	for (size_t i = 0; i < sizeof(counters); i++) {
+		g->ram[0x0B] = counters[i];
+		g->ram[0x0C] = 0;
+		uint64_t irqs = g->diagnostics.irqsTaken;
+		call(g, 0xF009, 0xA5, 0x35, 0x68, 0x60, 1000000);
+		unsigned expected = counters[i] < 24 ? 24 - counters[i] : 0;
+		assert(g->diagnostics.irqsTaken - irqs == expected);
+		assert(g->ram[0x0B] == 0);
+		assert(g->cpu.a == 0 && g->cpu.x == 0x35 && g->cpu.y == 0x68);
+		assert(g->cpu.p == 0x63);
+	}
+	g->ram[0x0B] = 23;
+	g->ram[0x0C] = 1;
+	call(g, 0xF009, 0xA5, 0x35, 0x68, 0x20, 100000);
+	assert(g->cpu.a == 0 && g->cpu.x == 0x44 && g->cpu.y == 0x68 && g->cpu.p == 0x23);
+}
+
+static void testRecords(struct Gamate* g) {
+	uint8_t expected[0x100];
+	for (unsigned i = 0; i < sizeof(expected); i++) expected[i] = (uint8_t) (i ^ 0x5A);
+	memcpy(g->ram, expected, sizeof(expected));
+	for (unsigned i = 0; i < 16; i++) expected[0x23 + 8 * i] = expected[0x28 + 8 * i] = 0xFF;
+	call(g, 0xF024, 0x13, 0x49, 0x72, 0x24, 10000);
+	assert(!memcmp(g->ram, expected, sizeof(expected)));
+	assert(g->cpu.a == 0x80 && g->cpu.x == 0 && g->cpu.y == 0x80);
+	assert(g->cpu.p == 0x66);
+}
+
+static void testClear(struct Gamate* g) {
+	for (unsigned control = 0; control <= 0x40; control += 0x40) {
+		memset(g->vram, 0xA5, sizeof(g->vram));
+		g->ram[0x15] = (uint8_t) control;
+		uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
+		call(g, 0xF00C, 0x27, 0x81, 0x76, 0x64, 200000);
+		for (unsigned row = 0; row < 256; row++) {
+			for (unsigned column = 0; column < 32; column++) {
+				bool cleared = control ? row <= 230 && column == 0 : row < 200;
+				for (unsigned plane = 0; plane < 2; plane++) {
+					size_t offset = ((row * 32 + column) << 1) | plane;
+					assert(g->vram[offset] == (cleared ? 0 : 0xA5));
+				}
+			}
+		}
+		assert(g->diagnostics.vramWrites - writes == 12800);
+		assert(g->diagnostics.lcdWrites - lcd == 13602);
+		assert(g->cpu.a == 0x40 && g->cpu.x == 0 && g->cpu.y == 0xC8);
+		assert(g->cpu.p == 0x65 && g->ram[0x1E] == 0x80);
+	}
+}
+
+static void testPlaceholder(struct Gamate* g) {
+	memset(g->vram, 0xA5, sizeof(g->vram));
+	g->ram[0x15] = 0;
+	uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
+	call(g, 0xF000, 0x12, 0x34, 0x56, 0x64, 10000);
+	for (unsigned row = 0; row < 256; row++) {
+		for (unsigned column = 0; column < 32; column++) {
+			bool cleared = row >= 0x8C && row < 0x94 && column >= 8 && column < 12;
+			for (unsigned plane = 0; plane < 2; plane++) {
+				size_t offset = ((row * 32 + column) << 1) | plane;
+				assert(g->vram[offset] == (cleared ? 0 : 0xA5));
+			}
+		}
+	}
+	assert(g->diagnostics.vramWrites - writes == 64 && g->diagnostics.lcdWrites - lcd == 81);
+	assert(g->cpu.a == 0x38 && g->cpu.x == 0x40 && g->cpu.y == 0x20);
+	assert(g->cpu.p == 0x26 && g->vramAddress == 0x128B && g->vramPlane);
+}
+
+static unsigned glyphIndex(uint8_t selector) {
+	if (selector <= 0x20) return 1;
+	if (selector <= 0x40) return ((selector + 32u - 0x2F) & 31) + 1;
+	return ((selector - 1u) & 31) + 1;
+}
+
+static uint16_t glyphAddress(uint8_t selector) {
+	unsigned base = selector <= 0x40 ? 0x6021 : selector <= 0x60 ? 0x6079 : 0x6149;
+	return (uint16_t) (base + 8 * glyphIndex(selector));
+}
+
+static void putExpected(uint8_t* vram, unsigned column, unsigned row, uint8_t value) {
+	unsigned offset = (((row & 0xFF) * 32 + (column & 31)) << 1) | ((column >> 7) & 1);
+	vram[offset] = value;
+}
+
+static void testGlyphs(struct Gamate* g) {
+	for (unsigned i = 0; i < g->romSize; i++) g->rom[i] = (uint8_t) (i * 73 + i / 7 + 0x5D);
+	for (unsigned selector = 0; selector < 256; selector++) {
+		for (unsigned initialV = 0; initialV <= 0x40; initialV += 0x40) {
+			memset(g->vram, 0xA5, sizeof(g->vram));
+			g->ram[0] = 0;
+			g->ram[1] = 3;
+			g->ram[0x15] = 0;
+			g->ram[0x300] = 1;
+			g->ram[0x301] = (uint8_t) selector;
+			uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
+			call(g, 0xF012, 0x93, 0xF9, 0xFC, (uint8_t) (0x24 | initialV), 10000);
+			for (unsigned row = 0; row < 8; row++) {
+				unsigned address = (((0xFC + row) & 0xFF) * 32 + 31) * 2 + 1;
+				assert(g->vram[address] == g->rom[glyphAddress(selector) - 0x6000 + row]);
+			}
+			bool carry = (selector >= 0x20 && selector <= 0x2E) ||
+				(selector >= 0x81 && selector <= 0xA0) ||
+				(selector >= 0xC1 && selector <= 0xE0);
+			bool overflow = selector <= 0x20 ? initialV != 0 :
+				selector >= 0x80 && selector <= 0xE0;
+			assert(g->cpu.a == 1 && g->cpu.y == 1);
+			assert(g->cpu.x == (uint8_t) (8 * glyphIndex(selector)));
+			assert(g->cpu.p == (uint8_t) (0x26 | carry | (overflow ? 0x40 : 0)));
+			assert(g->diagnostics.vramWrites - writes == 8);
+			assert(g->diagnostics.lcdWrites - lcd == 11);
+		}
+	}
+
+	uint8_t expected[0x4000];
+	memset(expected, 0xA5, sizeof(expected));
+	memset(g->vram, 0xA5, sizeof(g->vram));
+	g->ram[0] = 0;
+	g->ram[1] = 2;
+	g->ram[0x15] = 0;
+	g->ram[0x200] = 0;
+	for (unsigned i = 1; i < 256; i++) g->ram[0x200 + i] = (uint8_t) (i * 17);
+	for (unsigned tile = 0; tile < 256; tile++) {
+		uint8_t selector = g->ram[0x200 + ((tile + 1) & 0xFF)];
+		for (unsigned row = 0; row < 8; row++) {
+			putExpected(expected, (0x80 + 31 + tile) & 0xFF, 0xFC + row,
+				g->rom[glyphAddress(selector) - 0x6000 + row]);
+		}
+	}
+	call(g, 0xF012, 0x93, 0xF9, 0xFC, 0x24, 1000000);
+	assert(!memcmp(g->vram, expected, sizeof(expected)));
+	assert(g->cpu.a == 0 && g->cpu.y == 0 && g->cpu.x == 8);
+
+	g->ram[0] = 0;
+	g->ram[1] = 3;
+	g->ram[0x300] = 2;
+	g->ram[0x301] = 0x80;
+	g->ram[0x302] = 0x20;
+	call(g, 0xF012, 0, 0, 0, 0x24, 10000);
+	assert(g->cpu.a == 2 && g->cpu.y == 2 && g->cpu.p == 0x67);
+	g->ram[0x301] = 0x41;
+	call(g, 0xF012, 0, 0, 0, 0x64, 10000);
+	assert(g->cpu.p == 0x27);
+
+	g->ram[0x300] = 1;
+	g->ram[0x301] = 0x41;
+	memset(g->rom + glyphAddress(0x41) - 0x6000, 0, 8);
+	memset(g->vram, 0x5A, sizeof(g->vram));
+	uint64_t writes = g->diagnostics.vramWrites;
+	call(g, 0xF012, 0, 0, 0, 0x24, 10000);
+	assert(g->diagnostics.vramWrites - writes == 8);
+	for (unsigned row = 0; row < 8; row++) assert(g->vram[(row * 32 << 1) | 1] == 0);
+
+	prepareCallWithStack(g, 0xF012, 0, 0, 0, 0x24, 3);
+	runUntil(g, RETURN, 10000);
+	assert(g->cpu.s == 3 && g->cpu.a == 1 && g->cpu.x == 8 && g->cpu.y == 1);
+}
+
+static void testTileStream(struct Gamate* g) {
+	static const uint8_t stream[] = {
+		3, 1, 0, 0x1F, 0x20, 0xFF, 0xFF, 0xFE, 0xFF, 0xFE,
+	};
+	uint8_t expected[0x4000];
+	memset(expected, 0xA5, sizeof(expected));
+	memset(g->vram, 0xA5, sizeof(g->vram));
+	g->ram[0] = 0;
+	g->ram[1] = 3;
+	g->ram[6] = 0xF9;
+	g->ram[7] = 0x62;
+	g->ram[8] = 0x7F;
+	g->ram[9] = 0x6B;
+	g->ram[0x15] = 0;
+	memcpy(g->ram + 0x300, stream, sizeof(stream));
+	for (unsigned pass = 0; pass < 2; pass++) {
+		unsigned base = pass ? 0x6B7F : 0x62F9;
+		const uint8_t selectors[] = { 1, 0x1F, 0x20, 0xFE };
+		const uint8_t columns[] = { 0, 2, 3, 0 };
+		const uint8_t rows[] = { 3, 3, 3, 0xFF };
+		for (unsigned tile = 0; tile < 4; tile++) {
+			for (unsigned row = 0; row < 8; row++) {
+				putExpected(expected, (pass ? 0x80 : 0) + columns[tile],
+					8 * rows[tile] + row, g->rom[base + 8 * selectors[tile] + row - 0x6000]);
+			}
+		}
+	}
+	uint64_t writes = g->diagnostics.vramWrites;
+	call(g, 0xF01E, 0x42, 0x55, 0x71, 0x64, 100000);
+	assert(!memcmp(g->vram, expected, sizeof(expected)));
+	assert(g->diagnostics.vramWrites - writes == 64);
+	assert(g->cpu.a == 0xFE && g->cpu.x == 0xFF && g->cpu.y == 9 && g->cpu.p == 0x27);
+	assert(g->ram[0] == 0 && g->ram[1] == 3 && g->ram[2] == 0x7F && g->ram[3] == 0x72);
+	assert(g->ram[0x18] == 0x81 && g->ram[0x19] == 0xFF);
+	assert(g->ram[0x1A] == 0xF0 && g->ram[0x1B] == 0);
+
+	g->ram[0x300] = 0xFE;
+	memset(g->ram + 0x18, 0xA5, 4);
+	g->ram[2] = 0xA5;
+	g->ram[3] = 0xA5;
+	writes = g->diagnostics.vramWrites;
+	call(g, 0xF01E, 0x42, 0x55, 0x71, 0x64, 10000);
+	assert(g->cpu.a == 0xFE && g->cpu.x == 0x55 && g->cpu.y == 0 && g->cpu.p == 0x67);
+	assert(g->diagnostics.vramWrites == writes && g->ram[2] == 0xA5 && g->ram[3] == 0xA5);
+	for (unsigned i = 0x18; i <= 0x1B; i++) assert(g->ram[i] == 0xA5);
+
+	g->ram[0] = 0;
+	g->ram[1] = 2;
+	memset(g->ram + 0x200, 0, 0x100);
+	g->ram[0x2FF] = 0xFF;
+	g->ram[0x300] = 0xFE;
+	call(g, 0xF01E, 0, 0x55, 0, 0x64, 200000);
+	assert(g->ram[0] == 0 && g->ram[1] == 3 && g->cpu.y == 0 && g->cpu.x == 0x55);
+	assert(g->cpu.a == 0xFE && g->cpu.p == 0x27 && g->ram[0x18] == 0x7E);
+
+	g->ram[0] = 0;
+	g->ram[1] = 3;
+	memcpy(g->ram + 0x300, stream, sizeof(stream));
+	prepareCallWithStack(g, 0xF01E, 0, 0x55, 0, 0x24, 5);
+	runUntil(g, RETURN, 100000);
+	assert(g->cpu.s == 5 && g->cpu.a == 0xFE && g->cpu.x == 0xFF && g->cpu.y == 9);
+}
+
+static void testRectangle(struct Gamate* g) {
+	for (unsigned shape = 0; shape < 3; shape++) {
+		uint8_t expected[0x4000];
+		memset(expected, 0xA5, sizeof(expected));
+		memset(g->vram, 0xA5, sizeof(g->vram));
+		g->ram[0x15] = 0;
+		g->ram[0x1C] = shape == 0 ? 16 : shape == 1 ? 0 : 8;
+		g->ram[0x1D] = shape == 0 ? 3 : shape == 1 ? 1 : 0;
+		unsigned columns = shape == 0 ? 2 : shape == 1 ? 256 : 1;
+		unsigned rows = shape == 0 ? 3 : shape == 1 ? 1 : 256;
+		for (unsigned column = 0; column < columns; column++) {
+			for (unsigned row = 0; row < rows; row++)
+				putExpected(expected, (31 + column) & 0xFF, 0xFE + row, 0x5A);
+		}
+		uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
+		call(g, 0xF02A, 0x5A, 0xF8, 0xFE, 0x64, 100000);
+		assert(!memcmp(g->vram, expected, sizeof(expected)));
+		assert(g->diagnostics.vramWrites - writes == columns * rows);
+		assert(g->diagnostics.lcdWrites - lcd == 1 + columns * (2 + rows));
+		assert(g->cpu.a == 0x5A && g->cpu.x == 0 && g->cpu.y == 0 && g->cpu.p == 0x66);
+	}
+}
+
+int main(int argc, char** argv) {
+	assert(argc == 2);
+	FILE* image = fopen(argv[1], "rb");
+	if (!image) {
+		fprintf(stderr, "could not open experimental firmware\n");
+		return 1;
+	}
+	uint8_t bios[GAMATE_BIOS_SIZE], rom[0x4000];
+	assert(fread(bios, 1, sizeof(bios), image) == sizeof(bios));
+	assert(fgetc(image) == EOF && !ferror(image));
+	assert(!fclose(image));
+	makeCartridge(rom, sizeof(rom));
+	struct Gamate g;
+	gamateInit(&g);
+	assert(gamateLoad(&g, rom, sizeof(rom), bios, sizeof(bios)));
+	testBoot(&g);
+	testIrq(&g);
+	testWait(&g);
+	testRecords(&g);
+	testClear(&g);
+	testPlaceholder(&g);
+	testGlyphs(&g);
+	testTileStream(&g);
+	testRectangle(&g);
+	prepareCall(&g, 0xF027, 0, 0, 0, 0x24);
+	runUntil(&g, UNSUPPORTED, 10);
+	step(&g);
+	assert(g.cpu.pc == UNSUPPORTED);
+	gamateFree(&g);
+	puts("experimental firmware synthetic tests passed");
+	return 0;
+}

@@ -714,6 +714,66 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 ### Post-entry BIOS runtime API analysis
 
+#### Experimental replacement: standalone Cube Up
+
+- Local origin and method: the standalone Cube Up cartridge and both legally obtained BIOS
+  revisions were executed read-only in this project's emulator. Four 1,000-frame post-entry
+  campaigns used no input, repeated long Start, menu actions, and the controller cycle defined
+  in the runtime API analysis. The trace retained only derived service targets, call counts and
+  frame numbers; it did not retain cartridge or firmware bytes. Both revisions produced the
+  same service-call summaries: the unattended path reached `$F024`, `$F00C`, `$F01E`, `$F000`
+  and `$F009`; the three input campaigns additionally reached `$F012` and `$F02A`. No link NMI
+  was exercised. A separate 20-frame RAM-watch experiment classified writes to `$00B` without
+  retaining values: during the first observed wait, BIOS-owned IRQ-context writes incremented
+  that byte under both revisions; the CPU's read-modify-write sequence also wrote back its prior
+  value. These observations identify an initial prototype target, not all Cube Up paths or a
+  physical-hardware guarantee.
+- Fixed-bitmap geometry: an address-only LCD-port probe of Cube Up's first `$F000` call under each
+  revision observed the same four columns at row `$8C` in each plane, with eight data writes per
+  column. Only control/address writes and data-write counts were reported, not bitmap bytes.
+  The experimental firmware uses that layout with a purpose-written blank placeholder; its pixels
+  do not reproduce the authentic BIOS asset. The observation is emulator-based and does not
+  establish the bitmap's meaning or physical display appearance.
+- Rectangle boundary correction: an independently controlled `$F02A` call with a zero-derived
+  256-column count, one row, X=`$F8` and Y=`$FE` was run under both BIOSes. Address-only VRAM
+  coverage showed all 32 columns of that row in each plane, rather than plane 0 alone. The
+  corresponding LCD address trace showed all 256 selectors incrementing as a raw eight-bit
+  counter. The firmware therefore retains that selector instead of clipping it; the runtime
+  analysis now limits its plane-0 description to ordinary nonzero widths. Other zero-count
+  combinations and physical hardware remain unverified. No source bytes were retained.
+- Wait/callback correction: a purpose-written synthetic cartridge supplied an IRQ callback that
+  changed A, X, and Y during a one-IRQ `$F009` wait. Both authentic BIOSes and the experimental
+  firmware returned the callback-modified X, restored Y, and returned A zero. This disproves an
+  unconditional X-preservation claim for arbitrary callbacks; the prior corpus preservation result
+  remains valid for the observed callers. The synthetic cartridge contained no commercial payload,
+  and the result is an emulator observation rather than a physical measurement.
+- Prototype inputs and implementation: the published physical-hardware notes by Kevtris cited
+  above supplied the protection identifier and serial protocol; the project-authored
+  [`ROM_HEADER_ANALYSIS.md`](../../docs/ROM_HEADER_ANALYSIS.md), boot and replacement analyses
+  supplied the exact header field, checksum range, entry boundary and candidate RAM policy; and
+  [`BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md) supplied the observed
+  service and callback effects. The new firmware was written independently from those behavioral
+  requirements. Its exact short protocol/header identifiers are functional format constants, not
+  firmware instructions or assets. No BIOS instruction sequence, original bitmap, commercial
+  cartridge program, or other payload was copied or embedded. The optional assembler/linker are
+  `ca65` and `ld65` from the [cc65 project](https://cc65.github.io/); no cc65 runtime library is
+  linked into the image.
+- Prototype validation: the purpose-written synthetic-cartridge suite checks reset, successful and
+  rejected boot, IRQ counter carry and gated callbacks, unsupported traps, wait behavior, the
+  implemented services, both LCD-clear modes, all 256 glyph selectors with two incoming overflow
+  states, 256-tile, 256-column and 256-row boundaries, and wrapped stacks and streams. A separate
+  CLI check confirmed explicit unsupported-service, invalid-identity and invalid-checksum errors
+  with synthetic cartridges. Both authentic BIOSes and the prototype were then run against standalone
+  Cube Up for each of the four 1,000-frame input campaigns above. Per-slot call counts matched;
+  final video and VRAM hashes matched in all three input-driven campaigns but differed in the
+  unattended run. Audio hashes, boot/IRQ phases, frame timing, PCs and RAM hashes differed.
+  Controlled masked first-call probes of `$F01E`, `$F012`, and `$F02A` matched output registers,
+  VRAM hashes/addresses and LCD/VRAM write counts against both BIOSes, but not elapsed clocks.
+  Only derived metadata and hashes were compared; local commercial inputs remained read-only.
+  This does not establish physical behavior, full gameplay, link NMI, interrupt interference,
+  arbitrary inputs or compatibility with other cartridges. See
+  [`EXPERIMENTAL_BIOS.md`](../../docs/EXPERIMENTAL_BIOS.md) for build instructions and scope.
+
 #### Corpus and general method
 
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
@@ -737,7 +797,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   writer; `$F015` two-plane rectangle copy; `$F018` tile-row blitter; `$F01B` plane-0 row-run
   stream service; `$F01E` two-plane tile-literal stream service; `$F021` plane-0
   row-literal stream service; `$F024` strided RAM initializer; `$F02A`
-  plane-0 fill; `$F02D` plane-1 fill; `$F030` pseudorandom service; and `$F033` packed-BCD formatter.
+  rectangle fill; `$F02D` plane-1 fill; `$F030` pseudorandom service; and `$F033` packed-BCD formatter.
   `$F027` remains caller-dependent.
 - Used for: the replacement-ABI contracts, the 1,000-frame sweep default, and the conclusion that
   replacement firmware needs resident service and interrupt code, not just an entry-state jump.

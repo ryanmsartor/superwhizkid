@@ -43,6 +43,24 @@ static uint32_t audioHash(const int16_t* audio, size_t frames) {
 	return hash;
 }
 
+static const char* experimentalBiosTrap(uint16_t pc) {
+	switch (pc) {
+	case 0xF036: return "unsupported BIOS service or link NMI";
+	case 0xF039: return "cartridge protection failed";
+	case 0xF03C: return "cartridge identity failed";
+	case 0xF03F: return "cartridge checksum failed";
+	default: return NULL;
+	}
+}
+
+static bool reportExperimentalBiosTrap(bool enabled, uint16_t pc, uint16_t previous) {
+	const char* reason = enabled ? experimentalBiosTrap(pc) : NULL;
+	if (!reason) return false;
+	fprintf(stderr, "experimental firmware: %s (PC=$%04X, previous=$%04X)\n",
+		reason, pc, previous);
+	return true;
+}
+
 static uint8_t* readFile(const char* path, size_t* size) {
 	FILE* file = fopen(path, "rb");
 	if (!file) return NULL;
@@ -329,6 +347,12 @@ int main(int argc, char** argv) {
 		fprintf(stderr, "usage: %s gamate_bios.bin cartridge.bin [frames-after-entry]\n", argv[0]);
 		return 2;
 	}
+	const char* experimental = getenv("GAMATEBOOT_EXPERIMENTAL_BIOS");
+	if (experimental && *experimental && strcmp(experimental, "1")) {
+		fprintf(stderr, "GAMATEBOOT_EXPERIMENTAL_BIOS must be 1 or empty/unset\n");
+		return 2;
+	}
+	bool monitorExperimental = experimental && *experimental;
 	unsigned framesWanted = argc == 4 ? (unsigned) strtoul(argv[3], NULL, 0) : 1000;
 	size_t biosSize, romSize;
 	uint8_t* bios = readFile(argv[1], &biosSize);
@@ -361,6 +385,10 @@ int main(int argc, char** argv) {
 		uint16_t pc = g.cpu.pc;
 		unsigned cycles = gamateCpuStep(&g);
 		gamateRunClocks(&g, cycles * 2);
+		if (reportExperimentalBiosTrap(monitorExperimental, g.cpu.pc, pc)) {
+			gamateFree(&g);
+			return 1;
+		}
 		if (!reportedSequence && g.protectionSequence == 15) {
 			reportedSequence = true;
 			printf("protection key accepted after %llu instructions at PC=$%04X\n",
@@ -445,6 +473,10 @@ int main(int argc, char** argv) {
 			uint16_t pc = g.cpu.pc;
 			unsigned cycles = gamateCpuStep(&g);
 			gamateRunClocks(&g, cycles * 2);
+			if (reportExperimentalBiosTrap(monitorExperimental, g.cpu.pc, pc)) {
+				gamateFree(&g);
+				return 1;
+			}
 			if (g.cpu.pc == pc && pc == previousPc) {
 				if (++samePc > longestSamePc) longestSamePc = samePc;
 			} else {
