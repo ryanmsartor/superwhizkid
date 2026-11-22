@@ -1,7 +1,7 @@
 /* Copyright (c) 2026 superwhizkid contributors
  *
  * SPDX-License-Identifier: GPL-2.0-or-later */
-/* Diagnostic-only synthetic and corpus replay of the $F018 graphics service. */
+/* Diagnostic-only synthetic and corpus replay of the $F018 and $F01E tile streams. */
 #include "gamate/gamate.h"
 #include "gamatebiosinput.h"
 
@@ -14,6 +14,12 @@
 #include <string.h>
 
 enum { MAX_EVENTS = 300000 };
+
+#ifdef GAMATE_BIOS_F01E
+enum { ENTRY = 0xF01E, LITERAL = 1 };
+#else
+enum { ENTRY = 0xF018, LITERAL = 0 };
+#endif
 
 struct Event {
 	uint8_t reg, value;
@@ -110,7 +116,7 @@ static bool seekEntry(struct Gamate* g) {
 		while (!g->frameDone) {
 			unsigned cycles = gamateCpuStep(g);
 			gamateRunClocks(g, cycles * 2);
-			if (g->cpu.pc == 0xF018) return true;
+			if (g->cpu.pc == ENTRY) return true;
 		}
 	}
 	return false;
@@ -204,18 +210,20 @@ static bool model(const struct Gamate* g, struct Model* m) {
 			modelWrite(m, 0x18, column);
 			modelWrite(m, 0x19, row);
 			for (;;) {
-				uint8_t tile, count;
+				uint8_t tile, count = 1;
 				if (index >= 0xFFFF ||
 						!sourceByte(g, (uint16_t) (pointer + index), &tile)) return false;
 				modelRead(m, (uint16_t) (pointer + (index & ~255u)), index & 255);
 				if ((pointer & 255) + (index & 255) > 255) m->clocks += 2;
 				index++;
 				if (tile == 0xFF) break;
-				if (!sourceByte(g, (uint16_t) (pointer + index), &count)) return false;
-				modelRead(m, (uint16_t) (pointer + (index & ~255u)), index & 255);
-				if ((pointer & 255) + (index & 255) > 255) m->clocks += 2;
-				index++;
-				m->clocks += 236;
+				if (!LITERAL) {
+					if (!sourceByte(g, (uint16_t) (pointer + index), &count)) return false;
+					modelRead(m, (uint16_t) (pointer + (index & ~255u)), index & 255);
+					if ((pointer & 255) + (index & 255) > 255) m->clocks += 2;
+					index++;
+				}
+				m->clocks += LITERAL ? 196 : 236;
 				m->clocks += 32 * (tile >> 5);
 				if (tile >= 32) overflow = false;
 				uint8_t low = (uint8_t) base;
@@ -334,7 +342,7 @@ static int corpus(struct Gamate* g, struct Gamate* copy, struct Capture* capture
 		while (!g->frameDone) {
 			unsigned cycles = gamateCpuStep(g);
 			gamateRunClocks(g, cycles * 2);
-			if (g->cpu.pc != 0xF018) continue;
+			if (g->cpu.pc != ENTRY) continue;
 			calls++;
 			decimal += (g->cpu.p & 8) != 0;
 			*copy = *g;
@@ -371,7 +379,7 @@ static bool syntheticAddress(unsigned address) {
 }
 
 /* Input: pointer, plane-0 base, plane-1 base, LCD byte, P, A, X, Y, followed by stream bytes.
- * Stream and tile bytes are synthetic; cartridge bytes are changed only in the private ROM copy. */
+ * The stream and writable tile sources are synthetic; BIOS tile sources remain read-only. */
 static int replay(struct Gamate* g, const struct Gamate* base, struct Capture* capture,
 		struct Model* expected, FILE* input, bool preserveInterrupt) {
 	char line[8192];
@@ -392,7 +400,9 @@ static int replay(struct Gamate* g, const struct Gamate* base, struct Capture* c
 		int consumed = 0;
 		if (sscanf(line, "%x %x %x %x %x %x %x %x %n",
 				&pointer, &b0, &b1, &lcd, &p, &a, &x, &y, &consumed) != 8 ||
-				!syntheticAddress(pointer) || !syntheticAddress(b0) || !syntheticAddress(b1) ||
+				!syntheticAddress(pointer) ||
+				!(syntheticAddress(b0) || (b0 >= 0xE000 && b0 <= 0xFFFF)) ||
+				!(syntheticAddress(b1) || (b1 >= 0xE000 && b1 <= 0xFFFF)) ||
 				lcd > 0xFF || p > 0xFF || a > 0xFF || x > 0xFF || y > 0xFF) {
 			fprintf(stderr, "invalid synthetic case %u\n", cases + 1);
 			free(savedRom);
@@ -462,6 +472,38 @@ static int replay(struct Gamate* g, const struct Gamate* base, struct Capture* c
 static FILE* boundaryCases(void) {
 	FILE* input = tmpfile();
 	if (!input) return NULL;
+	if (LITERAL) {
+		for (unsigned i = 0; i < 255; i++)
+			fprintf(input, "6200 6800 70FF 00 60 71 37 A5 00 %02X FF FE\n", i);
+		for (unsigned i = 0; i < 256; i++)
+			fprintf(input, "62FE 68FF 70F9 %02X %02X 71 37 A5 %02X 00 %02X FF FE\n",
+				i, i, i == 254 ? 255 : i, i == 255 ? 254 : i);
+		for (unsigned i = 0; i < 256; i++)
+			fprintf(input, "6200 %04X %04X %02X 20 71 37 A5 00 11 FF FE\n",
+				0x6800 + i, 0x70FF - i, i);
+		for (unsigned i = 0; i < 16; i++) {
+			fprintf(input, "0200 0300 0380 00 20 71 37 A5 00 %02X FF FE\n", i);
+			fprintf(input, "02FC 0300 0380 FF 28 71 37 A5 00 %02X FF FE\n", i);
+		}
+		fputs("0020 0040 0080 00 20 71 37 A5 00 01 02 FF FE\n", input);
+		fputs("00FA 0040 0080 FF 28 71 37 A5 00 02 01 FF FE\n", input);
+		fputs("6200 E000 FFE0 00 20 71 37 A5 00 01 FF FE\n", input);
+		fputs("6200 FEF7 EFF9 FF 28 71 37 A5 00 1F FF FE\n", input);
+		static const unsigned lengths[] = { 127, 128, 129, 255, 256, 257, 300 };
+		static const unsigned lows[] = { 0, 1, 127, 254, 255 };
+		for (size_t i = 0; i < sizeof(lengths) / sizeof(lengths[0]); i++) {
+			for (size_t k = 0; k < sizeof(lows) / sizeof(lows[0]); k++) {
+				fprintf(input, "%04X 6800 7000 00 20 71 37 A5 ", 0x6200 + lows[k]);
+				for (unsigned j = 0; j < lengths[i]; j++) fprintf(input, "%02X FF ", j % 254);
+				fputs("FE\n", input);
+			}
+		}
+		if (ferror(input) || fseek(input, 0, SEEK_SET)) {
+			fclose(input);
+			return NULL;
+		}
+		return input;
+	}
 	for (unsigned i = 0; i < 255; i++)
 		fprintf(input, "6200 6800 70FF 00 60 71 37 A5 00 %02X 01 FF FE\n", i);
 	for (unsigned i = 0; i < 256; i++)
@@ -513,8 +555,12 @@ static FILE* interruptCases(void) {
 			"FE", "00 FF FE", "00 00 8A FF FE", "00 01 01 FF FE",
 			"00 01 01 00 80 20 01 FF FE"
 		};
+		static const char* literalStreams[] = {
+			"FE", "00 FF FE", "00 00 FF FE", "00 01 FF FE", "00 01 00 20 FF FE"
+		};
 		for (size_t i = 0; i < sizeof(streams) / sizeof(streams[0]); i++)
-			fprintf(input, "6200 6800 7080 00 %02X 71 37 A5 %s\n", p, streams[i]);
+			fprintf(input, "6200 6800 7080 00 %02X 71 37 A5 %s\n", p,
+				LITERAL ? literalStreams[i] : streams[i]);
 	}
 	if (ferror(input) || fseek(input, 0, SEEK_SET)) {
 		fclose(input);
@@ -526,6 +572,23 @@ static FILE* interruptCases(void) {
 static FILE* flagCases(void) {
 	FILE* input = tmpfile();
 	if (!input) return NULL;
+	if (LITERAL) {
+		for (unsigned decimal = 0; decimal < 2; decimal++) {
+			for (unsigned overflow = 0; overflow < 2; overflow++) {
+				for (unsigned count = 0; count < 256; count++) {
+					fprintf(input, "6200 6800 7000 00 %02X 71 37 A5 00 ",
+						0x20 | (decimal ? 8 : 0) | (overflow ? 0x40 : 0));
+					for (unsigned i = 0; i < count; i++) fputs("00 ", input);
+					fputs("FF FE\n", input);
+				}
+			}
+		}
+		if (ferror(input) || fseek(input, 0, SEEK_SET)) {
+			fclose(input);
+			return NULL;
+		}
+		return input;
+	}
 	for (unsigned decimal = 0; decimal < 2; decimal++) {
 		for (unsigned first = 0; first < 256; first++) {
 			for (unsigned second = 0; second < 256; second++) {
@@ -541,17 +604,76 @@ static FILE* flagCases(void) {
 	return input;
 }
 
+static int compareBios(struct Gamate* first, struct Capture* capture, struct Model* expected,
+		const char* biosPath) {
+	size_t biosSize;
+	uint8_t* bios = readFile(biosPath, &biosSize);
+	struct Gamate* second = malloc(sizeof(*second));
+	if (!bios || !second) {
+		fprintf(stderr, "could not read comparison BIOS or allocate machine\n");
+		free(bios);
+		free(second);
+		return 2;
+	}
+	gamateInit(second);
+	if (!gamateLoad(second, first->rom, first->romSize, bios, biosSize) ||
+			!boot(second) || !seekEntry(second)) {
+		fprintf(stderr, "comparison BIOS did not reach service entry\n");
+		free(bios);
+		gamateFree(second);
+		free(second);
+		return 1;
+	}
+	free(bios);
+	uint8_t beforeFirst[sizeof(first->ram)], beforeSecond[sizeof(second->ram)];
+	memcpy(beforeFirst, first->ram, sizeof(beforeFirst));
+	memcpy(beforeSecond, second->ram, sizeof(beforeSecond));
+	first->cpu.p |= 4;
+	first->cpu.irqMask = true;
+	second->cpu.p |= 4;
+	second->cpu.irqMask = true;
+	struct Result a = check(first, capture, expected);
+	struct Result b = check(second, capture, expected);
+	unsigned initial[2] = { 0 }, final[2] = { 0 }, added[2] = { 0 }, removed[2] = { 0 };
+	unsigned changedInitial[2] = { 0 };
+	for (size_t i = 0; i < sizeof(beforeFirst); i++) {
+		unsigned stack = i >= 0x100 && i < 0x200;
+		bool before = beforeFirst[i] != beforeSecond[i];
+		bool after = first->ram[i] != second->ram[i];
+		initial[stack] += before;
+		final[stack] += after;
+		added[stack] += !before && after;
+		removed[stack] += before && !after;
+		changedInitial[stack] += before &&
+			(beforeFirst[i] != first->ram[i] || beforeSecond[i] != second->ram[i]);
+	}
+	printf("initial_nonstack=%u initial_stack=%u final_nonstack=%u final_stack=%u "
+		"added_nonstack=%u added_stack=%u removed_nonstack=%u removed_stack=%u "
+		"changed_initial_nonstack=%u changed_initial_stack=%u\n",
+		initial[0], initial[1], final[0], final[1], added[0], added[1], removed[0], removed[1],
+		changedInitial[0], changedInitial[1]);
+	gamateFree(second);
+	free(second);
+	bool failed = !a.supported || !a.returned || !a.ports || !a.rom || !a.registers || !a.ram ||
+		!a.peripherals || a.clockDelta || !b.supported || !b.returned || !b.ports || !b.rom ||
+		!b.registers || !b.ram || !b.peripherals || b.clockDelta;
+	if (failed) fprintf(stderr, "a comparison call did not match the model\n");
+	return failed;
+}
+
 int main(int argc, char** argv) {
 	if (argc < 4 || (strcmp(argv[3], "stdin") && strcmp(argv[3], "selftest") &&
 			strcmp(argv[3], "selftest-open") && strcmp(argv[3], "selftest-flags") &&
-			strcmp(argv[3], "corpus")) ||
-			(argc != 4 && (argc != 5 || strcmp(argv[3], "corpus")))) {
+			strcmp(argv[3], "corpus") && strcmp(argv[3], "pair")) ||
+			(argc != 4 && (argc != 5 || (strcmp(argv[3], "corpus") &&
+			strcmp(argv[3], "pair")))) || (argc == 4 && !strcmp(argv[3], "pair"))) {
 		fprintf(stderr, "usage: %s bios cartridge "
-			"stdin|selftest|selftest-open|selftest-flags|corpus [frames]\n", argv[0]);
+			"stdin|selftest|selftest-open|selftest-flags|corpus [frames]|pair other_bios\n",
+			argv[0]);
 		return 2;
 	}
 	unsigned frames = 1000;
-	if (argc == 5) {
+	if (argc == 5 && !strcmp(argv[3], "corpus")) {
 		char* end;
 		errno = 0;
 		unsigned long parsed = strtoul(argv[4], &end, 0);
@@ -584,20 +706,24 @@ int main(int argc, char** argv) {
 		result = corpus(g, base, capture, expected, frames);
 	} else if (seekEntry(g)) {
 		*base = *g;
-		bool open = !strcmp(argv[3], "selftest-open");
-		FILE* input = stdin;
-		if (open) input = interruptCases();
-		else if (!strcmp(argv[3], "selftest")) input = boundaryCases();
-		else if (!strcmp(argv[3], "selftest-flags")) input = flagCases();
-		if (!input) {
-			fprintf(stderr, "could not create synthetic test cases\n");
-			result = 2;
+		if (!strcmp(argv[3], "pair")) {
+			result = compareBios(g, capture, expected, argv[4]);
 		} else {
-			result = replay(g, base, capture, expected, input, open);
-			if (input != stdin) fclose(input);
+			bool open = !strcmp(argv[3], "selftest-open");
+			FILE* input = stdin;
+			if (open) input = interruptCases();
+			else if (!strcmp(argv[3], "selftest")) input = boundaryCases();
+			else if (!strcmp(argv[3], "selftest-flags")) input = flagCases();
+			if (!input) {
+				fprintf(stderr, "could not create synthetic test cases\n");
+				result = 2;
+			} else {
+				result = replay(g, base, capture, expected, input, open);
+				if (input != stdin) fclose(input);
+			}
 		}
 	} else {
-		fprintf(stderr, "could not reach an authentic $F018 entry\n");
+		fprintf(stderr, "could not reach an authentic $%04X entry\n", ENTRY);
 		result = 1;
 	}
 	gamateFree(g);

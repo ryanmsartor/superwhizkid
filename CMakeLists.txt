@@ -50,8 +50,12 @@ target_link_libraries(gamatebiosf012 superwhizkid_diagnostics)
 add_executable(gamatebiosrowstream tests/gamatebiosrowstream.c)
 target_link_libraries(gamatebiosrowstream superwhizkid_diagnostics)
 
-add_executable(gamatebiosf018 tests/gamatebiosf018.c)
+add_executable(gamatebiosf018 tests/gamatebiostilestream.c)
 target_link_libraries(gamatebiosf018 superwhizkid_diagnostics)
+
+add_executable(gamatebiosf01e tests/gamatebiostilestream.c)
+target_compile_definitions(gamatebiosf01e PRIVATE GAMATE_BIOS_F01E=1)
+target_link_libraries(gamatebiosf01e superwhizkid_diagnostics)
 
 add_executable(gamatebiosf030 tests/gamatebiosf030.c)
 target_link_libraries(gamatebiosf030 superwhizkid_diagnostics)

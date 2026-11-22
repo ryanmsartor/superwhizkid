@@ -941,6 +941,8 @@ service input.
 
 ### Caller-supplied two-plane graphics service: `$F01E`
 
+The historical observations in this section are extended by the executable contract below.
+
 The 1,000-frame slot inventory records 110 `$F01E` entries per BIOS across 19 titles. The paired
 balanced-call corpus contains 216 calls, 108 per BIOS across 18 titles. All reported fields match
 between revisions. A returns `$FE`, X returns `$FF`, and S is preserved in every completed call;
@@ -961,8 +963,8 @@ The access maps in Time Warrior, Volcano Panic, and Robin Hood read `$000-$001`,
 `$015`; the first pair is also rewritten, while `$006-$009` and `$015` are preserved. In Time Warrior,
 one-bit XORs to `$000-$001` change the ROM-read coverage and operation. XORing bit 0 of `$000`
 specifically produces a 144-clock return with no VRAM writes, while changing `$001` selects a
-different read/output profile. This is consistent with `$000-$001` supplying a ROM-side control or
-descriptor address, but the format is not resolved.
+different read/output profile. These tests were consistent with `$000-$001` supplying a ROM-side
+control or descriptor address, but did not establish its format.
 
 In Time Warrior, `$006-$007` and `$008-$009` act as separate 16-bit source bases for the two VRAM
 planes. One-bit XORs to either byte of the first pair changed the streamed output hash for plane 0
@@ -972,11 +974,13 @@ streamed directly into per-plane hashes and counts; no graphics payload was reta
 
 `$015` is an active LCD-control input in the tested contexts: XORing its low bit changes the final
 LCD flags from `$03` to `$23` in both Famous 7 and Time Warrior, without changing their VRAM output
-hashes or write counts. The bit's hardware meaning is not established. The exact control-stream
-grammar, source units and record layout, return-Y rule, and status-flag contract remain open.
+hashes or write counts. The bit's physical-hardware meaning remains unmeasured. At this stage the
+exact control-stream grammar, source units and record layout, return-Y rule, and status-flag
+contract were not yet established.
 Controlled whole-RAM hashes differed between BIOS revisions in the four probed titles despite
-matching access maps and measured operation fields; the cause is unresolved. These are emulator
-observations, not physical-hardware measurements.
+matching access maps and measured operation fields. The paired-snapshot follow-up below localizes
+those differences to pre-existing, unchanged stack bytes. These are emulator observations, not
+physical-hardware measurements.
 
 #### Cross-corpus source-byte perturbations
 
@@ -998,8 +1002,8 @@ and captured ROM-address sequence summaries agreed between BIOS revisions in all
 Whole-RAM hashes and changed-byte summaries were excluded from those comparisons. Two of the 48
 sequence comparisons per byte involved a trace over the diagnostic capture limit, so full sequence
 equality is not claimed for those comparisons. The results support `$006-$007` as plane-0 source
-inputs and `$008-$009` as plane-1 source inputs across this caller set, but the exact address
-transform and stream grammar remain unresolved. VRAM bytes were hashed as they streamed from the
+inputs and `$008-$009` as plane-1 source inputs across this caller set, but did not establish the
+exact address transform or stream grammar. VRAM bytes were hashed as they streamed from the
 diagnostic and were not retained. These are emulator observations, not hardware measurements.
 
 #### Cross-corpus `$000-$001` perturbations
@@ -1021,8 +1025,104 @@ title pairs. Perturbed `$000` comparisons agreed in all 24 pairs; `$001` compari
 Whole-RAM hashes and changed-byte summaries were excluded. Two of the 48 `$000` sequence
 comparisons and 14 of the 48 `$001` comparisons involved a trace over the diagnostic capture limit;
 full address-sequence equality is not claimed for those comparisons. Both bytes are behaviorally
-influential and rewritten, but these low-bit tests do not establish whether they encode a pointer,
-descriptor, or mutable parser state. Their roles and the stream grammar remain unresolved.
+influential and rewritten, but these low-bit tests did not establish whether they encoded a pointer,
+descriptor, or mutable parser state.
+
+#### `$F01E` executable contract
+
+For terminating streams whose reads use ordinary memory and do not alias mutable scratch or stack,
+the diagnostic-only `gamatebiosf01e` model specifies the observed service as follows. Its grammar
+is related to `$F018`, but each selector here represents exactly one column and has no count byte.
+
+Inputs and stream:
+
+- `$000-$001` is the little-endian stream pointer; `$006-$007` and `$008-$009` are the first- and
+  second-pass tile bases. `$015` is the cached LCD control byte. Entry A, X, Y, and C do not affect
+  graphics output.
+- A row begins with a row selector followed by zero or more tile selectors and `$FF`. The next byte
+  begins another row; `$FE` in row-selector position terminates the stream. `$FF` is a valid row
+  selector, and `$FE` is a valid tile selector.
+- A zero tile selector advances the column by one without writing a tile. Any other selector `t`
+  emits eight bytes read from `base + 8*t` through `base + 8*t + 7`, with 16-bit wrapping.
+  The stream and selected graphics are read again during the second pass.
+- Cartridge reads follow stream and tile order, including indexed page-crossing dummy reads.
+  An additional read at the pulled return address is the CPU's RTS dummy read, not stream data.
+
+LCD port sequence:
+
+1. Write `$015 | $40` to LCD register 1, forcing increment-by-row mode.
+2. Process the entire stream using the first tile base, then restart it using the second. At each
+   row, start the eight-bit column at `$00` for the first pass or `$80` for the second.
+3. For each nonzero tile selector, write register 4 = column, register 5 = `(row << 3) & $FF`,
+   then the eight source bytes to register 7. Increment the column modulo 256 after each tile.
+   A zero selector advances the column without issuing LCD writes.
+
+Register-4 bit 7 normally selects the plane, but the service does not clip columns: exceeding
+`$7F` can change the selected plane. With D set, the zero-selector column addition uses NMOS
+decimal arithmetic; ordinary output-column increments are binary.
+
+Returns and side effects:
+
+- A=`$FE`; Y is the low byte of the terminator's stream index; S is restored. X=`$FF` if any
+  nonzero tile was emitted, otherwise entry X is retained.
+- `$000` is preserved, and `$001` becomes the entry high byte plus `terminator_index >> 8`, modulo
+  256. Both bytes are written even for immediate termination.
+- If any row exists, `$018` and `$019` contain the final second-pass column and row selector.
+- If any tile selector exists, `$002-$003` contains the second tile base with its high byte
+  incremented by `last_selector >> 5`, `$01A` is `(last_selector << 3) & $FF`, and `$01B` is
+  one for a zero selector or zero for a nonzero selector. Unwritten bytes retain their entry values.
+- No other non-stack RAM writes were observed. The maximum measured masked stack depth was six
+  bytes below entry S. No AY or bank-register writes or UART clocks were observed; UART transmit
+  state and scroll registers were preserved.
+
+Status, using the emulator's stored status-byte representation:
+
+`P_out = (P_in & $1C) | $23 | V`
+
+I and D are preserved, N is clear, and Z and C are set. Bit 4 is the emulator's stored,
+non-physical B bit. V begins with entry V and updates in stream order over both passes:
+
+- A zero selector sets V to the NMOS signed-overflow result of adding one to the current column
+  with carry clear. D selects decimal addition and its NMOS overflow behavior.
+- A selector of `$20` or greater clears V. A nonzero selector below `$20` and a row without
+  selectors leave V unchanged.
+
+Timing in master clocks without interrupts:
+
+```text
+144 + 260*rows + 392*selectors + 64*sum(selector >> 5)
+    + 660*opaque_columns + 4*stream_crossings + 16*stream_wraps
+    + 2*tile_crossing_reads
+```
+
+Rows, selectors and the selector sum count the stream once, not once per pass. `opaque_columns`
+is the number of nonzero selectors. `stream_wraps = terminator_index >> 8`. `stream_crossings`
+counts stream indexes `i` through the terminator for which
+`(pointer & $FF) + (i & $FF) > $FF`. `tile_crossing_reads` counts individual tile-byte reads
+across both passes for which `(base & $FF) + ((selector << 3) & $FF) + j > $FF`, with `j` from
+0 through 7. Neither D nor `$015` changes these clock terms.
+
+#### `$F01E` validation and limits
+
+- The four standard 1,000-frame campaigns covered all 62 cartridges under both BIOSes. The 808
+  calls, 404 per BIOS in 25 titles, all matched the masked model for ordered cartridge addresses,
+  LCD port values, return registers and status, non-stack RAM writes, selected peripheral state,
+  and elapsed clocks. None entered with D set. The four earlier no-input title/BIOS jobs were
+  included without rerunning them.
+- All 808 original-interrupt-state replays matched port and return-state checks; 736 spanned an
+  IRQ or NMI. Elapsed time was nonnegative relative to the masked model, and calls without an
+  interrupt had identical timing.
+- Both BIOSes passed 838 synthetic boundary cases, including zero-page, ordinary RAM, and BIOS
+  tile sources; 1,280 entry-status cases; 1,024 transparent column/decimal/overflow cases; and
+  1,200 seeded varied streams in Time Warrior.
+- Paired first-call snapshots in Famous 7, Time Warrior, Volcano Panic, and Robin Hood differed
+  only in one or two stack bytes before the call. Those bytes remained unchanged, and the calls
+  introduced no new RAM differences, explaining the earlier whole-RAM hash discrepancies in
+  these four contexts. No stack contents were published.
+- These are execution observations in the emulator, not physical measurements. The checker
+  excludes side-effectful I/O and mutable scratch or stack aliases as sources. Unterminated streams
+  and interrupt handlers that modify the source, scratch, or LCD ports are outside the tested
+  contract. No firmware or cartridge payload is retained or published.
 
 ### Plane-0 row-literal stream service: `$F021`
 

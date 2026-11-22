@@ -735,10 +735,10 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   fixed bitmap writer; `$F003`, `$F006`, and `$F009` IRQ waits; `$F00C` two-plane VRAM zero-writer
   with an LCD-control input; `$F00F` plane-0 rectangle clear; `$F012` selector-driven eight-row tile
   writer; `$F015` two-plane rectangle copy; `$F018` tile-row blitter; `$F01B` plane-0 row-run
-  stream service; `$F01E` partially bounded two-plane graphics service; `$F021` plane-0
+  stream service; `$F01E` two-plane tile-literal stream service; `$F021` plane-0
   row-literal stream service; `$F024` strided RAM initializer; `$F02A`
   plane-0 fill; `$F02D` plane-1 fill; `$F030` pseudorandom service; and `$F033` packed-BCD formatter.
-  `$F027` remains caller-dependent; `$F00C`'s bit-6 addressing mode, and `$F01E`'s stream format remain unresolved.
+  `$F027` remains caller-dependent, and `$F00C`'s bit-6 addressing mode remains unresolved.
 - Used for: the replacement-ABI contracts, the 1,000-frame sweep default, and the conclusion that
   replacement firmware needs resident service and interrupt code, not just an entry-state jump.
   The linked analysis owns per-service matrices, exact behavior, and probe-specific caveats.
@@ -1034,7 +1034,7 @@ open questions are addressed there for the tested memory domains.
 - Source and status: both authentic BIOS revisions and the local user-supplied cartridges, read in
   place and executed by this project's independently authored emulator. These are emulator
   observations, not physical measurements.
-- Method: `tests/gamatebiosf018.c`, linked only to the diagnostic library, replays entry snapshots
+- Method: `tests/gamatebiostilestream.c`, linked only to the diagnostic library, replays entry snapshots
   against an independently authored behavioral model. It compares ordered cartridge read addresses
   including dummy reads, LCD port writes, register/status results, non-stack RAM write coverage
   and values, selected peripheral effects and clocks.
@@ -1271,14 +1271,37 @@ unresolved stream format are corrected there.
 
 #### `$F01E` two-plane graphics service
 
+- Clean-room executable-model follow-up: both authentic BIOS revisions and the local
+  user-supplied cartridges were read in place and executed by this project's independently
+  authored emulator; this is not physical-hardware evidence. `tests/gamatebiostilestream.c`,
+  linked only to the diagnostic library, replays entry snapshots and compares ordered cartridge
+  addresses, LCD port writes, register/status results, non-stack RAM coverage and values, selected
+  peripheral state, and elapsed clocks. The model extends the earlier `$F018` tile-stream model,
+  using purpose-written single-selector streams and patterned writable tile sources. The
+  previously documented Visual6502 and Bruce Clark decimal references inform its decimal
+  arithmetic. Both BIOS revisions were checked against synthetic boundary and status cases,
+  transparent-column arithmetic cases, and seeded varied streams. No BIOS instructions,
+  cartridge code, or external emulator implementation were copied or reconstructed. Input files
+  remained read-only; synthetic ROM modifications use only a private in-memory copy, and reports
+  retain derived results rather than firmware, cartridge, or graphics payload.
+  The four standard 1,000-frame campaigns covered 62 cartridges and both BIOSes: all 808 calls
+  in 25 titles (404 per BIOS) matched the masked model, and 736 original-interrupt-state replays
+  spanned interrupts. Four already completed no-input jobs were included without rerunning them.
+  Each BIOS passed 838 boundary cases, 1,280 entry-status cases, 1,024 transparent-column cases,
+  and 1,200 varied streams in Time Warrior. Paired first-call snapshots in Famous 7, Time Warrior,
+  Volcano Panic, and Robin Hood localized the earlier whole-RAM differences to one or two
+  pre-existing, unchanged stack bytes; no new RAM differences appeared during the calls.
+  The resulting rules and limitations are recorded in
+  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+
 - `$F01E` follow-up: the paired balanced-call corpus contains 216 calls across 18 titles. First-call
   probes in Famous 7, Time Warrior, Volcano Panic, and Robin Hood were compared under both BIOSes
   with I set; register changes, RAM XOR perturbations, and address-only ROM coverage were used to
   bound the caller inputs. In Time Warrior, `$000-$001` select a ROM-side control/descriptor region,
   `$006-$007` and `$008-$009` feed separate plane outputs, and `$015` affects LCD flags. VRAM output
   was streamed to per-plane hashes without retaining payload. The stream grammar, return-Y rule,
-  status behavior, and BIOS-specific whole-RAM hash differences remain unresolved. Exact results
-  and limits are in
+  status behavior, and BIOS-specific whole-RAM hash differences were unresolved at that stage.
+  The follow-up above addresses them for the tested domains. Exact results and limits are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
 - `$F01E` cross-corpus source-byte matrix: the four existing 1,000-frame campaign reports supplied
   first authentic call contexts for 24 titles under both BIOS revisions. I-masked baselines and
