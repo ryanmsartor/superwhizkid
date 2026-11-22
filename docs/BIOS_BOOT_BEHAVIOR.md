@@ -152,31 +152,30 @@ Their addresses differ between revisions, but their cartridge-facing behavior is
 
 ```text
 on_periodic_irq:
-    preserve the interrupted cartridge context
     update BIOS-maintained timing counters
 
     if cartridge_callbacks_are_enabled:
         call cartridge IRQ callback at $6026
 
-    restore the interrupted context
     return from interrupt
 ```
 
 ```text
 on_link_receive_nmi:
-    preserve the interrupted cartridge context
     read the completed link byte into BIOS-managed RAM
 
     if cartridge_callbacks_are_enabled:
         call cartridge NMI callback at $6023
 
-    restore the interrupted context
     return from interrupt
 ```
 
 The cartridge callback returns to the BIOS wrapper as a subroutine; the wrapper performs the final
 interrupt return. Commercial cartridges may make `$6023` an immediate no-op return when they do not
-use link reception.
+use link reception. The wrappers do not always restore every interrupted register when a callback
+changes it. The previous assertion that they restore the entire context was incorrect; the
+controlled register results and their limits are in
+[`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md).
 
 ### Periodic IRQ counter
 
@@ -255,8 +254,6 @@ The current evidence does not establish:
 
 - The hardware meaning of `$5900`.
 - Complete semantics for every startup hardware-status branch.
-- A public or supported BIOS API beyond the observed entry and interrupt callbacks.
-- Whether cartridges call other BIOS helpers after `$6020`.
 - Whether nonzero callback-flag values encode anything beyond the wrapper's boolean test.
 - The purpose of opaque UMC-only regions replaced by fill in the BIT revision.
 - Exact physical bus timing within each firmware instruction.

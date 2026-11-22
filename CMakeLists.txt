@@ -48,6 +48,9 @@ target_link_libraries(gamatebiosprobe superwhizkid_diagnostics)
 add_executable(gamatebiosf030 tests/gamatebiosf030.c)
 target_link_libraries(gamatebiosf030 superwhizkid_diagnostics)
 
+add_executable(gamatebiosf033 tests/gamatebiosf033.c)
+target_link_libraries(gamatebiosf033 superwhizkid_diagnostics)
+
 add_library(superwhizkid_libretro SHARED libretro/gamate.c)
 target_include_directories(superwhizkid_libretro PRIVATE shared/libretro)
 target_link_libraries(superwhizkid_libretro superwhizkid)

@@ -109,6 +109,20 @@ A BIOS-free implementation must therefore provide:
 The corpus-wide use of the table favors a small resident clean-room firmware over setting PC directly
 to `$6020`. A direct jump without the table would fail immediately in all 62 titles observed here.
 
+## Interrupt callback register effects
+
+The earlier claim in the boot analysis that both BIOS wrappers restore the entire interrupted CPU
+context was incorrect. A purpose-written callback replaced A, X, and Y at a synthetic cartridge
+instruction boundary, then returned normally. Under both BIOS revisions, the IRQ path restored
+interrupted A and Y but retained the callback's X; the NMI path restored A but retained its X and Y.
+P, PC, and S were restored in these probes. When `$00C` disabled the callback, A, X, Y, P, PC, and S
+were preserved by both paths. The controlled matrix covered all 256 stack pointers, both callback
+enable states, and all N/V/D/I/Z/C combinations for NMI or those with I clear for IRQ, in all 32
+first-call cartridge/BIOS contexts (38,912 cases). These observations used a private in-memory
+cartridge copy, and NMI was injected directly rather than delivered by UART. Callbacks that modify
+the interrupted stack, generate nested interrupts, or depend on other machine state are not covered
+by this result.
+
 ## Next analysis stages
 
 The tracer establishes the service surface. Work should proceed in the following order so that each
@@ -332,32 +346,145 @@ authored image, or omit the drawing only after compatibility testing demonstrate
 depend on the pixels. The observed `$015` dependency and LCD/VRAM side effects remain part of the ABI
 even if the replacement artwork differs.
 
-### Third resolved contract: `$F033`
+### Packed-digit formatter: `$F033`
 
-`$F033` is observed only in Tornado in the current corpus. Controlled register, status, and output
-inspection under both BIOS revisions resolves it as a six-digit packed-BCD formatter when entered
-under the commercial calling convention with decimal mode clear.
+The unattended 1,000-frame sweep observed `$F033` only in Tornado, but the existing input-driven
+1,000-frame campaigns expose 16 cartridge images: Boom, Brick Blaster, Devil Castle, Enchanted
+Bricks, Famous 7, Fist of Thunder, Magic Jigsaw, Marauder, Mars Voyage, Money Maze, Monster Pitfall,
+Myth of Asamia, Nightmare of Santa Claus, Pipemania, Tornado, and Treasure Hunter. This corrects the
+earlier description of Tornado as the only observed caller.
 
-| Property | Controlled contract |
+The candidate uninterrupted formatter model below extends the valid packed-BCD interface to
+synthetic invalid nibbles and a special Y input. Let the six nibbles of A, X, Y, in high-to-low
+order, be `d[0]` through `d[5]`.
+
+1. If input Y is `$FF`, set the last two characters to spaces and consider only `d[0..3]`.
+   Otherwise consider all six nibbles.
+2. Set `first` to the index of the first nonzero considered nibble, except that the search stops
+   at index 4 for Y=`$FF` and at index 5 otherwise.
+3. Before `first`, write spaces. Starting at `first`, write `$30 + d[i]` for each considered
+   nibble; the two suffix spaces for Y=`$FF` remain spaces.
+
+| Property | Uninterrupted model |
 | --- | --- |
-| Input | A, X, and Y contain six packed-BCD digits in display order: A high/low, X high/low, then Y high/low. |
-| Output buffer | Writes `$06` at `$0A1`, followed by six character bytes at `$0A2-$0A7`. Valid BCD nibbles become ASCII digits. Leading zeroes become spaces, except that an all-zero value retains the final `0`. |
-| Return | A becomes `$06`; X and S are preserved; Y becomes the zero-based index of the first displayed digit, with `$05` returned for both a single final digit and the all-zero value. |
-| Status | Carry is set. N and Z describe returned A (`$06`). I and V are preserved; D remains clear. |
-| Timing | Depends on leading-space count: 222, 266, 310, 354, 398, or 422 master clocks for first displayed positions 0 through 5; all-zero input also takes 422. |
-| Inherited RAM | No non-stack RAM is read before write. The service writes exactly `$0A1-$0A7` outside its stack use. |
-| Hardware effects | None: VRAM/LCD state, scroll, AY selection/registers, mapper state, UART, IRQ, and NMI remain unchanged. |
+| Output | `$06` at `$0A1`, followed by the six characters at `$0A2-$0A7`. Invalid nibbles `$A-$F` yield `$3A-$3F`, except that Y=`$FF` produces two trailing spaces. |
+| Return | A=`$06`; X and S are preserved; Y=`first`. For Y=`$FF` and A=X=`$00`, `first` is 4 and all six characters are spaces. |
+| Status | N and Z clear. C clears only for Y=`$FF` and A=X=`$00`; otherwise C sets. B, I, D, and V are preserved, and bit 5 is set. |
+| Timing | For Y other than `$FF`, `222 + 44 * first` master clocks when `first < 5`, or 422 when `first = 5`. For Y=`$FF`, `190 + 44 * first` clocks. |
+| RAM | No non-stack RAM is read before being written; only `$0A1-$0A7` are written outside the stack. |
+| Stack | For a normal JSR returning with S, the tested calls write `S-2` and read-before-write `S-3`, `S-1`, and S, modulo 256 within the stack page. |
+| Hardware | No VRAM, LCD, AY, mapper, UART, scroll, or hardware-address-state changes; time-dependent hardware continues to advance. |
 
-For example, packed input A/X/Y = `$12/$34/$56` produces a six-character `123456` field, while
-`$00/$00/$01` produces five spaces followed by `1`. Tornado immediately supplies the buffer at
-`$0A1` to service `$F012`, consistent with `$06` being the field length consumed by the downstream
-display helper.
+For example, `$12/$34/$56` produces `123456`, `$00/$00/$01` produces five spaces and `1`, and
+`$00/$00/$FF` produces six spaces. The latter is not equivalent to formatting the invalid nibbles
+`$F/$F`. The previous blanket statement that decimal mode changes this service was not supported by
+the new controlled comparisons; D-set behavior is included in the model rather than excluded.
 
-The contract is limited to valid packed-BCD input with D clear. Values containing nibbles `$A-$F`
-produced non-decimal character or suppression behavior, and setting D changed the routine's internal
-arithmetic. Neither condition was observed in commercial calls, so replacement firmware should not
-promise those undocumented behaviors. The output examples are derived interface behavior; no BIOS
-instruction listing or firmware data table was retained.
+Across the four existing completed-call campaigns, 2,470 uninterrupted `$F033` calls matched the
+candidate register, status, and timing model; 42 interrupt-spanning calls were excluded. These
+campaign totals may overlap, and none of these calls used Y=`$FF`, invalid nibbles, or D set. The
+formatter output bytes themselves are not present in the completed-call reports.
+
+`gamatebiosf033 matrix` tested 526,848 synthetic calls in the first `$F033` context of each of the
+16 cartridge images under each BIOS revision: 16,859,136 matches. Per context, it tested all
+65,536 A/X pairs with Y=`$00`, `$99`, and `$FF`, plus 65,536 mixed 24-bit values, each with D
+clear and set. For five additional inputs it exercised every entry-status byte and every stack
+pointer, checking non-stack RAM access, stack wrapping, and the cartridge return dummy read.
+Uninterrupted output, registers, timing, and peripheral effects were checked in every call.
+Tornado used the no-input campaign; the other 15 used long Start pulses
+`90:0x40:60,400:0x40:60,750:0x40:60`. The inputs were synthetic and the cartridge and BIOS files
+remained read-only.
+
+The uninterrupted model also matched all 16,777,216 A/X/Y combinations under each BIOS revision
+with D clear and with D set: 67,108,864 calls in total. D-clear runs used the Tornado no-input
+context; D-set runs used the Brick Blaster long-Start context. Entry I was set in these exhaustive
+runs. They checked output, registers, status, timing, and peripheral effects, but do not replace
+the broader context, stack, status, or interrupt matrices.
+
+Build the diagnostic with `cmake --build build --target gamatebiosf033` and invoke
+`build/gamatebiosf033 BIOS_FILE CARTRIDGE_FILE matrix`. `full-binary` and `full-decimal` enumerate
+the 24-bit input domain with D clear and set, respectively. `interleave-irq`, `interleave-nmi`,
+`interleave-flags-irq`, `interleave-flags-nmi`, `reentrant-irq`, and `reentrant-nmi` test
+synthetic callbacks; `context-irq` and `context-nmi` test callback register preservation, and
+`register-irq`, `register-nmi`, `register-early-irq`, `register-early-nmi`, and
+`register-range-nmi` test register interference below. The `GAMATEBIOSCALLS_PRESS`
+environment variable selects the input schedule, and each mode starts at the first observed `$F033`
+call. These diagnostics require user-supplied local BIOS and cartridge files and do not alter the
+production core.
+
+#### Formatter interrupt-visible ordering
+
+The output buffer is not written atomically. Address watches on five synthetic inputs at the first
+call context of all 16 cartridge images under both BIOSes gave identical traces. The following
+event model describes the observed output-buffer operations; offsets are emulator instruction-start
+master clocks from service entry, excluding interrupt work, not physical bus-cycle measurements.
+
+| Offset | Observable event |
+| ---: | --- |
+| 20, 58 | Write the characters derived from the low and high nibbles of A to `$0A3`, then `$0A2`. |
+| 76, 110 | Write the characters derived from the low and high nibbles of X to `$0A5`, then `$0A4`. |
+| 138, 172 | For Y other than `$FF`, write its low and high characters to `$0A7`, then `$0A6`. |
+| 128, 134 | For Y=`$FF`, write spaces to `$0A6`, then `$0A7`. |
+| 182 or 150 | Begin examining `$0A2` for Y other than `$FF`, or for Y=`$FF` respectively. |
+
+Examine successive positions through `$0A6`, 44 clocks apart. If the current character equals
+`$30`, it is replaced by a space 20 clocks after its examination; otherwise stop. The final length
+write to `$0A1` occurs 22 clocks after the first nonzero-character examination, or two clocks
+after the hypothetical next examination if the first five characters were zero. Carry is set if
+the stopping character is at least `$30`, or if all five examined characters were zero. The
+candidate model treats an interrupt callback's single buffer-byte write as occurring at the
+interrupted outer instruction boundary.
+
+Synthetic single-write IRQ and NMI callbacks matched this model for seven inputs, six callback
+values (`$00`, `$20`, `$2F`, `$30`, `$31`, and `$FF`), all seven buffer addresses, and every
+outer instruction boundary in all 32 caller/BIOS contexts (1,257,984 interrupted calls), with entry
+P=`$20`. An equally sized matrix set D and V on entry; its NMI profile also set I. All 2,515,968
+cases matched.
+Callbacks were installed only in a private in-memory cartridge copy; direct NMI injection did not
+simulate UART link traffic. This does not establish arbitrary callback programs, nested
+asynchronous interrupts, physical bus timing, or callbacks that inspect or modify stacked state.
+
+Another matrix used a callback that saves X/Y, invokes `$F033` once with a synthetic input, restores
+X/Y, and returns without further interrupts. Applying the uninterrupted inner formatter result at the
+outer interruption boundary and then resuming this event model matched all 209,664 cases: each of the
+same seven outer and inner inputs, every outer instruction boundary, IRQ/NMI, and all 32 contexts,
+with entry P=`$20`. This is one level of service reentry, not arbitrary asynchronous nesting.
+
+Callbacks that change registers are outside that single-write model. In a synthetic call with
+A/X/Y=`$12/$78/$9A`, an NMI callback that sets X=`$34` and Y=`$56` at outer offset 182 redirects
+the formatter's next indexed RAM access. When RAM `$0F8` was deliberately initialized to `$30`,
+that location became `$20` and Y returned `$57`, even though `$0F8` is outside the normal output
+buffer. NMI at the adjacent tested boundaries, offsets 178 and 190, did not change `$0F8`. The
+corresponding IRQ controls did not redirect the access because the IRQ wrapper restored Y. All
+192 probes across those three offsets, both interrupt types, and all 32 caller/BIOS contexts
+matched. A replacement cannot assume the uninterrupted RAM write set applies when callbacks clobber
+registers. The example uses synthetic data and direct NMI injection, not a link-driven hardware
+observation. With `$0F8` left at its authentic caller-context value instead, the same NMI returned
+carry clear in 10 of the 32 contexts and set in the other 22; the underlying RAM bytes were not
+retained.
+
+With the same synthetic input and an NMI callback setting Y=`$5E`, a second controlled probe used
+S=`$F0`, set stack-page `$100` to `$30`, and set `$000` to `$31`. At offset 182, `$100` became `$20`
+and Y returned `$5F`; `$000` remained `$31`. Thus this redirected access can reach stack-page RAM,
+not merely wrap within zero page. The adjacent-boundary and IRQ controls did not change `$100`.
+All 384 tests of both target addresses, three boundaries, IRQ/NMI, and 32 caller/BIOS contexts
+matched. The test did not overwrite a live return address and does not establish the consequences
+of doing so.
+
+For the same outer input and NMI boundary, a synthetic callback set Y to each value `$06-$FF` and
+initialized RAM at `$0A2 + Y` to `$30` immediately before returning. Across all 32 caller/BIOS
+contexts, each of the 8,000 cases left that target as `$20` and returned Y=`(Y + 1) & $FF`.
+The targets span `$0A8-$1A1`; the `$FF` case wraps the returned Y to zero. The callback
+initialization matters: an earlier probe found an NMI wrapper could change a targeted location
+before the callback ran. These tests avoid live stack entries and do not establish the behavior
+of overwriting them.
+
+Earlier callback boundaries can also change the formatted digits. With the same input and callback
+X=`$34`, an IRQ or NMI at offset 0 yielded X-derived characters `34`; at offset 68 they were
+the mixed pair `38`; at offset 86 they remained `78`. An NMI additionally replaced the
+Y-derived characters with the callback's Y digits, whereas an IRQ restored the original Y digits.
+All 384 tests across both callback-Y values, three boundaries, both interrupt types, and all 32
+contexts matched. These are selected timing examples, not an exhaustive model of register clobber.
 
 ### Fourth resolved contract: `$F024`
 

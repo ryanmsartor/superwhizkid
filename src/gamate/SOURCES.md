@@ -788,6 +788,79 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   no external emulator code was consulted or copied. Results are emulator observations, not
   physical measurement.
 
+#### `$F033` formatter follow-up
+
+- Source and status: both local, user-supplied BIOS revisions and the local cartridge collection,
+  read in place. The existing 1,000-frame unattended and input-driven call reports expose 16
+  cartridge images calling `$F033`, not only the unattended caller. These are execution observations
+  in the project-authored emulator, not physical measurements.
+- Initial method and result: an independently authored diagnostic supplied synthetic A/X/Y and
+  status values after an authentic Tornado call. Both BIOSes produced two trailing spaces when
+  input Y was `$FF`; with A=X=`$00`, all six positions were spaces and returned carry was clear.
+  Synthetic invalid BCD nibbles otherwise produced character values `$30 + nibble` in the
+  examined cases. A 20,000-call mixed-input check under one BIOS agreed with this candidate model
+  for D clear and set, including timing and status. The existing four completed-call campaigns
+  contain 2,470 uninterrupted calls, all matching the derived register, status, and timing model;
+  42 interrupt-spanning calls were excluded. Campaigns overlap and contain no observed invalid
+  nibbles, Y=`$FF`, or D-set inputs. Output bytes are not retained in those reports.
+- Corpus matrix: `gamatebiosf033` exercised 526,848 synthetic inputs per first-call context across
+  16 images and both BIOSes, yielding 16,859,136 matches. Each context tested every A/X pair with
+  Y=`$00`, `$99`, and `$FF`; 65,536 mixed 24-bit values; both D states; and every status byte and
+  stack pointer on five representative inputs. Registers, output, timing, and unrelated hardware
+  effects were checked in every call; those representative cases also checked RAM and stack access
+  maps. Tornado used the no-input campaign and the other 15 the existing long-Start schedule.
+- Full-domain verification: all 16,777,216 A/X/Y inputs matched the uninterrupted model under each
+  BIOS and both D profiles, totaling 67,108,864 calls. D-clear runs used Tornado's no-input
+  context; D-set runs used Brick Blaster's long-Start context. Entry I was set. Output, registers,
+  status, timing, and peripheral effects were checked; the exhaustive run does not replace the
+  separate context, stack, status, and interrupt matrices.
+- Interrupt method and result: diagnostic address watches for five synthetic inputs at the first
+  caller context of all 16 images and both BIOSes yielded identical output-buffer access sequences
+  and emulator clock offsets. Independently written single-byte IRQ and NMI callbacks, installed
+  only in a private in-memory cartridge copy, matched the derived event model in 1,257,984 cases
+  across all contexts and both BIOSes: seven inputs, six chosen write values, each output-buffer
+  byte, every outer instruction boundary, and entry P=`$20`. Another 1,257,984 cases passed with D/V
+  set; that NMI profile also set I. A further 209,664 cases matched one uninterrupted reentrant
+  `$F033` call per callback, with the callback saving and restoring X/Y, using seven outer and inner
+  inputs, all outer boundaries, both interrupt types, every context, and entry P=`$20`. Direct NMI
+  injection did not test UART link delivery; arbitrary callback programs, nested interrupts, and
+  physical timing remain unverified. The private ROM/BIOS inputs were not modified or copied into
+  the repository; no external emulator source or BIOS code was consulted or copied.
+- Callback register observation: a purpose-written callback replaced A, X, and Y before returning
+  from an interrupt injected at a synthetic cartridge boundary. In all 32 caller/BIOS contexts,
+  enabled IRQ callbacks left the replacement X but not A or Y; enabled NMI callbacks left
+  replacement X and Y but not A. P, PC, and S were restored in both cases. Disabling callbacks
+  preserved all tested registers. The expanded 38,912-case matrix covered all 256 stack pointers,
+  both callback-enable states, and all N/V/D/I/Z/C flag combinations for NMI or I-clear combinations
+  for IRQ in all 32 contexts. This corrects the former claim that both wrappers always restore the
+  entire interrupted context. NMI was injected directly, not delivered by UART; arbitrary
+  callbacks, stack modification, and nested interrupts were not tested.
+- Register-interference result: with synthetic A/X/Y=`$12/$78/$9A`, a callback changing X/Y to
+  `$34/$56` and an NMI at emulator offset 182 caused `$F033` to access synthetic RAM `$0F8`,
+  transforming its test value `$30` to `$20`. Adjacent NMI boundaries and matched IRQ controls did
+  not change `$0F8`. All 192 probes across both interrupt types, three boundaries, and all 32
+  caller/BIOS contexts matched, showing that callback register clobber can invalidate the
+  uninterrupted output-buffer write set. These are emulator observations with direct NMI injection,
+  not physical measurements or a link-traffic test. Leaving the targeted RAM byte unchanged instead
+  yielded carry clear in 10 of 32 contexts and set in 22; the inherited byte values were not retained.
+- A follow-up used the same synthetic formatter input with NMI callback Y=`$5E`, S=`$F0`,
+  stack-page `$100=$30`, and zero-page `$000=$31`. At offset 182, `$100` became `$20` and Y returned
+  `$5F`, while `$000` was preserved; adjacent-boundary and IRQ controls did not change `$100`.
+  The expanded 384 tests of both target addresses, three boundaries, IRQ/NMI, and all 32
+  caller/BIOS contexts matched. The test did not overwrite a live return address, and it does not
+  establish physical or link-driven behavior.
+- A synthetic NMI callback at offset 182 set Y to each value `$06-$FF` and initialized
+  `$0A2 + Y` to `$30` before returning. All 8,000 tests across the 32 caller/BIOS contexts left
+  that target `$20` and returned `(Y + 1) & $FF`; targets span `$0A8-$1A1`. Callback-side
+  initialization was necessary to isolate the formatter from preceding wrapper effects, and live
+  stack entries were avoided. This is direct emulator NMI injection, not physical or UART testing.
+- Earlier IRQ/NMI callback register changes were tested at offsets 0, 68, and 86 using the same
+  synthetic input, with callback X=`$34` and Y=`$56` or `$5E`. The X-derived character pair was
+  respectively `34`, `38`, or `78`; NMI also replaced the Y-derived pair with the callback Y
+  digits, while IRQ retained the original pair. All 384 tests across both callback-Y values, both
+  interrupt types, three boundaries, and all 32 contexts matched. These are selected examples,
+  not an exhaustive model of register clobber or physical/link-driven timing.
+
 #### `$F003` IRQ-gated counter wait
 
 - Method and result: `gamatebiosprobe` set RAM `$00B` in its private machine copy and invoked the
