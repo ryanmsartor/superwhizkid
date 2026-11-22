@@ -796,6 +796,34 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   were not traced. This is local emulator evidence, not a physical timing measurement; no external
   emulator source was used or copied.
 
+#### `$F012` cross-corpus graphics lookup
+
+- Source and status: the local user-supplied collection of 39 titles with observed `$F012` calls and
+  both authentic BIOS revisions, read in place. These are execution observations from the
+  independently authored emulator, not physical-hardware measurements.
+- Method: `gamatebiosprobe` captured address-only cartridge-ROM read sequences and derived VRAM
+  output for the first authentic `$F012` occurrence in each title under both BIOSes (78 contexts).
+  One graphics-data byte per context was XOR-perturbed only in the probe's private in-memory ROM
+  copy; baseline and perturbed traces, timing, VRAM coverage, and output were compared. No payload
+  values or lookup table were written to reports or repository files.
+- Result: all 78 contexts parsed. The 794 tile runs yielded 6,352 source/output row observations;
+  89 distinct graphics input-byte values had one consistent output globally and within each title.
+  Repeated selectors used identical eight-byte address runs in observed repeats. The per-call
+  `base + 8 * selector` address formula fit 14 of 74 descriptor-bearing contexts, with single-tile
+  contexts unable to discriminate the formula. Four one-tile contexts from two titles exposed no
+  width/selector reads in the cartridge-ROM trace; each showed eight contiguous graphics reads and
+  the return dummy read. RAM `$000` and `$001` were each read twice in those contexts, but their
+  values and role were not established. All 78 byte perturbations changed only their associated
+  output byte or bytes as predicted by the observed mapping, without changing address trace, timing,
+  or VRAM coverage. Address traces, timing, VRAM output and coverage, registers, and LCD activity
+  matched between BIOS revisions in all 39 title pairs.
+- Limits and legal boundary: only one authentic first-call context per title and one graphics byte
+  per context were perturbed; 89 of 256 possible input-byte values were observed. The
+  selector-to-address transform, control-data source in the four one-tile contexts, and exact
+  timing remain unresolved. BIOS and cartridge files remained read-only; perturbations were confined
+  to private in-memory ROM copies. No BIOS/cartridge payload or code was copied or published, and no
+  external emulator source code was consulted or copied.
+
 #### `$F027` caller-dependent graphics service
 
 - `$F027` follow-up: IRQ-masked `occurrence=1` probes covered 14 additional titles under both BIOS

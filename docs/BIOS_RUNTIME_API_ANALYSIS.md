@@ -605,12 +605,18 @@ revisions. Of those, 36,518 do not span an IRQ or NMI. Every non-interrupted cal
 register and write-shape contract; interrupt-spanning calls are excluded because their summaries mix
 callback work into the service effects.
 
-Controlled authentic-call probes identify a compact descriptor stream in cartridge ROM. RAM
-`$000-$001` points to its first byte, the number of horizontal tiles. One tile selector follows for
-each column. Every selector produces eight row bytes at `(X >> 3, Y)` through
-`(X >> 3, Y + 7)`, after which the service advances one byte column. The starting X and Y registers
-therefore specify pixel coordinates, while entry A is ignored. The cached LCD-control byte at `$015`
-supplies the selected plane and other retained mode bits.
+Controlled authentic-call probes identify a compact descriptor stream in cartridge ROM for 37 of
+the 39 observed callers. In a controlled Mighty Boxer call, RAM `$000-$001` points to the first
+descriptor byte. Corpus traces show that, in descriptor-bearing contexts, the stream begins with the
+horizontal tile count, followed by one selector per column. Every selector produces eight row bytes
+at `(X >> 3, Y)` through `(X >> 3, Y + 7)`, after which the service advances one byte column. The
+starting X and Y registers therefore specify pixel coordinates, while entry A is ignored. The cached
+LCD-control byte at `$015` supplies the selected plane and other retained mode bits.
+
+The other two callers each have a one-tile first-call context under both BIOSes. Those four traces
+show eight contiguous graphics reads followed by the return dummy read, but no width or selector
+reads in the cartridge-ROM trace. RAM `$000` and `$001` are each read twice in these contexts; their
+values and role are unresolved.
 
 Every tile unconditionally overwrites eight complete destination bytes. A controlled selector whose
 output was all zero still issued eight VRAM writes: an initially zero destination showed no changed
@@ -618,8 +624,8 @@ bytes, while `$FF` and `$5A` fills were replaced. There is no transparent-row pa
 
 | Observable | Contract |
 | --- | --- |
-| Descriptor | One width byte followed by `width` tile selectors. |
-| Graphics lookup | Each selector reads one run of eight cartridge bytes; identical selectors read identical runs. Output row `r` is a fixed single-byte function of graphics byte `r`. The selector-to-address transform remains unresolved. |
+| Descriptor | In descriptor-bearing calls, one width byte followed by `width` tile selectors. The four one-tile traces described above expose no descriptor reads in cartridge ROM. |
+| Graphics lookup | In descriptor-bearing calls, each selector reads one run of eight cartridge bytes; identical selectors read identical runs in observed repeats. Across all observed first-call contexts, output row `r` is a consistent single-byte function of graphics byte `r` for the 89 distinct input-byte values observed. The selector-to-address transform remains unresolved. |
 | VRAM writes | `8 * width`. |
 | LCD writes | `11 * width`. |
 | Registers | A and Y return the tile width; X returns the final selector multiplied by eight; S is restored. |
@@ -627,13 +633,30 @@ bytes, while `$FF` and `$5A` fills were replaced. There is no transparent-row pa
 | Scratch | `$018-$01B` are service scratch. Stack bytes `$1F9-$1FB` are also written during the call. |
 | Other hardware | Scroll, AY, mapper, and UART state are preserved. |
 
-Width perturbation expands both the selector stream and destination coverage exactly one column at a
-time. Selector perturbation changes only the corresponding eight-byte graphics lookup and output.
-X perturbation moves the byte column at each eight-pixel boundary, Y perturbation moves the first row,
-and A perturbation has no effect. Both BIOS revisions produced identical ordered ROM coverage,
-timing, VRAM coverage, output, registers, and LCD activity in the controlled comparison.
+In a controlled descriptor-bearing call, width perturbation expanded both the selector stream and
+destination coverage exactly one column at a time. Selector perturbation changed only the
+corresponding eight-byte graphics lookup and output. X perturbation moved the byte column at each
+eight-pixel boundary, Y perturbation moved the first row, and A perturbation had no effect. Both
+BIOS revisions produced identical ordered ROM coverage, timing, VRAM coverage, output, registers,
+and LCD activity in that comparison.
 
 Observed authentic widths range from 1 through 18 tiles.
+
+Cross-corpus first-call study (39 caller titles, both BIOS revisions; 78 contexts): all contexts
+were parsed, including the four one-tile traces without ROM-visible descriptors. The 794 tile runs
+produced 6,352 source/output row observations; 89 distinct graphics input-byte values had no
+conflicting output globally or within a title. Repeated selectors selected identical address runs in
+every observed repeat. A per-call `base + 8 * selector` address formula fit only 14 of the 74
+descriptor-bearing contexts; single-tile contexts cannot discriminate this formula. It is not a
+corpus-wide rule. Address traces, timing, VRAM output and coverage, registers, and LCD activity
+matched between BIOS revisions in all 39 title pairs.
+
+One selected graphics byte was XOR-perturbed in a private in-memory ROM copy for each of the 78
+contexts. Each perturbation changed only its associated output byte or bytes, with the expected
+output for the resulting input value; ROM address trace, timing, and VRAM coverage stayed unchanged.
+This tests one byte per first-call context, not every source byte or every possible input value.
+BIOS and cartridge files remained read-only; XOR changes affected only private in-memory ROM copies.
+No payload values or lookup table were retained.
 
 Controlled mapping study (one authentic Mighty Boxer call, width 15, 6,714 cycles, both BIOS
 revisions): address-only tracing shows the width byte, then one selector read per tile, with each tile
@@ -650,10 +673,12 @@ the cycle count were descriptor bytes: the width byte produced a +100,036-cycle 
 bytes produced deltas between −30 and +16 cycles. Changing any of the 130 unique graphics or dummy-read bytes left the
 cycle count unchanged. The VRAM maps and cycle deltas were identical for both BIOS revisions.
 
-Open questions are the selector-to-address transform (a simple linear offset does not fit the observed
-selector/run pairs), the origin of the 16-entry mapping, and an exact cycle formula. Per-selector cycle
-cost has not been isolated. None of these is needed to validate the resolved drawing and calling
-convention above.
+Open questions are the control-data source in the four one-tile contexts, the selector-to-address
+transform, the origin of the 16-entry mapping, and an exact cycle formula. The simple
+`base + 8 * selector` relation is not universal, and per-selector cycle cost has not been isolated.
+The corpus study covers only 89 of 256 possible graphics input bytes and one authentic first-call
+context per observed title. These are emulator observations, not physical-hardware measurements.
+None of these open questions invalidates the resolved drawing and calling convention above.
 
 `tools/gamate-bios-f012-summary.py` derives width from LCD/VRAM write counts and validates the write
 shape, return registers, status invariants, stack balance, and unrelated hardware effects. It reports
