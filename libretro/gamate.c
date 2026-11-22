@@ -277,8 +277,9 @@ void retro_set_environment(retro_environment_t cb) {
 		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction", "Suppresses brief light flashes caused by games clearing and redrawing objects. The selected number is the maximum transient duration suppressed; genuine lightening changes are delayed by the same number of frames.",
 			{ { "off", "Off" }, { "1", "1 Frame" }, { "2", "2 Frames" },
 				{ "3", "3 Frames" }, { NULL, NULL } }, "off" },
-		{ "superwhizkid_bios", "BIOS Priority", "Selects the preferred BIOS at content load; the other is used if it is missing. Reload content to apply a change. Reset continues using the currently loaded BIOS.",
-			{ { "umc", "UMC (gamate_bios_umc.bin)" }, { "bit", "Bit (gamate_bios_bit.bin)" }, { NULL, NULL } }, "umc" },
+		{ "superwhizkid_bios", "BIOS Priority", "Selects the preferred BIOS at content load. UMC and Bit fall back to each other, then SWK; SWK falls back to UMC, then Bit. SWK is currently experimental and targets standalone Cube Up. Reload content to apply a change. Reset continues using the currently loaded BIOS.",
+			{ { "umc", "UMC (gamate_bios_umc.bin)" }, { "bit", "Bit (gamate_bios_bit.bin)" },
+				{ "swk", "SWK (gamate_bios_swk.bin)" }, { NULL, NULL } }, "umc" },
 		{ "superwhizkid_skip_intro", "Skip BIOS intro", "Runs the BIOS logo sequence instantly at power-on and reset, starting at the cartridge.",
 			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
 		{ NULL, NULL, NULL, { { NULL, NULL } }, NULL }
@@ -290,7 +291,7 @@ void retro_set_environment(retro_environment_t cb) {
 		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting; off|1|2|3|4|5" },
 		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction; off|1|2|3" },
-		{ "superwhizkid_bios", "BIOS Priority; umc|bit" },
+		{ "superwhizkid_bios", "BIOS Priority; umc|bit|swk" },
 		{ "superwhizkid_skip_intro", "Skip BIOS intro; off|on" },
 		{ NULL, NULL }
 	};
@@ -672,11 +673,16 @@ static bool readBios(uint8_t* out) {
 	const char* system = NULL;
 	if (!environCb(RETRO_ENVIRONMENT_GET_SYSTEM_DIRECTORY, &system) || !system) return false;
 	struct retro_variable var = { "superwhizkid_bios", NULL };
-	bool bitFirst = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value && !strcmp(var.value, "bit");
-	const char* names[] = { "gamate_bios_umc.bin", "gamate_bios_bit.bin" };
-	if (bitFirst) {
+	const char* preference = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ?
+		var.value : "umc";
+	const char* names[] = { "gamate_bios_umc.bin", "gamate_bios_bit.bin", "gamate_bios_swk.bin" };
+	if (!strcmp(preference, "bit")) {
 		names[0] = "gamate_bios_bit.bin";
 		names[1] = "gamate_bios_umc.bin";
+	} else if (!strcmp(preference, "swk")) {
+		names[0] = "gamate_bios_swk.bin";
+		names[1] = "gamate_bios_umc.bin";
+		names[2] = "gamate_bios_bit.bin";
 	}
 	char path[4096];
 	for (size_t i = 0; i < sizeof(names) / sizeof(*names); i++) {
@@ -686,7 +692,11 @@ static bool readBios(uint8_t* out) {
 		size_t got = fread(out, 1, GAMATE_BIOS_SIZE, file);
 		int extra = fgetc(file);
 		fclose(file);
-		if (got == GAMATE_BIOS_SIZE && extra == EOF) return true;
+		if (got == GAMATE_BIOS_SIZE && extra == EOF) {
+			if (!strcmp(names[i], "gamate_bios_swk.bin"))
+				message("superwhizkid: using SWK replacement BIOS (experimental)");
+			return true;
+		}
 	}
 	return false;
 }
@@ -695,7 +705,7 @@ bool retro_load_game(const struct retro_game_info* game) {
 	if (!game || !game->data || !game->size) return false;
 	uint8_t bios[GAMATE_BIOS_SIZE];
 	if (!readBios(bios)) {
-		message("superwhizkid: gamate_bios_umc.bin or gamate_bios_bit.bin is required");
+		message("superwhizkid: gamate_bios_umc.bin, gamate_bios_bit.bin or gamate_bios_swk.bin is required");
 		return false;
 	}
 	if (!gamateLoad(&gamate, game->data, game->size, bios, sizeof(bios))) {

@@ -82,7 +82,7 @@ static bool environment(unsigned command, void* data) {
 		unsigned mask = 0;
 		bool defaults = true, audioValues = false, paletteLabels = false;
 		bool yellowPaletteValues = false;
-		bool contrastValues = false, flickerValues = false;
+		bool contrastValues = false, flickerValues = false, biosValues = false;
 		for (; options && options->key; options++) {
 			mask |= optionMask(options->key);
 			if (!strcmp(options->key, "superwhizkid_audio_output")) {
@@ -116,6 +116,13 @@ static bool environment(unsigned command, void* data) {
 				flickerValues = options->values[3].value &&
 					!strcmp(options->values[3].value, "3") && !options->values[4].value;
 			}
+			if (!strcmp(options->key, "superwhizkid_bios")) {
+				biosValues = options->values[0].value &&
+					!strcmp(options->values[0].value, "umc") &&
+					options->values[1].value && !strcmp(options->values[1].value, "bit") &&
+					options->values[2].value && !strcmp(options->values[2].value, "swk") &&
+					!options->values[3].value;
+			}
 			const char* expected = !strcmp(options->key, "superwhizkid_palette") ? "original" :
 				!strcmp(options->key, "superwhizkid_contrast") ? "8" :
 				!strcmp(options->key, "superwhizkid_audio_output") ? "stereo" :
@@ -123,21 +130,25 @@ static bool environment(unsigned command, void* data) {
 			defaults &= options->default_value && !strcmp(options->default_value, expected);
 		}
 		modernOptions = mask == 0xFF && defaults && audioValues && paletteLabels &&
-			yellowPaletteValues && contrastValues && flickerValues;
+			yellowPaletteValues && contrastValues && flickerValues && biosValues;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_VARIABLES: {
 		const struct retro_variable* variables = data;
 		unsigned mask = 0;
-		bool yellowPaletteValues = false;
+		bool yellowPaletteValues = false, biosValues = false;
 		for (; variables && variables->key; variables++) {
 			mask |= optionMask(variables->key);
 			if (!strcmp(variables->key, "superwhizkid_palette")) {
 				yellowPaletteValues = variables->value &&
 					strstr(variables->value, "yellow_rgb") != NULL;
 			}
+			if (!strcmp(variables->key, "superwhizkid_bios")) {
+				biosValues = variables->value &&
+					!strcmp(variables->value, "BIOS Priority; umc|bit|swk");
+			}
 		}
-		legacyOptions = mask == 0xFF && yellowPaletteValues;
+		legacyOptions = mask == 0xFF && yellowPaletteValues && biosValues;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE:
@@ -362,6 +373,7 @@ int main(int argc, char** argv) {
 	reportVideoHash = getenv("GAMATECORETEST_VIDEO_HASH") != NULL;
 	writeTestFirmware("gamate_bios_umc.bin", 0x55);
 	writeTestFirmware("gamate_bios_bit.bin", 0xAA);
+	writeTestFirmware("gamate_bios_swk.bin", 0xCC);
 	void* core = dlopen(argv[1], RTLD_NOW);
 	assert(core);
 
@@ -876,6 +888,83 @@ int main(int argc, char** argv) {
 	p_retro_unload_game();
 	writeTestFirmware("gamate_bios_bit.bin", 0xAA);
 
+	biosOption = "swk";
+	unsigned messagesBeforeSwk = messageCount;
+	assert(p_retro_load_game(&game));
+	p_retro_run();
+	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+	assert(ram && ram[3] == 0xCC && messageCount == messagesBeforeSwk + 1);
+	assert(strstr(lastMessage, "SWK") && strstr(lastMessage, "experimental"));
+	biosOption = "bit";
+	optionUpdate = true;
+	ram[3] = 0;
+	p_retro_reset();
+	p_retro_run();
+	assert(ram[3] == 0xCC);
+	p_retro_unload_game();
+	assert(p_retro_load_game(&game));
+	p_retro_run();
+	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+	assert(ram && ram[3] == 0xAA);
+	p_retro_unload_game();
+
+	char swkFirmwarePath[sizeof(systemDirectory) + 24];
+	char umcFirmwarePath[sizeof(systemDirectory) + 24];
+	snprintf(swkFirmwarePath, sizeof(swkFirmwarePath), "%s/gamate_bios_swk.bin", systemDirectory);
+	snprintf(umcFirmwarePath, sizeof(umcFirmwarePath), "%s/gamate_bios_umc.bin", systemDirectory);
+	biosOption = "swk";
+	assert(unlink(swkFirmwarePath) == 0);
+	assert(p_retro_load_game(&game));
+	p_retro_run();
+	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+	assert(ram && ram[3] == 0x55);
+	p_retro_unload_game();
+	assert(unlink(umcFirmwarePath) == 0);
+	assert(p_retro_load_game(&game));
+	p_retro_run();
+	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+	assert(ram && ram[3] == 0xAA);
+	p_retro_unload_game();
+
+	writeTestFirmware("gamate_bios_swk.bin", 0xCC);
+	biosOption = "umc";
+	assert(p_retro_load_game(&game));
+	p_retro_run();
+	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+	assert(ram && ram[3] == 0xAA);
+	p_retro_unload_game();
+	assert(unlink(bitFirmwarePath) == 0);
+	const char* fallbackPreferences[] = { "umc", "bit", "swk", "invalid" };
+	for (unsigned i = 0; i < sizeof(fallbackPreferences) / sizeof(*fallbackPreferences); i++) {
+		biosOption = fallbackPreferences[i];
+		messagesBeforeSwk = messageCount;
+		assert(p_retro_load_game(&game));
+		p_retro_run();
+		ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+		assert(ram && ram[3] == 0xCC && messageCount == messagesBeforeSwk + 1 &&
+			strstr(lastMessage, "SWK"));
+		p_retro_unload_game();
+	}
+	biosOption = "swk";
+	for (unsigned size = 0xFFF; size <= 0x1001; size += 2) {
+		writeTestFirmware("gamate_bios_swk.bin", 0xCC);
+		assert(truncate(swkFirmwarePath, size) == 0);
+		unsigned messagesBeforeFailure = messageCount;
+		assert(!p_retro_load_game(&game));
+		assert(messageCount == messagesBeforeFailure + 1 &&
+			strstr(lastMessage, "gamate_bios_swk.bin"));
+	}
+	assert(unlink(swkFirmwarePath) == 0);
+	unsigned messagesBeforeMissing = messageCount;
+	assert(!p_retro_load_game(&game));
+	assert(messageCount == messagesBeforeMissing + 1 &&
+		strstr(lastMessage, "gamate_bios_umc.bin") &&
+		strstr(lastMessage, "gamate_bios_bit.bin") &&
+		strstr(lastMessage, "gamate_bios_swk.bin"));
+	writeTestFirmware("gamate_bios_umc.bin", 0x55);
+	writeTestFirmware("gamate_bios_bit.bin", 0xAA);
+	writeTestFirmware("gamate_bios_swk.bin", 0xCC);
+
 	// Invalid option values use documented defaults rather than enabling features accidentally.
 	biosOption = "invalid";
 	paletteOption = "invalid";
@@ -906,15 +995,20 @@ int main(int argc, char** argv) {
 	// entry, allowing intro skip to be checked synchronously on both load and reset.
 	writeIntroFirmware("gamate_bios_umc.bin", 0x55);
 	writeIntroFirmware("gamate_bios_bit.bin", 0xAA);
-	biosOption = "bit";
+	writeIntroFirmware("gamate_bios_swk.bin", 0xCC);
 	skipIntroOption = "on";
-	assert(p_retro_load_game(&game));
-	ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
-	assert(ram && ram[3] == 0xAA);
-	ram[3] = 0;
-	p_retro_reset();
-	assert(ram[3] == 0xAA);
-	p_retro_unload_game();
+	const char* introPreferences[] = { "umc", "bit", "swk" };
+	const uint8_t introMarkers[] = { 0x55, 0xAA, 0xCC };
+	for (unsigned i = 0; i < sizeof(introPreferences) / sizeof(*introPreferences); i++) {
+		biosOption = introPreferences[i];
+		assert(p_retro_load_game(&game));
+		ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
+		assert(ram && ram[3] == introMarkers[i]);
+		ram[3] = 0;
+		p_retro_reset();
+		assert(ram[3] == introMarkers[i]);
+		p_retro_unload_game();
+	}
 
 	// A BIOS that never reaches cartridge entry hits the master-clock deadline. Load/reset both
 	// report the failure and return to a clean ordinary reset state instead of continuing mid-BIOS.
@@ -940,9 +1034,8 @@ int main(int argc, char** argv) {
 	p_retro_deinit();
 	dlclose(core);
 
-	char umcFirmwarePath[sizeof(systemDirectory) + 24];
-	snprintf(umcFirmwarePath, sizeof(umcFirmwarePath), "%s/gamate_bios_umc.bin", systemDirectory);
-	assert(unlink(umcFirmwarePath) == 0 && unlink(bitFirmwarePath) == 0 && rmdir(systemDirectory) == 0);
+	assert(unlink(umcFirmwarePath) == 0 && unlink(bitFirmwarePath) == 0 &&
+		unlink(swkFirmwarePath) == 0 && rmdir(systemDirectory) == 0);
 	if (reportVideoHash) printf("presentation video hash: %08X (%u frames)\n", videoHash, videoFrames);
 	puts("Gamate libretro integration test passed");
 	return 0;

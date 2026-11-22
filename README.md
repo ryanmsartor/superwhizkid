@@ -12,8 +12,10 @@ known uncertainties are recorded in [`src/gamate/SOURCES.md`](src/gamate/SOURCES
 
 ## Libretro Core
 
-Gamate emulation requires an authentic `gamate_bios_umc.bin` or `gamate_bios_bit.bin` in the frontend's system directory.
-No BIOS or game images are included with superwhizkid.
+Gamate emulation requires `gamate_bios_umc.bin`, `gamate_bios_bit.bin`, or the independently authored
+replacement `gamate_bios_swk.bin` in the frontend's system directory. The SWK replacement is currently
+an incomplete experiment targeting standalone Cube Up.
+No commercial BIOS or game images are included with superwhizkid.
 
 ### Default Controls
 
@@ -40,7 +42,7 @@ quality of life features or change presentation.
 | Catch quick taps | **Off**, On | Holds button presses until the game next reads input. May help in games whose code reads input sparsely. |
 | LCD Ghosting | **Off**, Very light, Light, Medium, Strong, Very strong | Applies an estimated slow-panel response. |
 | Redraw Flicker Reduction | **Off**, 1 Frame, 2 Frames, 3 Frames | Reduces brief redraw flashes; may delay genuine lightening changes. |
-| BIOS Priority | **UMC**, Bit | Chooses the preferred BIOS at content load; falls back if it is unavailable. Reload content to apply. |
+| BIOS Priority | **UMC**, Bit, SWK | UMC/Bit fall back to each other, then SWK; SWK falls back to UMC, then Bit. Reload content to apply. |
 | Skip BIOS intro | **Off**, On | Runs the BIOS logo sequence instantly at power-on and reset. |
 
 ### Link Cable support
@@ -58,7 +60,7 @@ Current research revolves around implementing an open-source, clean room boot fi
 that is 100% compatible across the library. See the `docs/` folder for work that has been done
 so far in this area. A separately built, incomplete
 [experimental BIOS prototype](docs/EXPERIMENTAL_BIOS.md) currently targets standalone Cube Up;
-it is not used by the libretro core.
+it can be selected as SWK in the libretro core and is the fallback when neither authentic BIOS is available.
 
 Future lines of research and development will hopefully allow us to create tools to make homebrewing
 for this system more feasible.

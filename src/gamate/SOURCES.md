@@ -1684,7 +1684,7 @@ copied into the repository, build output, tests, or releases.
   one AY tone, writes a visible LCD pixel, and mirrors `$4400` into RAM. The temporary file is named
   `gamate_bios_umc.bin` solely because that is one of the core's firmware-discovery names; its
   contents are not derived from, intended to reproduce, or usable as a replacement for the UMC
-  firmware. The harness now generates identifiable UMC/Bit variants plus a second synthetic BIOS
+  firmware. The harness now generates identifiable UMC/Bit/SWK variants plus a second synthetic BIOS
   that sends the documented `BIT CORPORATION` protection sequence, reads the eight-bit reply, and
   jumps to `$6020`. These test option-controlled BIOS selection, missing-preference fallback, and
   intro skipping on load/reset without commercial bytes. The controllable test program also covers
@@ -1695,6 +1695,17 @@ copied into the repository, build output, tests, or releases.
   input mappings, video/audio callbacks, fixed state size, serialization restoration, reset, unload,
   and a second content load. This scaffolding was authored for superwhizkid; no emulator source or
   commercial firmware, BIOS, or game-ROM bytes were used to create it.
+- Replacement BIOS discovery (project design decision, user-directed): the independent firmware's
+  public filename and optional build output are `gamate_bios_swk.bin`. The libretro adapter retains
+  UMC priority by default, tries the other authentic BIOS before SWK, and permits explicit SWK
+  priority with UMC then Bit fallback. Invalid values use UMC priority; reset retains the loaded
+  BIOS and content reload applies preference changes. Each candidate must be exactly 4 KiB.
+  Loading SWK produces an experimental-firmware notice, not an assertion of authenticity.
+  Purpose-written `gamatecoretest` firmware validates modern/legacy option values, all selection
+  orders, SWK-only fallback, missing/incorrect-size rejection, reset/reload and intro skipping;
+  no commercial BIOS or cartridge bytes are used or copied. This is frontend discovery policy,
+  not hardware evidence or validation of interactive Cube Up gameplay. Unsupported prototype
+  service/NMI traps remain firmware halts rather than frontend error notifications.
 
 ### Corpus sweep and title-specific validation
 

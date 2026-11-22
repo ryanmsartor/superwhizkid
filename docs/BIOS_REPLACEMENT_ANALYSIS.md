@@ -83,8 +83,9 @@ protection, header/checksum validation, entry point, callback ABI, and machine i
 behavioral requirements rather than reproduce authentic instruction sequences.
 
 A separately built, limited resident prototype targeting standalone Cube Up is described in
-[`EXPERIMENTAL_BIOS.md`](EXPERIMENTAL_BIOS.md). It does not remove the authentic-BIOS requirement
-from the libretro core.
+[`EXPERIMENTAL_BIOS.md`](EXPERIMENTAL_BIOS.md). The libretro core accepts it as
+`gamate_bios_swk.bin`, through explicit SWK priority or fallback when neither authentic BIOS is
+available; this does not establish compatibility beyond the prototype's tested scope.
 
 It does not need a separate boot recipe for each cartridge. Cartridge-dependent entry RAM is limited
 to the header checksum, which the replacement can calculate or copy from the public header fields.

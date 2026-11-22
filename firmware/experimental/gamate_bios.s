@@ -1,3 +1,4 @@
+; Copyright (c) 2026 Ry
 ; Independently authored experimental Gamate firmware.
 ; SPDX-License-Identifier: GPL-2.0-or-later
 

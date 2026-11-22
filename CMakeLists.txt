@@ -75,7 +75,7 @@ if(SUPERWHIZKID_EXPERIMENTAL_BIOS)
 	if(NOT SUPERWHIZKID_CA65 OR NOT SUPERWHIZKID_LD65)
 		message(FATAL_ERROR "Experimental firmware requires ca65 and ld65 from cc65")
 	endif()
-	set(EXPERIMENTAL_BIOS "${CMAKE_CURRENT_BINARY_DIR}/experimental-gamate-bios.bin")
+	set(EXPERIMENTAL_BIOS "${CMAKE_CURRENT_BINARY_DIR}/gamate_bios_swk.bin")
 	set(EXPERIMENTAL_BIOS_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/experimental-gamate-bios.o")
 	add_custom_command(OUTPUT "${EXPERIMENTAL_BIOS}"
 		COMMAND "${SUPERWHIZKID_CA65}" -o "${EXPERIMENTAL_BIOS_OBJECT}"

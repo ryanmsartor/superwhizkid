@@ -2,8 +2,8 @@
 
 This independently authored, 4 KiB resident firmware is an **incomplete experiment**, initially
 targeting the standalone Cube Up cartridge. It is not an authentic BIOS, a drop-in replacement, or
-a claim of hardware accuracy. The normal libretro core still discovers and requires one of the
-two authentic BIOS files; neither its discovery policy nor its default behavior changes.
+a claim of hardware accuracy. The libretro core recognizes it as `gamate_bios_swk.bin`; UMC remains
+the default BIOS priority, with SWK used as a fallback when neither authentic BIOS is available.
 
 The source implements published protocol and behavioral observations, not the original BIOS
 instructions, startup graphics, or cartridge program data. The protection identifier and cartridge
@@ -18,10 +18,10 @@ do not require them and do not build or install this firmware.
 
 ```sh
 cmake -S . -B build-bios -DSUPERWHIZKID_EXPERIMENTAL_BIOS=ON
-cmake --build build-bios --parallel --target gamateboot gamatebiosprototypetest
+cmake --build build-bios --parallel --target superwhizkid_libretro gamateboot gamatebiosprototypetest
 ctest --test-dir build-bios --output-on-failure -R '^gamate-bios-prototype$'
 GAMATEBOOT_EXPERIMENTAL_BIOS=1 build-bios/gamateboot \
-  build-bios/experimental-gamate-bios.bin path/to/cartridge.bin 1000
+  build-bios/gamate_bios_swk.bin path/to/cartridge.bin 1000
 ```
 
 Replace the cartridge argument with a legally obtained local image. `GAMATEBOOT_EXPERIMENTAL_BIOS=1`
@@ -31,6 +31,17 @@ error and return a nonzero exit status. Without this option, `gamateboot` does n
 prototype-specific trap addresses. The image is also usable explicitly through the library's
 `gamateLoad` BIOS argument, but unsupported calls will halt in the firmware rather than produce a
 frontend notification.
+
+For interactive testing in RetroArch, place the generated `gamate_bios_swk.bin` in the frontend's
+system directory and load standalone Cube Up with the newly built core. Select **BIOS Priority:
+SWK** and reload content to prefer the replacement without changing either authentic BIOS file.
+UMC priority tries UMC, Bit, then SWK; Bit priority tries Bit, UMC, then SWK; SWK priority tries SWK,
+UMC, then Bit. Missing or incorrectly sized files are skipped; each BIOS must be exactly 4 KiB.
+Invalid option values use UMC priority. Reset retains the BIOS loaded with the content.
+
+The frontend displays an experimental-BIOS notice when SWK is loaded, including through fallback.
+It does not detect the prototype's unsupported-service traps, which can leave the game halted.
+Interactive gameplay remains unvalidated; this integration enables testing, not a compatibility claim.
 
 ## Implemented subset
 
@@ -51,8 +62,8 @@ frontend notification.
   not generally validated.
 - All other slots and link NMI enter the explicit `$F036` unsupported trap. Protection, identity,
   and checksum failures enter distinct traps at `$F039`, `$F03C`, and `$F03F`, respectively.
-  Link reception, BRK-specific behavior, other games, and frontend integration are not implemented
-  or validated.
+  Link reception and BRK-specific behavior are not implemented; other games and interactive
+  gameplay are not validated.
 
 The chosen low-RAM initialization is a compatibility policy, not measured physical power-on state.
 The common entry contract and its uncertainty are described in
