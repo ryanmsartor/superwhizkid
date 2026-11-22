@@ -734,12 +734,11 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md): `$F000`
   fixed bitmap writer; `$F003`, `$F006`, and `$F009` IRQ waits; `$F00C` two-plane VRAM zero-writer
   with an LCD-control input; `$F00F` plane-0 rectangle clear; `$F012` selector-driven eight-row tile
-  writer; `$F015` two-plane rectangle copy; `$F018` tile-row blitter; `$F01B` partially bounded
-  ROM-driven plane-0 graphics writer; `$F01E` partially bounded two-plane graphics service; `$F021`
+  writer; `$F015` two-plane rectangle copy; `$F018` tile-row blitter; `$F01B` plane-0 row-run
+  stream service; `$F01E` partially bounded two-plane graphics service; `$F021`
   partially bounded ROM-backed plane-0 graphics service; `$F024` strided RAM initializer; `$F02A`
   plane-0 fill; `$F02D` plane-1 fill; `$F030` pseudorandom service; and `$F033` packed-BCD formatter.
-  `$F027` remains caller-dependent; `$F00C`'s bit-6 addressing mode, `$F01B`'s source-data format,
-  `$F01E`'s stream format, and `$F021`'s source-data format remain unresolved.
+  `$F027` remains caller-dependent; `$F00C`'s bit-6 addressing mode, `$F01E`'s stream format, and `$F021`'s source-data format remain unresolved.
 - Used for: the replacement-ABI contracts, the 1,000-frame sweep default, and the conclusion that
   replacement firmware needs resident service and interrupt code, not just an entry-state jump.
   The linked analysis owns per-service matrices, exact behavior, and probe-specific caveats.
@@ -949,6 +948,60 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   perturbations were confined to private in-memory copies. No BIOS/cartridge payload or code was
   copied or published, and no external emulator source code was consulted or copied.
 
+#### `$F012` executable model and synthetic matrix
+
+- **Source and status:** the local user-supplied collection (39 `$F012` caller titles, plus the two
+  titles used for synthetic runs) and both authentic BIOS revisions, read in place. These are
+  execution observations from the independently authored emulator, not physical-hardware
+  measurements.
+- **Method:** the diagnostic-only `tests/gamatebiosf012.c` (CMake target `gamatebiosf012`, linked
+  only against the diagnostics library) contains an independently written executable model of the
+  observed contract. It compares the model with every call, checking:
+  - cartridge read addresses, including dummy and trailing reads;
+  - VRAM write count, address, plane, and value;
+  - A/X/Y/S and status flags;
+  - exact master-clock duration.
+
+  Corpus mode ran every caller under both BIOSes for the standard 1,000-frame window (78 runs,
+  parallel processes). Synthetic mode boots once to the first authentic call, snapshots that state,
+  installs RAM descriptors, and replays batched cases:
+  - all single selectors × 10 entry-flag sets;
+  - all 65,536 selector pairs;
+  - 740 width, column-wrap, and page cases;
+  - width 0;
+  - all 256 `$015` values;
+  - decimal entry.
+
+  The transform test XORs one glyph byte at a time in the private in-memory ROM copy and restores
+  it. Synthetic mode ran on two titles under both BIOSes (293,780 calls). `gamatebiosprobe` also
+  gained an address-only CPU-address line for its ROM-read sequence. Private per-call feature
+  reports contained only derived counts, positions, flags, and clocks, and remained outside the
+  repository.
+- **Result:**
+  - All 36,518 uninterrupted corpus calls (35,564 ROM descriptors and 954 RAM descriptors) and all
+    synthetic categories matched with zero failures, including timing and C/V.
+  - Both BIOS revisions produced identical results, including identical decimal-mode deviations.
+  - The resolved contract (pointer descriptor, selector-to-glyph-address classes, identity copy,
+    column-counter plane selection, width-0 behavior, flag rules, and exact clock formula) is in
+    `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
+- **Corrections:** this supersedes several earlier `$F012` conclusions in this file and in the
+  analysis document:
+  - The mapping is an identity copy; the earlier "not a copy" conclusion was wrong.
+  - There is no separate lookup table.
+  - `$015` does not supply the plane.
+  - The one-tile contexts without visible descriptors use RAM descriptors.
+  - `$000-$001` is a direct descriptor pointer.
+- **Limits and legal boundary:**
+  - Selector classes `$00-$1F` and `$21-$2E` never occur in the corpus; their costs and flags rest
+    on synthetic cases.
+  - Interrupt-spanning calls (2,516) and D-set entry are excluded from the contract.
+  - The model was derived from observed addresses, counts, timing, and equality comparisons. No
+    BIOS instructions were reconstructed.
+  - The glyph font is cartridge-supplied; no glyph, BIOS, or cartridge bytes were retained or
+    published.
+  - BIOS and ROM files remained read-only.
+  - No external emulator source was consulted or copied.
+
 #### `$F018` cross-corpus command-stream structure
 
 - Source and status: the local user-supplied collection of 15 titles with observed `$F018` calls and
@@ -1044,6 +1097,11 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 #### `$F01B` ROM-driven graphics writer
 
+The two historical entries below are superseded in part by the
+[executable model entry](#f01b-row-run-stream-executable-model) that follows. They are retained as a
+record of probes that were actually run. Their LCD-flag "mapping", "sparse addressing mode", and
+unresolved stream format are corrected there.
+
 - `$F01B` follow-up: the no-input 1,000-frame inventory records 18 entries per BIOS across 12
   titles. The paired balanced-call corpus contains 34 calls, 17 per BIOS across 12 titles, with 32
   calls spanning IRQs. Every paired report row matches across BIOS revisions; all calls return
@@ -1092,6 +1150,82 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   authored, diagnostic-only probe retained only derived results and address-only traces; no
   payload or external emulator code was copied. This is emulator evidence, not physical
   measurement.
+
+#### `$F01B` row-run stream executable model
+
+- **Source and status:**
+  - Inputs: the local user-supplied collection (all 62 cartridges, 23 of which call `$F01B` in the
+    standard campaigns) and both authentic BIOS revisions, read in place.
+  - Status: execution observations from the independently authored emulator, not physical
+    measurements.
+  - Supporting reference: published NMOS 6502 decimal-mode arithmetic, used only to write the model
+    of D-set row addition. The model was checked against the emulator's own CPU and was not taken
+    from any emulator implementation.
+- **Method:**
+  - Exploratory probes:
+    - `gamatebiosprobe` XORs to `$000-$001` shifted the first cartridge read by exactly the
+      perturbed pointer bits.
+    - Address-run analysis found sequential reads with indexed-indirect page-crossing dummy reads.
+    - Synthetic RAM streams with exact LCD port logs exposed the row/escape/value/count grammar.
+  - Instrumentation: a diagnostic-only LCD port-write callback (`gamateSetLcdDiagnosticWatch`,
+    compiled only with `GAMATE_ACCESS_DIAGNOSTICS`) was added to expose the register/value
+    sequence written to `$5000-$5007`.
+  - Checker: `tests/gamatebiosf01b.c` (CMake target `gamatebiosf01b`, linked only against the
+    diagnostics library) is an independently written model. It checks:
+    - the complete LCD port-write sequence;
+    - A/X/Y/S and the status register;
+    - RAM writes below `$400` outside the stack page;
+    - AY writes, bank writes, UART clocks, and UART transmit state;
+    - exact master-clock duration.
+  - Corpus mode: the four standard 1,000-frame input campaigns were run over all 62 cartridges and
+    both BIOSes, 496 runs on three parallel workers. At each `$F01B` entry, the checker:
+    - replays an I-masked copy;
+    - replays a second copy with the authentic interrupt state.
+  - Synthetic mode: the checker snapshots one authentic entry and replays batched streams:
+    - in RAM;
+    - in the checker's private in-memory ROM copy, restored after each case;
+    - with random entry registers and flags;
+    - with all classes of `$015` bits;
+    - with D set.
+- **Result:**
+  - Authentic corpus: all 242 calls, 121 per BIOS in 23 titles, matched the model with zero
+    mismatches, including exact timing. All streams were in cartridge ROM and used up to 2 Y wraps.
+  - Unmasked replays: all calls entered with I clear, and 224 spanned interrupts. Every call
+    produced the same port sequence, registers, and status, with only handler time added (at most
+    1,628 master clocks).
+  - Synthetic cases: all 960 cases matched under both BIOS revisions. These included up to 4 Y
+    wraps, every `$015` bit class, and D-set entry.
+  - Both BIOS revisions behaved identically.
+  - The full contract is in
+    [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md). It covers:
+    - the `$000-$001` stream pointer;
+    - the fixed 25-row clear;
+    - the absolute-row/escape/run grammar;
+    - the verbatim `$015` register-1 write;
+    - the returns and the `$001`/`$01A` side effects;
+    - the status formula with V;
+    - the exact clock formula.
+- **Corrections:**
+  - The earlier `$015` "flag mapping" was the probe's re-encoding of the emulator's decoded
+    register-1 fields; the BIOS writes the byte verbatim. Bits 1-3 had no effect only because the
+    emulator does not model them.
+  - Bit-6 "sparse mode" is the LCD increment-by-row setting applied to an unchanged port
+    sequence.
+  - Cosmic Fighter's larger extent comes from stream content.
+  - The `$000-$001` perturbation results follow from pointer redirection.
+  - The earlier status relation is the V-clear case.
+  - The earlier 22-title count missed Incantational Couple.
+- **Limits and legal boundary:**
+  - Timing is the emulator's validated CPU/bus model.
+  - D-set behavior is outside all authentic calls and inherits the emulator's decimal arithmetic.
+  - Non-terminating streams are not part of the contract.
+  - The model was derived from port logs, address patterns, counts, timing, and equality
+    comparisons. No BIOS instructions were reconstructed.
+  - Only derived counts and purpose-written synthetic streams were retained. No BIOS, ROM, stream,
+    RAM, or VRAM payload was retained or published.
+  - BIOS and ROM files remained read-only.
+  - No external emulator source was consulted or copied.
+  - The diagnostic callback compiles out of production builds and is not part of save states.
 
 #### `$F01E` two-plane graphics service
 

@@ -238,6 +238,12 @@ void gamateSetRomDiagnosticWatch(struct Gamate* g,
 	g->diagnostics.romReadContext = context;
 }
 
+void gamateSetLcdDiagnosticWatch(struct Gamate* g,
+		GamateLcdWriteCallback callback, void* context) {
+	g->diagnostics.lcdWriteCallback = callback;
+	g->diagnostics.lcdWriteContext = context;
+}
+
 void gamateSetRamDiagnosticWatch(struct Gamate* g, uint16_t address,
 		GamateRamAccessCallback callback, void* context) {
 	g->diagnostics.ramWatchAddress = address & 0x3FF;
@@ -453,6 +459,12 @@ void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
 	}
 	if ((address & 0xFC00) == 0x5000) {
 		g->diagnostics.lcdWrites++;
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+		if (g->diagnostics.lcdWriteCallback) {
+			g->diagnostics.lcdWriteCallback(g->diagnostics.lcdWriteContext, g,
+				(uint8_t) (address & 7), value);
+		}
+#endif
 		switch (address & 7) {
 		case 1:
 			g->displayBlank = value & 0x80;

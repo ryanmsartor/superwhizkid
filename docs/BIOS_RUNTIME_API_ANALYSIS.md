@@ -660,135 +660,173 @@ reads, the repeated stream/base triples, and later invocation contexts remain op
 address-only traces and transient local ROM reads to derive counts; no stream or graphics payload
 was saved or published.
 
-### ROM-driven plane-0 graphics writer: `$F01B`
+### Plane-0 row-run stream service: `$F01B`
 
-The no-input 1,000-frame inventory records 18 `$F01B` entries per BIOS across 12 titles. The
-paired balanced-call corpus contains 34 calls, 17 per BIOS across 12 titles; 32 calls span IRQs.
-Every paired report field matches across revisions. All 34 calls return A=`$FE`, X=`$00`, and
-preserve S; Y varies. The IRQ-spanning corpus is useful for the register signature, but its timing
-and memory summaries include callback work.
+`$F01B` is fully defined for every observed calling context and for the synthetic edge classes
+listed below. It clears a fixed 25-row band of plane 0, then decodes a caller-supplied row/run
+stream into LCD port writes. An independent model in `tests/gamatebiosf01b.c` reproduces the BIOS's
+LCD port-write sequence, returned registers and status, RAM side effects, and exact elapsed clocks.
 
-IRQ-masked first-call probes in Baseball, Brick Blaster, Magic Jigsaw, and Witty Apee, plus later
-calls in Devil Castle and Witty Apee, were compared under both BIOS revisions. Each tested call
-writes only plane 0. Those tested contexts cover 800 unique addresses, `$1CC0-$1FDF`; the later
-all-title matrix below identifies a Cosmic Fighter exception. The calls issue
-1,020-1,600 VRAM writes and take 27,134-57,484 clocks across these contexts; the range includes
-repeated writes to the same addresses and does not define a timing formula. The first-call probes
-had no AY, mapper, UART, IRQ, or NMI effects. In Baseball, changing entry A, X, or Y individually,
-the VRAM pointer, or LCD flags leaves the measured output and ROM-read profile unchanged; scroll
-values are preserved. These results establish a ROM-driven graphics writer, but not its data grammar.
+#### Contract
 
-RAM `$000-$001` and `$015` are read in the controlled Baseball and Brick Blaster calls. In Baseball,
-`$001` is also rewritten. The cross-title follow-up below found `$001` writes in 32 of 44 first-call
-contexts, while `$000` was not written in any of them. Earlier bit-0 XOR perturbations in Baseball
-expanded the output to the full plane-0 address space and took more than 300,000 clocks. These
-perturbations show sensitivity to the caller-supplied pair, but do not establish whether it is a
-pointer or a control structure.
+Inputs:
 
-`$015` affects final LCD flags. The following values were tested in Baseball; values `$01` and
-`$40` were also confirmed in Brick Blaster under both BIOS revisions:
+- RAM `$000-$001` is a little-endian pointer to the stream. The stream may be in cartridge ROM or
+  RAM. Byte `i` is read from `pointer + i` through an indexed-indirect walk; `$000` is never
+  written.
+- RAM `$015` is the caller's cached LCD control byte.
+- Entry A, X, and Y are ignored. Entry C is ignored. Entry D affects row arithmetic, described
+  below; every authentic call enters with D clear.
 
-| RAM `$015` | Final LCD flags | Plane-0 write coverage |
-| --- | --- | --- |
-| `$00` | `$00` | `$1CC0-$1FDF` |
-| `$01` | `$20` | `$1CC0-$1FDF` |
-| `$02`, `$04`, `$08` | `$00` | `$1CC0-$1FDF` |
-| `$10` | `$08` | `$1CC0-$1FDF` |
-| `$20` | `$04` | `$1CC0-$1FDF` |
-| `$40` | `$02` | 56 addresses: `$0000-$03A0` and `$1CC0-$1FE0`, each at `$20` intervals |
-| `$80` | `$10` | `$1CC0-$1FDF` |
-| `$3F` | `$2C` | `$1CC0-$1FDF` |
+LCD port sequence, all at `$5000-$5007`:
 
-With `$015=$40`, the final VRAM pointer is `$0220` in Baseball and `$0160` in Brick Blaster.
-Cosmic Fighter's corresponding first call ends at `$0260`; the final pointer is therefore
-caller-context-dependent. The addressing-mode meaning is not established. Devil Castle is the only
-title in the completed call corpus observed using both `$F01B` and `$F021`. I-masked probes show
-that each writes the same 800-byte plane-0 region, while their ROM read ranges, write counts, and
-timings differ. Separate control tests show that both are affected by `$015`; these common behaviors
-do not establish an alias.
+1. Write `$015` verbatim to register 1.
+2. Clear rows `$E6-$FE` (25 rows). For each row in ascending order, write register 5 = row,
+   register 4 = `$00`, then 32 writes of `$00` to register 7.
+3. Decode the stream:
+   - Byte 0 is a row offset. Offset `$FE` terminates the stream.
+   - Any other offset selects absolute row `$E6 + offset`, computed with carry clear. The service
+     writes register 5 = row, then register 4 = `$00`.
+   - The next byte is a value. Value `$FF` is an escape: the following byte is a new row offset,
+     which is again absolute from `$E6`, not relative to the previous row. Offset `$FE`
+     terminates.
+   - Any other value is followed by a count byte. The service writes the value to register 7
+     `count` times, with count `$00` meaning 256. It then reads the next value.
 
-#### Exhaustive `$015` mapping in Baseball
+Consequences:
 
-The first authentic Baseball occurrence was probed with I set for every `$015` value from `$00`
-through `$FF`, under both BIOS revisions (512 probes total). The final LCD flags follow:
+- Register 4 is always `$00`, so every write targets plane 0 from the start of the selected row.
+- Value `$FF` cannot be emitted as data.
+- Row offsets wrap modulo 256. For example, offset `$19` selects row `$FF`, and offset `$1A`
+  selects row `$00`.
+- Register-1 bits, including the increment-by-row bit 6, apply to the same port sequence. The
+  BIOS does not alter its port sequence when that bit is set.
 
-`out_lcd = (bit 0 ? $20 : 0) | (bit 4 ? $08 : 0) | (bit 5 ? $04 : 0) | (bit 6 ? $02 : 0) | (bit 7 ? $10 : 0)`.
+Returns and side effects:
 
-Within the checked return, timing, ROM-read, and VRAM observables, bits 1-3 have no effect. Bits 0,
-4, 5, and 7 change only the final LCD flags; bit 6 additionally selects the sparse VRAM coverage
-already observed in the representative-value tests. Across all values, the service took 44,080
-master clocks, issued 1,241 VRAM writes and 1,336 LCD writes, and read the same 492 cartridge
-addresses. The ordinary mode covered 800 unique plane-0 addresses from `$1CC0-$1FDF` and ended at
-`$1FB4`. Bit-6 mode covered 56 addresses at `$20` intervals across `$0000-$03A0` and
-`$1CC0-$1FE0`, ending at `$0220`. Returned registers and status had the same values for all 256
-inputs, and both BIOS revisions agreed on the checked outputs, timing, ROM-read map, write
-coverage, and final pointer for every value.
+- A=`$FE` and X=`$00`. Y is the low byte of the terminator's stream index. S is restored.
+- `$001` becomes the entry value plus `index >> 8`, where `index` is the terminator's stream
+  index. It is written only when the index wrapped past `$FF`.
+- `$01A` is written only if at least one value/count pair was decoded. It then holds the last
+  emitted run value.
+- No other RAM below `$400` is written outside the stack page.
+- No AY or bank-register writes occur, the UART is not clocked, UART transmit state is
+  unchanged, and the scroll registers are not written.
 
-The direct cross-BIOS comparison does not use whole-RAM hashes: the unperturbed Baseball probes
-have different whole-RAM hashes, and their cause was not localized. This exhaustive mapping is
-specific to Baseball's first authentic call. It does not by itself establish the mapping across
-other callers or explain the physical meaning of the sparse mode.
+Status:
 
-#### Cross-title `$015` control-byte contract
+`P_out = (P_in & $1C) | $23 | V`
 
-The four 1,000-frame campaigns (no input, long Start, menu actions, and controller cycle) cover the
-62-title cartridge corpus under both BIOS revisions. `$F01B` was observed in 22 titles. For each,
-one first authentic call context was selected from the baseline or input campaigns and probed with
-I set for all 256 `$015` values under both BIOSes: 11,264 probes total. No probe failed to return.
-Within each title and addressing mode, the checked return/status, timing, write counts, VRAM hashes
-and geometry, and ROM-read coverage stayed constant across the byte sweep. Paired BIOS outputs
-agreed, excluding whole-RAM hashes.
+- N is clear; Z and C are set; I and D are preserved.
+- V is the signed overflow of the last `$E6 + offset` row addition, computed with carry clear.
+  With D clear, V is set for offsets `$80-$99`.
+- Bit 4 is the emulator's stored, non-physical B bit, carried through from entry.
 
-The same flag formula holds in all 22 title contexts:
+Timing in master clocks, with CPU cycles in parentheses:
 
-`out_lcd = (bit 0 ? $20 : 0) | (bit 4 ? $08 : 0) | (bit 5 ? $04 : 0) | (bit 6 ? $02 : 0) | (bit 7 ? $10 : 0)`.
+```text
+15362 (7681)
++ 140 (70) * row_commands
++ 134 (67) * pairs
++  18 (9)  * (run_bytes - pairs)
++   2 (1)  * crossing_reads
++   8 (4)  * Y_wraps
+```
 
-Bits 1-3 have no effect on the checked return, timing, ROM-read, or VRAM results. Bits 0, 4, 5,
-and 7 change only the final LCD flags. Bit 6 additionally selects the same 56 plane-0 addresses in
-every tested title: `$0000-$03A0` and `$1CC0-$1FE0` at `$20` intervals. Within each addressing
-mode, the remaining checked outputs, including VRAM hash and geometry, were invariant across all
-256 input values.
+- `row_commands` counts non-terminating offsets.
+- `pairs` counts decoded value/count pairs.
+- `run_bytes` is the sum of counts, with `$00` counted as 256.
+- `crossing_reads` counts stream indexes `i` from 0 through the terminator index for which
+  `(pointer & $FF) + (i & $FF) > $FF`. These are the indexed-indirect page-crossing penalty reads.
+- `Y_wraps` is `index >> 8`.
+- `$015` and decimal mode do not affect timing.
+- Interrupts add only handler time.
 
-Ordinary-mode geometry is not universal: 21 title contexts cover `$1CC0-$1FDF` (800 addresses),
-while Cosmic Fighter covers `$1CC0-$1FF3` (820 addresses). Thus the `$015` flag/mode mapping is
-cross-title, but it does not imply a fixed output extent, final VRAM pointer, timing, or ROM-data
-format. The matrix covers the first authentic call per title, not every later invocation. No
-`$F01B` calls were observed in the other 40 titles during these fixed input windows; that is not
-proof that those games can never call the service. In Cosmic Fighter, the ordinary-mode call takes
-42,708 master clocks and issues 1,060 VRAM writes and 1,137 LCD writes; bit-6 mode preserves those
-counts and timing while selecting the common 56-address sparse coverage.
+Decimal mode:
 
-Controlled status tests in Witty Apee and all 34 completed-call summaries follow
-`P_out = (P_in & $0C) | $23`: N and V clear, Z and C set, and I and D preserved. This describes
-observed calls, not the physical significance of the CPU's unused status bits. The exact
-`$000-$001` format, ROM-source mapping, return-Y rule, and data-dependent timing remain unresolved.
-ROM traces retained addresses only; no BIOS/ROM or VRAM payload was retained. These are emulator
-observations, not physical-hardware measurements. Selected single-byte XORs in a private ROM copy
-produced no output change at some offsets and localized, broad, or expanded work at others; they
-did not resolve a source-data format. No ROM bytes or graphics payload were retained.
+- The service does not clear D.
+- With D set, each row is the NMOS decimal-mode addition of `$E6 + offset` with carry clear, and V
+  follows the same decimal sequence.
+- Every other port write, return value, RAM effect, and timing value is unchanged.
 
-#### Cross-title `$000-$001` low-bit perturbations
+No authentic caller enters with D set. A replacement BIOS therefore needs binary row addition only
+to match the corpus. D-set behavior also depends on the emulator's CPU decimal implementation,
+which is not a physical measurement.
 
-The same four 1,000-frame campaigns identified first authentic `$F01B` calls in 22 titles. For each
-title and BIOS, an I-masked baseline and independent XOR-1 perturbations to `$000` and `$001` were
-run using that campaign's input schedule (132 probes total). All probes returned. Both bytes were
-read before being written in all 44 title/BIOS contexts; `$000` was never written, while `$001` was
-written in 32 contexts.
+Interrupts:
 
-Each perturbation changed the address-only ROM-read sequence, elapsed clocks, VRAM hash and
-coverage, and VRAM/LCD write counts in all 44 contexts. The returned register signature changed in
-all 44 `$000` perturbations and 8 `$001` perturbations. Relative to each context's baseline, clock
-deltas ranged from -57,012 to +30,255,628 for `$000`, and -29,002 to +601,432 for `$001`. These
-large and caller-dependent changes show that both bytes influence execution, but are not a usable
-mapping formula or evidence of normal behavior for altered caller data.
+- The service does not mask interrupts.
+- All authentic calls enter with I clear, and most take IRQs mid-service.
+- An interrupt changes neither the service's port sequence nor its register and status results.
+  This assumes the game's own handler does not use the LCD ports, which held in the corpus.
 
-Baseline checked output signatures, captured address-sequence prefixes, and total read counts
-agreed between BIOS revisions in all 22 title pairs. The comparison excludes whole-RAM hashes and
-per-address RAM-write summaries. Perturbed `$001` results agreed in all 22 pairs; perturbed `$000`
-comparisons agreed in 20 pairs. Two `$000` sequences exceeded the diagnostic's capture limit, so
-full address-sequence equality is not claimed for those sequences. The probe retained derived
-summaries and address-only traces, not BIOS, ROM, RAM, or VRAM payload. This establishes cross-title
-input sensitivity only; the pair's format and source-address transformation remain unresolved.
+Practical note: a cartridge address read immediately before return, such as `$A0BE` or `$794C`
+depending on the title, is the CPU's RTS dummy read at the pulled return address. It is not a
+service input.
+
+#### Validation
+
+- **Authentic corpus:**
+  - Coverage: the four standard 1,000-frame input campaigns (no input, long Start, menu actions,
+    and controller cycle) across all 62 cartridges and both BIOS revisions, 496 runs.
+  - At every `$F01B` entry, an I-masked copy of the machine was replayed and compared with the model.
+  - Calls and titles: 242 calls, 121 per BIOS, in 23 titles.
+  - Results: zero port, register, status, RAM, peripheral, or clock mismatches.
+  - Stream properties: all streams came from cartridge ROM. The maximum stream used 334 pairs, 800
+    run bytes, 25 row commands, 2 Y wraps, and 395 crossing reads.
+  - Two-wrap streams appear in Nightmare of Santa Claus and Treasure Hunter.
+  - No authentic call produced a row-addition overflow or entered with D set.
+- **Unmasked replay:**
+  - Coverage: the 23 caller titles under the same campaigns.
+  - Results: all 242 calls entered with I clear, 224 spanned at least one IRQ or NMI, and all
+    returned. Every call had zero port, register, or status mismatches.
+  - Timing: extra elapsed time was 0 to 1,628 master clocks, consistent with handler execution
+    alone.
+- **Synthetic streams:**
+  - Method: the checker snapshots Baseball's first entry and replays caller-style streams through
+    the authentic BIOS under both revisions.
+  - Coverage:
+    - 400 random RAM streams;
+    - 200 RAM streams with random entry A, X, Y, and P (D clear) and random `$015`;
+    - 120 private-copy ROM streams with up to 4 Y wraps and 1,244 crossing reads;
+    - 120 `$015` values with bits 1-3 set;
+    - 120 D-set entries.
+  - Edge cases: these cases include count `$00`, escape-only rows, offset `$FF`, row wrap, and
+    overflowing offsets.
+  - Results: every case matches under both BIOS revisions.
+
+#### Corrections to earlier `$F01B` findings
+
+- The earlier formula mapping `$015` to final LCD flags was not a BIOS transformation. The BIOS
+  writes `$015` verbatim to register 1. The formula was the earlier probe's re-encoding of the
+  emulator's decoded register-1 fields. Bits 1-3 had no observed effect because the emulator does
+  not model them, not because the BIOS discards them.
+- The "sparse" bit-6 coverage was LCD increment-by-row mode applied to the same port sequence. It
+  was not a separate BIOS addressing mode.
+- The common `$1CC0-$1FDF` region is the fixed 25-row clear of rows `$E6-$FE`.
+- Cosmic Fighter's extent to `$1FF3`, and caller-dependent final VRAM pointers, come from stream
+  content. One example is an offset selecting row `$FF`.
+- The `$000`/`$001` XOR results follow from pointer semantics. Shifting the pointer redirects
+  decoding into unrelated bytes, which explains the large and caller-dependent changes in clocks
+  and registers.
+- The earlier status formula `(P_in & $0C) | $23` is the V-clear case of the full formula.
+- The format, source mapping, return-Y rule, and timing previously listed as unresolved are
+  resolved above.
+- Earlier counts of 34 calls in 12 titles came from a narrower no-input call inventory. The full
+  campaign corpus contains 242 calls in 23 titles, including Incantational Couple.
+
+#### Limits
+
+- The contract is derived from the emulator's execution of the authentic BIOS revisions. Timing
+  is the emulator's validated CPU and bus model, not a separate physical measurement of this
+  service.
+- D-set behavior inherits the emulator's NMOS-style decimal arithmetic and is outside every
+  observed caller.
+- Behavior when a stream never terminates is not part of the contract.
+- The fixed-window campaigns do not prove that other titles never call `$F01B`.
+- Retained evidence consists of derived counts, model comparisons, and synthetic
+  stream descriptions. No BIOS, ROM, stream, RAM, or VRAM payload bytes were retained.
+- Synthetic ROM streams were written only into the checker's private in-memory copy.
 
 ### Caller-supplied two-plane graphics service: `$F01E`
 
@@ -917,104 +955,163 @@ graphics values and BIOS/ROM payloads were not retained.
 
 ### Fixed-height tile-run contract: `$F012`
 
-The combined completed-call corpus contains 39,034 balanced `$F012` calls, evenly split between BIOS
-revisions. Of those, 36,518 do not span an IRQ or NMI. Every non-interrupted call fits the same
-register and write-shape contract; interrupt-spanning calls are excluded because their summaries mix
-callback work into the service effects.
+`$F012` draws a horizontal run of eight-row glyph tiles from a descriptor. The contract below is
+resolved from emulator observation. It reproduces all 36,518 uninterrupted authentic calls in the
+1,000-frame corpus and 293,780 synthetic calls (four title/BIOS runs of 73,445 calls each). No mismatches were
+found in cartridge read addresses, VRAM write addresses and planes, VRAM output, registers, status
+flags, or exact master-clock duration.
 
-Controlled authentic-call probes identify a compact descriptor stream in cartridge ROM for 37 of
-the 39 observed callers. In a controlled Mighty Boxer call, RAM `$000-$001` points to the first
-descriptor byte. Corpus traces show that, in descriptor-bearing contexts, the stream begins with the
-horizontal tile count, followed by one selector per column. Every selector produces eight row bytes
-at `(X >> 3, Y)` through `(X >> 3, Y + 7)`, after which the service advances one byte column. The
-starting X and Y registers therefore specify pixel coordinates, while entry A is ignored. The cached
-LCD-control byte at `$015` supplies the selected plane and other retained mode bits.
+#### Calling convention
 
-The other two callers each have a one-tile first-call context under both BIOSes. Those four traces
-show eight contiguous graphics reads followed by the return dummy read, but no width or selector
-reads in the cartridge-ROM trace. RAM `$000` and `$001` are each read twice in these contexts; their
-values and role are unresolved.
+| Input | Meaning |
+| --- | --- |
+| RAM `$000-$001` | Little-endian pointer `P` to the descriptor. The descriptor may be in cartridge ROM or work RAM. |
+| X | Destination pixel X. Only `X >> 3` is used; the low three bits have no effect. |
+| Y | Destination pixel row of the first glyph row. |
+| A | Ignored. |
+| RAM `$015` | Cached LCD-control byte. Each tile writes `$015 | $40` (row-increment mode) to the LCD control register; the value is retained after return. |
+| D flag | Must be clear. Decimal-mode entry is unsupported (see below). |
 
-A targeted matrix toggled each individual bit of RAM `$000` and `$001` at service entry in all four
-contexts (64 probes); every probe returned, and neither byte was written. Every `$000` bit toggle
-changed the ROM-read trace, output, timing, write shape, returned registers, and VRAM coverage. For
-`$001`, 20 of 32 toggles changed the ROM-read trace, 20 changed output, 20 changed timing, 20 changed
-returned registers, and 16 changed VRAM coverage and write shape. These bytes are behaviorally
-influential, but this does not identify their ABI meaning. Treating them as a direct 16-bit pointer
-whose value linearly shifts the first eight cartridge reads was also tested; none of the 32
-individual bit toggles produced that shift, which does not rule out an indirect or table-mediated
-role.
+The descriptor is a width byte `W` at `P`, followed by one selector byte per tile. Selector `t`
+(0-based) is read from `P + ((1 + t) & $FF)`: the index is eight bits wide. `W = 0` draws 256
+tiles, and its final tile rereads the width byte as selector `$00`. If a descriptor read falls on a
+different page from `P`, the read is preceded by a dummy read 256 bytes lower and costs two extra
+master clocks. Descriptors in RAM and ROM take the same time.
 
-For `$001` XOR `$01`, baseline byte values matched across BIOS revisions in each title pair, as did
-the toggled values. One pair nevertheless differed between BIOS revisions in ROM-read sequence and
-timing; its VRAM output, returned registers, and write counts matched. Duplicate probes reproduced
-the difference, whose cause remains unresolved.
+#### Glyph lookup
 
-Every tile unconditionally overwrites eight complete destination bytes. A controlled selector whose
-output was all zero still issued eight VRAM writes: an initially zero destination showed no changed
-bytes, while `$FF` and `$5A` fills were replaced. There is no transparent-row path.
+Each selector chooses one eight-byte glyph from a font in the cartridge's fixed `$6000` window,
+immediately after the normal `$6020` entry area. The font is supplied by the cartridge and is not
+part of the BIOS. Its contents are not reproduced here. With index `i`, the glyph begins at
+`base + 8 * i`:
+
+| Selector | Glyph index `i` | `base` |
+| --- | --- | --- |
+| `$00-$20` | 1 | `$6021` |
+| `$21-$40` | `((s - $2F) & $1F) + 1` | `$6021` |
+| `$41-$60` | `((s - 1) & $1F) + 1` | `$6079` |
+| `$61-$FF` | `((s - 1) & $1F) + 1` | `$6149` |
+
+Selectors `$00-$20` all use glyph 1. `$2F-$40` map to indices 1-18, and `$21-$2E` wrap to indices
+19-32. `$41-$60` index one 32-glyph segment. `$61-$FF` index another segment, and that mapping
+repeats every 32 selectors. Row `r` reads `base + 8 * i + r`. A glyph row on a different page from
+`base` is preceded by a dummy read 256 bytes lower and costs two extra master clocks. One trailing
+read at the return address minus 1 follows during `RTS`.
+
+#### Output
+
+- **Copy:** Glyph byte `r` is copied unchanged to VRAM. This identity transform was tested on all
+  256 input values. It does not depend on the row, the low bits of X, or `$015`.
+- **Destination:** Tile `t` writes rows `r = 0..7` in order, to row `(Y + r) & $FF` and byte column
+  `c & $1F`. Here `c` is an eight-bit counter that starts at `$80 + (X >> 3)` and increments by one
+  per tile. The VRAM address is `((Y + r) & $FF) << 5 | (c & $1F)`.
+- **Plane:** Bit 7 of `c` selects the plane. Runs start on plane 1. A run switches to plane 0 when
+  `c` wraps past `$FF`; with `X >> 3 = 31`, for example, the switch occurs at tile 97. The plane is
+  not taken from `$015`.
+- **No transparency:** Every tile writes all eight destination bytes. An all-zero glyph row still
+  overwrites the destination.
+- **LCD writes:** Each tile makes 11 LCD writes: one control write, two address writes, and eight
+  data writes.
+
+#### Returned state
 
 | Observable | Contract |
 | --- | --- |
-| Descriptor | In descriptor-bearing calls, one width byte followed by `width` tile selectors. The four one-tile traces described above expose no descriptor reads in cartridge ROM. |
-| Graphics lookup | In descriptor-bearing calls, each selector reads one run of eight cartridge bytes; identical selectors read identical runs in observed repeats. Across all observed first-call contexts, output row `r` is a consistent single-byte function of graphics byte `r` for the 89 distinct input-byte values observed. The selector-to-address transform remains unresolved. |
-| VRAM writes | `8 * width`. |
-| LCD writes | `11 * width`. |
-| Registers | A and Y return the tile width; X returns the final selector multiplied by eight; S is restored. |
-| Status | N clears and Z sets; I and D are preserved. Carry and V depend on intermediate address arithmetic. |
-| Scratch | `$018-$01B` are service scratch. Stack bytes `$1F9-$1FB` are also written during the call. |
+| A, Y | The width byte (`$00` for 256-tile runs). |
+| X | `(8 * i_last) & $FF`, where `i_last` is the glyph index of the final selector. |
+| S | Restored. Stack bytes `$1F9-$1FB` are written. |
+| N, Z | N clear, Z set. |
+| I, D | Preserved. |
+| C | Depends only on the final selector: set for `$20-$2E`, `$81-$A0`, and `$C1-$E0`; otherwise clear. Entry C has no effect. |
+| V | Updated by each selector above `$20`: set for `$80-$E0`, otherwise clear. Selectors `$00-$20` leave V unchanged, so it can carry from an earlier tile or from entry. |
+| Scratch | RAM `$018-$01B`. |
 | Other hardware | Scroll, AY, mapper, and UART state are preserved. |
 
-In a controlled descriptor-bearing call, width perturbation expanded both the selector stream and
-destination coverage exactly one column at a time. Selector perturbation changed only the
-corresponding eight-byte graphics lookup and output. X perturbation moved the byte column at each
-eight-pixel boundary, Y perturbation moved the first row, and A perturbation had no effect. Both
-BIOS revisions produced identical ordered ROM coverage, timing, VRAM coverage, output, registers,
-and LCD activity in that comparison.
+#### Timing
 
-Observed authentic widths range from 1 through 18 tiles.
+Duration, in master clocks from the first service instruction through `RTS` and excluding the
+caller's `JSR`, is:
 
-Cross-corpus first-call study (39 caller titles, both BIOS revisions; 78 contexts): all contexts
-were parsed, including the four one-tile traces without ROM-visible descriptors. The 794 tile runs
-produced 6,352 source/output row observations; 89 distinct graphics input-byte values had no
-conflicting output globally or within a title. Repeated selectors selected identical address runs in
-every observed repeat. A per-call `base + 8 * selector` address formula fit only 14 of the 74
-descriptor-bearing contexts; single-tile contexts cannot discriminate this formula. It is not a
-corpus-wide rule. Address traces, timing, VRAM output and coverage, registers, and LCD activity
-matched between BIOS revisions in all 39 title pairs.
+`68 + sum(tile_cost) + 2 * (glyph page-crossing rows + descriptor page crossings)`
 
-One selected graphics byte was XOR-perturbed in a private in-memory ROM copy for each of the 78
-contexts. Each perturbation changed only its associated output byte or bytes, with the expected
-output for the resulting input value; ROM address trace, timing, and VRAM coverage stayed unchanged.
-This tests one byte per first-call context, not every source byte or every possible input value.
-BIOS and cartridge files remained read-only; XOR changes affected only private in-memory ROM copies.
-No payload values or lookup table were retained.
+| Selector | `tile_cost` |
+| --- | ---: |
+| `$00-$1F` | 440 |
+| `$20` | 428 |
+| `$21-$40` | 456 |
+| `$41-$60` | 440 |
+| `$61-$FF` | 426 |
 
-Controlled mapping study (one authentic Mighty Boxer call, width 15, 6,714 cycles, both BIOS
-revisions): address-only tracing shows the width byte, then one selector read per tile, with each tile
-then reading a contiguous run of eight cartridge bytes. Tiles that share a selector read the same run
-and produce identical output. For eight-read tiles, output row `r` is a consistent single-byte function
-of graphics byte `r`: 96 rows covering 16 distinct graphics values had no conflicting outputs. The
-mapping is not a copy or bit reversal, and it is not reproduced here. Two tile forms issue extra
-reads. In 16-read tiles, each row reads a dummy address (the data address minus `$100`) before the data
-read. The wrap row of a 9-read tile reads `$00` before `$100`. Perturbing the dummy reads changed neither
-VRAM nor cycles. Interpreting them as 6502 page-crossing dummy accesses is an inference.
+CPU cycles are half these values. Timing does not depend on glyph contents, X, Y, `$015`, the
+descriptor's memory type, or entry flags other than D.
 
-Timing follows the descriptor, not graphics content. In this call, the only perturbations that changed
-the cycle count were descriptor bytes: the width byte produced a +100,036-cycle delta, and selector
-bytes produced deltas between −30 and +16 cycles. Changing any of the 130 unique graphics or dummy-read bytes left the
-cycle count unchanged. The VRAM maps and cycle deltas were identical for both BIOS revisions.
+#### Decimal mode
 
-Open questions are the control-data source in the four one-tile contexts, the selector-to-address
-transform, the origin of the 16-entry mapping, and an exact cycle formula. The simple
-`base + 8 * selector` relation is not universal, and per-selector cycle cost has not been isolated.
-The corpus study covers only 89 of 256 possible graphics input bytes and one authentic first-call
-context per observed title. These are emulator observations, not physical-hardware measurements.
-None of these open questions invalidates the resolved drawing and calling convention above.
+With D set at entry, 41 of the 256 single selectors change their reads and returned registers. The
+affected selectors are `$21-$2E`, `$30-$3E`, `$40`, and `$50-$F0` in steps of `$10`. Of these, 12
+also change timing and 14 change C or V. Both BIOS revisions agree. No authentic call entered with D
+set, so a replacement BIOS may treat D-set entry as undefined.
 
-`tools/gamate-bios-f012-summary.py` derives width from LCD/VRAM write counts and validates the write
-shape, return registers, status invariants, stack balance, and unrelated hardware effects. It reports
-zero mismatches across all 36,518 available non-interrupted calls.
+#### Evidence
+
+- **Corpus:** `gamatebiosf012` ran every caller title under both BIOS revisions for the standard
+  1,000-frame window: 39 titles and 78 runs. It reproduced the 39,034 balanced calls in the
+  completed-call corpus, 19,517 per revision. Of the 36,518 uninterrupted calls, 35,564 used ROM
+  descriptors and 954 used RAM descriptors. Six titles used RAM descriptors, and two used only RAM
+  descriptors. All 36,518 matched the model exactly, including clocks and C/V, with no D-set entries.
+  Per revision, authentic selectors fell in `$20` (11,293 tiles), `$2F-$40` (16,193), `$41-$60`
+  (51,066), and `$61-$FF` (11,264). Widths ranged from 1 through 18. The 2,516 calls that span an IRQ
+  or NMI were excluded because their summaries include callback work.
+- **Synthetic matrix:** The matrix was run on two titles under both BIOS revisions. In each run, the
+  first authentic call was snapshotted, a RAM descriptor was installed, and the service was replayed
+  for:
+  - every single selector with 10 entry-flag sets (2,560 cases);
+  - all 65,536 ordered selector pairs;
+  - 740 width, column-wrap, and page-crossing cases;
+  - width 0;
+  - every `$015` value;
+  - every selector under decimal entry.
+
+  The transform test rewrote one glyph byte at a time in a private in-memory ROM copy, which was
+  restored afterward. All four runs passed with zero failures and produced identical decimal-mode
+  deviations.
+- **Earlier studies:** First-call address traces, RAM-bit toggles, single-byte XOR perturbations, and
+  the Mighty Boxer descriptor study are consistent with this contract. The earlier eight-read and
+  16-read tile forms are the page-crossing dummy reads described above. Earlier timing deltas came
+  from selector classes and page crossings.
+
+#### Corrections to earlier findings
+
+- **Identity copy:** Output is an identity copy of the glyph byte. The earlier statement that the
+  Mighty Boxer mapping was "not a copy or bit reversal" was wrong. The exhaustive in-memory perturbation test
+  supersedes it. The pairing error in the earlier analysis was not re-audited.
+- **No 16-entry mapping:** There is no separate 16-entry or 89-entry lookup table.
+- **Plane source:** The plane comes from bit 7 of the column counter, not from `$015`.
+- **RAM descriptors:** The two "one-tile contexts without descriptor reads" used RAM descriptors.
+  The cartridge-ROM trace could not see them. RAM `$000-$001` is a direct pointer: in the earlier
+  experiment, toggling a pointer bit moved the descriptor, not the glyph run, so no linear shift of
+  the glyph reads was expected.
+- **BIOS-specific trace:** The single BIOS-specific trace under `$001` XOR `$01` is consistent with
+  the moved pointer reading RAM whose prior contents differ between BIOS revisions. This explanation
+  is inferred and was not separately traced. The service itself agreed between revisions in every
+  controlled comparison.
+
+#### Limits
+
+- **Source of evidence:** All results are emulator observations, not physical-hardware
+  measurements.
+- **Selectors outside the corpus:** Costs and flags for selectors `$00-$1F` and `$21-$2E` come only
+  from the synthetic tests.
+- **Untested conditions:** Interrupt-spanning behavior and D-set entry are not part of the
+  contract.
+- **Clean-room boundary:** The model was derived from addresses, write positions, counts, timing,
+  and equality comparisons. No BIOS instructions were reconstructed. No glyph, BIOS, or cartridge
+  bytes were retained or published.
+
+`tools/gamate-bios-f012-summary.py` checks the write shape, return registers, status invariants,
+stack balance, and unrelated hardware effects against the completed-call report. That report has no
+selector or glyph-address columns, so exact timing and glyph addressing are checked by
+`gamatebiosf012`. The validator reports zero mismatches across all 36,518 uninterrupted calls.
 
 ### Two-plane bitmap-copy contract: `$F015`
 

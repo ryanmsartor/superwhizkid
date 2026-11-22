@@ -19,6 +19,7 @@ enum { ROM_TRACE_LIMIT = 16384 };
 
 struct RomTrace {
 	size_t offsets[ROM_TRACE_LIMIT];
+	uint16_t addresses[ROM_TRACE_LIMIT];
 	size_t count, total;
 };
 
@@ -31,8 +32,10 @@ static void captureRomRead(void* context, const struct Gamate* g,
 		uint16_t address, size_t physicalOffset) {
 	struct RomTrace* trace = context;
 	(void) g;
-	(void) address;
-	if (trace->count < ROM_TRACE_LIMIT) trace->offsets[trace->count++] = physicalOffset;
+	if (trace->count < ROM_TRACE_LIMIT) {
+		trace->addresses[trace->count] = address;
+		trace->offsets[trace->count++] = physicalOffset;
+	}
 	trace->total++;
 }
 
@@ -130,6 +133,8 @@ static void printRomSequence(const struct RomTrace* trace) {
 	printf("# bios_rom_sequence: captured=%zu total=%zu offsets=", trace->count, trace->total);
 	for (size_t i = 0; i < trace->count; i++) printf(" %05zX", trace->offsets[i]);
 	if (trace->count < trace->total) printf(" ...");
+	printf("\n# bios_rom_sequence_cpu:");
+	for (size_t i = 0; i < trace->count; i++) printf(" %04X", trace->addresses[i]);
 	putchar('\n');
 }
 

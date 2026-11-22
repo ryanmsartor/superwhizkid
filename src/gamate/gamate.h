@@ -21,6 +21,8 @@ typedef void (*GamateRamAccessCallback)(void* context, const struct Gamate* gama
 	bool write, uint16_t address, uint8_t previous, uint8_t value);
 typedef void (*GamateRomReadCallback)(void* context, const struct Gamate* gamate,
 	uint16_t address, size_t physicalOffset);
+typedef void (*GamateLcdWriteCallback)(void* context, const struct Gamate* gamate,
+	uint8_t reg, uint8_t value);
 #endif
 
 struct GamateCpu {
@@ -58,6 +60,8 @@ struct GamateDiagnostics {
 	GamateRamAccessCallback ramAccessCallback;
 	void* ramAccessContext;
 	GamateRomReadCallback romReadCallback;
+	GamateLcdWriteCallback lcdWriteCallback;
+	void* lcdWriteContext;
 	void* romReadContext;
 	uint16_t ramUniqueWritten, ramUniqueReadBeforeWrite[3];
 	uint8_t ramWritten[0x400 / 8];
@@ -147,6 +151,8 @@ void gamateSetRamDiagnosticWatch(struct Gamate* gamate, uint16_t address,
 	GamateRamAccessCallback callback, void* context);
 void gamateSetRomDiagnosticWatch(struct Gamate* gamate,
 	GamateRomReadCallback callback, void* context);
+void gamateSetLcdDiagnosticWatch(struct Gamate* gamate,
+	GamateLcdWriteCallback callback, void* context);
 #endif
 void gamateSetAudio(struct Gamate* gamate, int16_t* output, size_t frameCapacity, unsigned sampleRate);
 void gamateCpuReset(struct Gamate* gamate);
