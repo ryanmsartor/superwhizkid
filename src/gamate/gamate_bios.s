@@ -147,17 +147,21 @@ reset:
 	sta $4000,x
 	dex
 	bpl @clear_ay
-	sta $5001
 	cli
+	jsr animate_logo
+
 	lda #$00
+	sta $0B
+	lda #$03
+@hold_logo_irq:
+	cmp $0B
+	bne @hold_logo_irq
+
+	lda #$00
+	sta $5001
 	jsr clear_plane
 	lda #$80
 	jsr clear_plane
-
-	lda $0B
-@wait_for_irq:
-	cmp $0B
-	beq @wait_for_irq
 
 	lda #$00
 	ldx #$1F
@@ -166,6 +170,9 @@ reset:
 	dex
 	bpl @initialize_low_ram
 	sta $21
+	lda #$FF
+	sta $20
+	lda #$00
 	sta $5002
 	lda #$47
 	sta $04
@@ -201,6 +208,102 @@ reset:
 	cld
 	sec
 	jmp $6020
+
+animate_logo:
+	lda #<logo
+	sta $18
+	lda #>logo
+	sta $19
+	lda #$00
+	sta $5001
+	jsr clear_plane
+	lda #$80
+	jsr clear_plane
+	lda #$40
+	sta $5001
+	lda #$00
+	sta $5002
+	sta $5003
+	lda #$2E
+	sta $1A
+	ldx #$17
+@source_row:
+	stx $1B
+	ldy #$00
+@source_byte:
+	cpy #$09
+	beq @next_source_row
+	lda ($18),y
+	sta $1C
+	lda $1C
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	tax
+	lda logo_expand_nibbles,x
+	sta $1D
+	lda $1C
+	and #$0F
+	tax
+	lda logo_expand_nibbles,x
+	sta $1C
+	tya
+	asl a
+	asl a
+	clc
+	adc #$01
+	tax
+	lda #$40
+	sta $5001
+	txa
+	sta $5004
+	lda $1A
+	sta $5005
+	lda $1D
+	sta $5007
+	txa
+	clc
+	adc #$01
+	sta $5004
+	lda $1A
+	sta $5005
+	lda $1C
+	sta $5007
+	lda $1A
+	clc
+	adc #$01
+	sta $5005
+	lda $1D
+	sta $5007
+	txa
+	clc
+	adc #$01
+	sta $5004
+	lda $1A
+	sta $5005
+	lda $1C
+	sta $5007
+	iny
+	jmp @source_byte
+@next_source_row:
+	lda $18
+	clc
+	adc #$09
+	sta $18
+	lda $19
+	adc #$00
+	sta $19
+	lda $1A
+	clc
+	adc #$02
+	sta $1A
+	ldx $1B
+	dex
+	beq @done
+	jmp @source_row
+@done:
+	rts
 
 clear_plane:
 	sta $5004
@@ -1679,6 +1782,11 @@ overflow_flag:
 	.byte $40
 zero_flag:
 	.byte $00
+logo:
+	.incbin "gamate_bios_logo.bin"
+logo_expand_nibbles:
+	.byte $00, $03, $0C, $0F, $30, $33, $3C, $3F
+	.byte $C0, $C3, $CC, $CF, $F0, $F3, $FC, $FF
 protection_identifier:
 	.byte "BIT CORPORATION"
 cartridge_identity:

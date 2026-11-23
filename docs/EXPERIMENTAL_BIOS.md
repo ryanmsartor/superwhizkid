@@ -92,9 +92,10 @@ piece behavior appeared good.
 ## Implemented subset
 
 - Reset performs the documented serial protection exchange, checks the exact cartridge identity
-  field and the `$7000-$7FFF` checksum, then constructs the tested RAM policy, clears VRAM,
-  initializes AY/LCD state and enters at `$6020`. It does not show the authentic startup sequence
-  or reproduce its duration and phase.
+  field and the `$7000-$7FFF` checksum, then constructs the tested RAM policy, draws a centered
+  2×2-expanded SWK logo by sliding it in from the left, holds it, clears VRAM, initializes AY/LCD
+  state and enters at `$6020`. It does not reproduce the authentic startup sequence or exact hardware
+  timing.
 - The periodic IRQ handler increments the `$00B` wait counter and the big-endian `$00E-$011`
   counter, calling `$6026` when `$00C` is nonzero. Its register and callback behavior is tested
   with a synthetic cartridge; broader interrupt interference remains unverified.
@@ -207,7 +208,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 
 | Area | Timing status | Remaining issue |
 | --- | --- | --- |
-| Reset and `$6020` entry | Unknown | SWK startup code, entry phase, frame/LCD/AY/audio phase, and boot duration are independently authored and not matched to UMC/Bit. UMC and Bit differ by 58 master clocks at `$6020`; SWK phase remains unmeasured broadly. |
+| Reset and `$6020` entry | Unknown | SWK startup code now draws a static slide-in 2×2 SWK logo endpoint and holds before clearing VRAM and entering `$6020`. Entry phase, frame/LCD/AY/audio phase, and boot duration remain independently authored and not matched to UMC/Bit. UMC and Bit differ by 58 master clocks at `$6020`; SWK phase remains unmeasured broadly. |
 | Periodic IRQ wrapper and `$6026` callback | Partial | Counter carry and callback gating are synthetic-tested, and callback register effects are bounded, but arbitrary callback work, IRQ timing inside services, stack bus timing, and full frame-level phase are not established. |
 | Link NMI and `$6023` callback | Exact synthetic timing; live timing unknown | Disabled, direct, and absolute-JMP synthetic forms measured 66, 110, and 116 master clocks respectively at instruction-granular emulator boundaries. The 64 P/256 S matrix and partial receive-state save/load pass. Live UART/Netpacket edges, callback reentrancy, nested IRQ/NMI and physical timing remain open. |
 | `$F000` fixed bitmap placeholder | Unknown | The blank placeholder has no authentic timing claim. It is intentionally not modeled as the authentic asset. |

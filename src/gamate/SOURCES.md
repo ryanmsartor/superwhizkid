@@ -793,6 +793,16 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 #### Corpus and general method
 
+- SWK startup logo: the user-supplied PNG attached to this development session is a 160×150, 2×2
+  block-scaled image. It is downsampled to 65×46 source pixels and encoded as one bit per source
+  pixel in `src/gamate/gamate_bios_logo.bin` (414 bytes). The reset routine expands each 65×46 row
+  through 9 packed bytes and writes 2×2 output pixels, holds the final centered image, clears both
+  planes, and jumps to `$6020`.
+  A left-slide animation remains a planned presentation step. This is an independently authored visual
+  presentation policy, not a representation of authentic Gamate boot graphics or hardware timing.
+  The generated binary contains the original logo pixels only in purpose-built derived form and is
+  documented as a synthetic replacement asset. No commercial BIOS or cartridge payload is embedded.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

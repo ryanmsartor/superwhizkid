@@ -11,6 +11,7 @@
 *.exe
 
 *.bin
+!src/gamate/gamate_bios_logo.bin
 *.gam
 *.zip
 *.7z

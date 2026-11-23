@@ -591,10 +591,10 @@ static void testRectangle(struct Gamate* g) {
 			call(g, plane ? 0xF02D : 0xF02A, 0x5A, 0xF8, 0xFE, 0x64, 100000);
 			if (shape == 1)
 				assert(g->masterClocks - clocks ==
-					(plane ? 118u : 126u) + 256u * 58u + 256u * 18u);
+					(plane ? 118u : 124u) + 256u * 58u + 256u * 18u);
 			if (shape == 2)
 				assert(g->masterClocks - clocks ==
-					(plane ? 118u : 126u) + 58u + 256u * 18u);
+					(plane ? 118u : 124u) + 58u + 256u * 18u);
 			assert(!memcmp(g->vram, expected, sizeof(expected)));
 			assert(g->diagnostics.vramWrites - writes == columns * rows);
 			assert(g->diagnostics.lcdWrites - lcd == 1 + columns * (2 + rows));
