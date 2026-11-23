@@ -84,8 +84,9 @@ tools/gamate-sweep.sh /path/to/gamate/files 1000 build/gamateboot
 ## Releases
 
 The manual **Build and package cores** GitHub Action builds spruce-compatible ARMHF and ARM64
-libretro cores. Supply a release tag when invoking it; after both builds and architecture/ABI checks
-pass, it creates or replaces that tag and uploads a combined package to a draft GitHub release.
+libretro cores and the independent experimental `gamate_bios_swk.bin`. Supply a release tag when
+invoking it; after both core builds, BIOS validation, and architecture/ABI checks pass, it creates
+or replaces that tag and uploads a combined package to a draft GitHub release.
 
 ## Provenance and license
 

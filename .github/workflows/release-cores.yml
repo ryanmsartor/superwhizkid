@@ -93,6 +93,20 @@ jobs:
             '
           cp build-armhf/superwhizkid_libretro.so output/cores/
 
+      - name: Build experimental replacement BIOS
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y cc65
+          cmake -S . -B build-bios -DCMAKE_BUILD_TYPE=Release \
+            -DSUPERWHIZKID_EXPERIMENTAL_BIOS=ON
+          cmake --build build-bios --parallel "$(nproc)" \
+            --target gamatebiosprototypetest gamate-experimental-bios
+          build-bios/gamatebiosprototypetest build-bios/gamate_bios_swk.bin
+          test "$(stat -c %s build-bios/gamate_bios_swk.bin)" -eq 4096
+          mkdir -p output/bios
+          cp build-bios/gamate_bios_swk.bin output/bios/
+
       - name: Verify architectures and glibc floors
         run: |
           set -euo pipefail
@@ -137,9 +151,14 @@ jobs:
           cp libretro/superwhizkid_libretro.info output/info/
           cp LICENSE output/
 
+          test -f output/bios/gamate_bios_swk.bin || {
+            echo "::error::Experimental replacement BIOS build did not produce gamate_bios_swk.bin"
+            exit 1
+          }
           contents=""
           test -f output/cores64/superwhizkid_libretro.so && contents="$contents cores64/"
           test -f output/cores/superwhizkid_libretro.so && contents="$contents cores/"
+          test -f output/bios/gamate_bios_swk.bin && contents="$contents bios/"
           test -f output/info/superwhizkid_libretro.info && contents="$contents info/"
           if test -f output/cores64/superwhizkid_libretro.so || \
              test -f output/cores/superwhizkid_libretro.so; then
@@ -169,7 +188,7 @@ jobs:
             --verify-tag \
             --draft \
             --title "$title" \
-            --notes "Spruce-compatible ARMHF and ARM64 libretro cores built from commit $GITHUB_SHA. Source and GPL license are available at this tag."
+            --notes "Spruce-compatible ARMHF and ARM64 libretro cores and the independently authored experimental SWK BIOS built from commit $GITHUB_SHA. Source and GPL license are available at this tag."
           gh release upload "$RELEASE_TAG" superwhizkid_libretro.zip --clobber
 
       - name: Upload workflow artifact

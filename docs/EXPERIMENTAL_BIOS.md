@@ -24,6 +24,9 @@ GAMATEBOOT_EXPERIMENTAL_BIOS=1 build-bios/gamateboot \
   build-bios/gamate_bios_swk.bin path/to/cartridge.bin 1000
 ```
 
+The manual release workflow also builds this image with cc65 and validates the synthetic prototype
+suite before placing `gamate_bios_swk.bin` at `bios/gamate_bios_swk.bin` in the release archive.
+
 Replace the cartridge argument with a legally obtained local image. `GAMATEBOOT_EXPERIMENTAL_BIOS=1`
 enables diagnostic trap reporting in `gamateboot`; it must only be used with this experimental
 image. Protection, identity and checksum failures and unsupported service/NMI traps then print an

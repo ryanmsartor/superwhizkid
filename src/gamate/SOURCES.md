@@ -281,6 +281,12 @@ hardware measurements take precedence where they conflict with an emulator.
   directory structure, and reports validation failures with explicit `::error::` messages. The GPL
   license remains an additional top-level archive file. Tag replacement and the draft-release lifecycle
   are independently written for this repository's explicit release-tag input.
+  A separate Ubuntu-host step installs cc65, builds the 4 KiB independently authored
+  `gamate_bios_swk.bin` from `gamate_bios.s`, runs the synthetic prototype target, and verifies the
+  exact 4,096-byte output size before copying it into `output/bios/`. The spruce archive includes
+  `bios/gamate_bios_swk.bin` alongside `cores/`, `cores64/`, and `info/`. This packages a documented
+  synthetic/incomplete replacement experiment, not an authentic, commercial, or substitute firmware
+  image.
 
 ### GitHub Actions and GitHub CLI documentation
 
