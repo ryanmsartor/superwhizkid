@@ -42,6 +42,43 @@ UMC priority tries UMC, Bit, then SWK; Bit priority tries Bit, UMC, then SWK; SW
 UMC, then Bit. Missing or incorrectly sized files are skipped; each BIOS must be exactly 4 KiB.
 Invalid option values use UMC priority. Reset retains the BIOS loaded with the content.
 
+### Three-BIOS differential sessions
+
+`tools/gamate-three-bios-diff.py` launches three isolated RetroArch instances: UMC, Bit, and SWK.
+Each instance receives the same core, cartridge, window geometry, and keyboard input, but an isolated
+system directory containing only its selected BIOS. The session and screenshots, save states, replay
+files, logs, and manifest remain under `/tmp`.
+
+```sh
+tools/gamate-three-bios-diff.py \
+  path/to/Cube-Up.bin \
+  --core build/superwhizkid_libretro.so \
+  --bios-dir path/to/local/gamate \
+  --swk-bios build-bios/gamate_bios_swk.bin \
+  --record-replay
+```
+
+The terminal interface broadcasts arrows, Enter/Escape, and Z/X/A/S/Q/W to all three instances.
+Uppercase `P` pauses, `U` resumes, `V` frame-advances, `R` resets, `T` screenshots, `S` captures a
+paused save-state/screenshot snapshot, and `Q` quits. Snapshot report hashes and pairwise divergence
+flags are written to `snapshots.tsv`; state and screenshot files remain in the per-BIOS session
+directories. Interactive window broadcast requires `xdotool`.
+
+An existing Replay-Event `.bsv` file can be replayed in all three instances without key broadcasting:
+
+```sh
+tools/gamate-three-bios-diff.py \
+  path/to/Cube-Up.bin \
+  --core build/superwhizkid_libretro.so \
+  --bios-dir path/to/local/gamate \
+  --swk-bios build-bios/gamate_bios_swk.bin \
+  --replay path/to/inputs.bsv
+```
+
+Both modes retain the ROM and BIOS inputs read-only. No commercial payload, BIOS bytes, or ROM bytes
+are copied into the repository or included in the report. Replay and snapshot files are diagnostic
+artifacts under the local temporary session only.
+
 The frontend displays an experimental-BIOS notice when SWK is loaded, including through fallback.
 It does not detect the prototype's unsupported-service traps, which can leave the game halted.
 This integration enables testing; it is not a compatibility claim.

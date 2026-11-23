@@ -288,6 +288,17 @@ hardware measurements take precedence where they conflict with an emulator.
   synthetic/incomplete replacement experiment, not an authentic, commercial, or substitute firmware
   image.
 
+- Three-instance interactive differential method: [tools/gamate-three-bios-diff.py](../../tools/gamate-three-bios-diff.py)
+  isolates UMC, Bit, and SWK in separate RetroArch system/config/state/screenshot directories.
+  The selected authentic or experimental BIOS is linked from its local read-only source rather than
+  copied or embedded. The launcher records ROM/core/BIOS SHA-256 values and per-instance priorities
+  in a temporary manifest, broadcasts keyboard inputs and control commands, optionally records or
+  replays RetroArch `.bsv` input, and writes save-state/screenshot snapshots derived from the three
+  processes. It does not retain ROM or BIOS bytes in reports, and replay/snapshot artifacts stay under
+  `/tmp`. `xdotool` is required for interactive window broadcast; replay-only use does not broadcast
+  input. This tool is an interactive diagnosis aid, not proof of physical timing or identical frame
+  alignment.
+
 ### GitHub Actions and GitHub CLI documentation
 
 - Manual-workflow documentation: <https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow>
