@@ -1839,6 +1839,24 @@ copied into the repository, build output, tests, or releases.
     close the controlled timing gap. The synthetic test now asserts 824 clocks, 32 `$FF` writes,
     and the documented register/status effect. D-set arithmetic and interrupt-spanning timing remain
     outside this result.
+  - **`$F033` timing padding validation.** The independent formatter measured 210/410/270/358
+    clocks for focused ordinary, zero, Y=`$FF`, and blank cases. Two NOP instructions in the
+    Y=`$FF` suffix path and three NOP instructions in ordinary Y formatting add 8 and 12 master
+    clocks respectively. The full 526,848-call matrix then matched the documented formula for
+    every input, including first-nibble branches and Y=`$FF`. Interrupt-spanning and callback
+    interference remain outside the matrix.
+  - **Withdrawn timing experiments.** `$F02A/$F02D` were probed with a removed final
+    `LDA $1A`; clean 2×3, 256×1, 1×256 and 1×1 shapes were four master clocks high in both
+    routines. Removing the load moved 1×1 from 202/196 to 200/194 and the shortest neutral 6502
+    instruction could not supply the required two-master-clock correction, so the removal was
+    reverted. `$F030` branch NOP padding raised
+    a zero-state synthetic mismatch to 220 clocks, so it was reverted. `$F033` ordinary/Y=`$FF`
+    padding blocks produced branch-dependent mismatches and were reverted. `$F027` shape/delta
+    instrumentation found 139 of 141 scheduled Cube Up calls with 4 background and 4 sprite records
+    at a 30,588-clock shortfall, plus 0/3 and 0/8 classes with 62,544 and 53,684 shortfalls. No
+    global or shape-only NOP constant can be inferred from that corpus distribution. Temporary
+    diagnostics and all speculative code changes were removed; these attempts are recorded as
+    negative evidence, not implementation facts.
   - **Interactive follow-up.** A RetroArch session loaded the rebuilt core with explicit SWK
     priority and ran the standalone Cube Up cartridge for 12 minutes 36 seconds. Gameplay began
     successfully, and the user-observed gameplay, score digits and piece behavior appeared correct

@@ -332,6 +332,9 @@ format_digits:
 	lda #$20
 	sta $A6
 	sta $A7
+	.repeat 2
+	nop
+	.endrepeat
 	bne @blank
 @digits:
 	tya
@@ -345,6 +348,9 @@ format_digits:
 	and #$0F
 	ora #$30
 	sta $A7
+	.repeat 3
+	nop
+	.endrepeat
 @blank:
 	ldy #$00
 @scan:

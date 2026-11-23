@@ -187,11 +187,48 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | `$F02A` plane-0 rectangle fill | Partial | A single controlled prototype/authentic probe measured 1,532 versus 1,540 master clocks. The 8-clock difference and broader dimension/IRQ combinations remain open. |
 | `$F02D` plane-1 rectangle fill | Partial | Geometry and ordinary output are implemented, but exact timing across dimensions and callback boundaries is not fully matched. |
 | `$F030` pseudorandom step | Unknown exact timing | The timing-removed checker matched 138,688 calls. Exact implementation timing and interrupt-interleaving remain unvalidated. |
-| `$F033` digit formatter | Unknown exact timing | The timing-removed checker matched 526,848 calls. Exact implementation timing and stack-slot behavior remain unvalidated. |
+| `$F033` digit formatter | Exact for the documented formula | The full 526,848-call matrix matched the authentic formula. Y=`$FF` adds 2 NOP (8 master clocks); ordinary Y adds 3 NOP (12 master clocks). Stack-slot and interrupt-spanning timing remain outside the ordinary matrix. |
 
 The prototype has intentionally not padded most services except `$F00F`'s controlled ready path.
 NOP padding is not itself proof of exact timing and can shift IRQ or NMI boundaries if applied
 without a measured formula and call-context review.
+
+### Withdrawn timing experiments
+
+The following experiments were measured, but were reverted because they did not close their
+targeted timing equations or could not be defended across the tested shape classes:
+
+- **`$F02A` and `$F02D` redundant-A-load removal:** a controlled probe removed a final
+  `LDA $1A` from the shared fill routine. Clean baseline measurements in 2×3, 256×1, 1×256,
+  and 1×1 shapes were four master clocks high for both planes (for example `$F02A` $354/$19586/
+  $4796/$206 versus formulas $350/$19582/$4792/$202). Removing the load moved the sampled values
+  in the wrong direction: the shortest 1×1 path became 200/194 instead of 202/196 in the
+  diagnostic matrix. One NOP added 4 master clocks back and still left the 1×1 shapes two clocks
+  high. The change was reverted; the shortest neutral 6502 instruction is also 2 CPU cycles/4
+  master clocks in this emulator, so no one-instruction neutral correction exists for the observed
+  two-clock residual. Neither fill service is upgraded from partial timing status.
+- **`$F024` initial NOP count:** an earlier 22-NOP experiment for the strided-record initializer
+  overshot the target. Corrected 11-NOP padding then measured exactly 824 master clocks and was
+  retained; it is not listed here as withdrawn.
+- **`$F030` branch NOP padding:** state-dependent padding was probed in a first synthetic mismatch
+  at input `$0000`; the measured SWK clock was 138 and the documented emulator-model clock was 188.
+  A 25-NOP candidate overshot because repeat expansion and branch/path accounting were not yet isolated.
+  The work was reverted; `$F030` remains timing-unclosed.
+- **`$F033` initial separate branch padding:** an earlier ordinary/Y=`$FF` experiment used branch
+  blocks that produced 428/372-clock mismatches and was reverted. A later narrower measurement
+  proved that two NOP instructions (8 master clocks) are required for Y=`$FF` and three NOP
+  instructions (12 master clocks) for ordinary Y formatting. That measured correction is retained
+  and the full 526,848-call matrix now matches.
+- **`$F027` global and shape-local padding:** shape/delta instrumentation was tested only to
+  classify replay calls. In the 141-call scheduled Cube Up corpus, 139 calls had 4 background
+  records and 4 sprite records, with predicted 53,630 and actual 84,218 master clocks; one call
+  had 0/3 records at 76,304 predicted/138,848 actual; and one had 0/8 at 66,774 predicted/120,458
+  actual. These gaps span 30,588–62,544 master clocks and are not a single safe NOP constant.
+  Temporary diagnostics were removed and no padding or functional rewrite was retained.
+
+No speculative fill, random, formatter, or compositor timing change remains in production code.
+The retained timing fixes are limited to measured contracts with synthetic assertions:
+`$F00F` and `$F024` in the current firmware.
 
 | Service | Corpus or input set | Result (non-timing properties) |
 | --- | --- | --- |
