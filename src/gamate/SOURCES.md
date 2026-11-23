@@ -1825,9 +1825,14 @@ copied into the repository, build output, tests, or releases.
     `$6023` through `$000C`, restores A, and uses RTI to restore P/PC/S. Synthetic callback tests
     used two received bytes (`$A5` and `$3C`) with callback enable on and off. With dispatch enabled,
     a purpose-written `$6023` code sequence incremented RAM `$08`; disabled dispatch left it unchanged.
-    Entry A/X/Y/P/PC/S and the received byte were checked. The test used direct NMI injection and
-    purpose-written cartridge bytes, not live UART traffic or commercial images. Callback clobber,
-    nested IRQ/NMI, absolute-JMP `$6023` stubs, byte-edge timing, and Netpacket delivery remain open.
+    Entry A/X/Y/P/PC/S and the received byte were checked. The test now covers direct callbacks,
+    absolute-JMP `$6023` stubs, callback clobber of X/Y/A, all 64 C/Z/I/D/V/N status combinations,
+    and all 256 stack pointers. Partial receive-byte state survives save/load and completion of the
+    byte requests NMI. Measured synthetic elapsed clocks are 66 (disabled), 110 (direct callback),
+    and 116 (absolute-JMP stub) master clocks. These values are implementation-observation timings,
+    not physical hardware timing. The test used direct NMI injection and purpose-written cartridge
+    bytes, not live UART traffic or commercial images. Live Netpacket timing, callback reentrancy,
+    nested IRQ/NMI, and physical byte-edge timing remain open.
   - **Interactive follow-up.** A RetroArch session loaded the rebuilt core with explicit SWK
     priority and ran the standalone Cube Up cartridge for 12 minutes 36 seconds. Gameplay began
     successfully, and the user-observed gameplay, score digits and piece behavior appeared correct

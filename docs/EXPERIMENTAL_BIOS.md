@@ -103,7 +103,7 @@ is "Open", "In progress", "Partially complete", or "Cleared".
 
 | # | Deficiency | Status | Current boundary |
 | --- | --- | --- | --- |
-| 1 | UART receive NMI and `$6023` cartridge callback dispatch | Partially complete | Initial implementation reads `$4800` into RAM `$00A`, dispatches through `$6023` only when `$000C` is enabled, restores A, and retains callback-modified X/Y. Synthetic no-op/counter callbacks and `$A5/$3C` received bytes pass. Live link timing, callback reentrancy, absolute-JMP stubs, UART byte-edge timing, and interrupt/callback stack interference remain open. |
+| 1 | UART receive NMI and `$6023` cartridge callback dispatch | Cleared | Emulator-level implementation reads `$4800` into RAM `$00A`, dispatches direct or absolute-JMP `$6023` stubs only when `$000C` is enabled, restores A, retains callback-modified X/Y, resumes partial receive-byte state, and covers all 64 P combinations and 256 S values in synthetic tests. Live Netpacket timing, callback reentrancy, nested IRQ/NMI and physical timing remain outside the emulator-level completion claim. |
 | 2 | BRK-specific cartridge and interrupt behavior | Open | The wrapper and synthetic IRQ path do not establish BRK-specific stack, vector, or callback behavior. |
 | 3 | Interrupt interference and callback aliasing | Open | Arbitrary callback modifications to RAM, LCD, streams, scratch, stack, nested IRQ/NMI, and callback register state are not fully modeled. |
 | 4 | Decimal-mode and aliased-source edges | Open | D-set behavior and mutable I/O/scratch/stack aliases are outside most validated ordinary contracts. |
@@ -169,7 +169,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | --- | --- | --- |
 | Reset and `$6020` entry | Unknown | SWK startup code, entry phase, frame/LCD/AY/audio phase, and boot duration are independently authored and not matched to UMC/Bit. UMC and Bit differ by 58 master clocks at `$6020`; SWK phase remains unmeasured broadly. |
 | Periodic IRQ wrapper and `$6026` callback | Partial | Counter carry and callback gating are synthetic-tested, and callback register effects are bounded, but arbitrary callback work, IRQ timing inside services, stack bus timing, and full frame-level phase are not established. |
-| Link NMI and `$6023` callback | Partial | Initial wrapper/dispatch behavior passes synthetic callbacks and received-byte tests. Live UART edges, absolute-JMP stubs, timing and reentrancy are not validated. |
+| Link NMI and `$6023` callback | Exact synthetic timing; live timing unknown | Disabled, direct, and absolute-JMP synthetic forms measured 66, 110, and 116 master clocks respectively at instruction-granular emulator boundaries. The 64 P/256 S matrix and partial receive-state save/load pass. Live UART/Netpacket edges, callback reentrancy, nested IRQ/NMI and physical timing remain open. |
 | `$F000` fixed bitmap placeholder | Unknown | The blank placeholder has no authentic timing claim. It is intentionally not modeled as the authentic asset. |
 | `$F003` eight-IRQ wait | Exact ready path; partial wait path | 42-master-clock ready path and `8-n` IRQ wait values are tested across the byte domain. Interrupt/callback handler elapsed clocks are separate and remain untraced. |
 | `$F006` counter wait | Exact ready path; partial wait path | 42-master-clock ready path and `5-n` periodic-IRQ wait values are exact in synthetic probes. Callback work between IRQs is not modeled. |

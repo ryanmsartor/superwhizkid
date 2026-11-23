@@ -162,10 +162,14 @@ static void testIrq(struct Gamate* g) {
 
 static void testNmi(struct Gamate* g) {
 	static const uint8_t disabled[] = { 0x60, 0xEA, 0xEA };
-	static const uint8_t callbackCode[] = { 0xE6, 0x08, 0x60 };
-	for (unsigned enabled = 0; enabled <= 1; enabled++) {
-		memcpy(g->rom + 0x23, enabled ? callbackCode : disabled,
-			enabled ? sizeof(callbackCode) : sizeof(disabled));
+	static const uint8_t direct[] = { 0xE6, 0x08, 0xA9, 0x78, 0xA2, 0x34, 0xA0, 0x56, 0x60 };
+	static const uint8_t absStub[] = { 0x4C, 0x40, 0x60 };
+	static const uint8_t absHandler[] = { 0xE6, 0x08, 0xA9, 0x78, 0xA2, 0x34, 0xA0, 0x56, 0x60 };
+	for (unsigned form = 0; form < 3; form++) {
+		if (form == 0) memcpy(g->rom + 0x23, disabled, sizeof(disabled));
+		else if (form == 1) memcpy(g->rom + 0x23, direct, sizeof(direct));
+		else memcpy(g->rom + 0x23, absStub, sizeof(absStub));
+		memcpy(g->rom + 0x40, absHandler, sizeof(absHandler));
 		for (unsigned byteIndex = 0; byteIndex < 2; byteIndex++) {
 			uint8_t byte = byteIndex ? 0x3C : 0xA5;
 			g->cpu.pc = RETURN;
@@ -177,12 +181,13 @@ static void testNmi(struct Gamate* g) {
 			g->cpu.irqMask = false;
 			g->cpu.stopped = false;
 			g->ram[0x0A] = 0;
-			g->ram[0x0C] = (uint8_t) enabled;
+			g->ram[0x0C] = (uint8_t) (form != 0);
 			g->ram[0x08] = 0;
 			g->irq = false;
 			g->nmi = false;
 			g->uartRx = 0;
 			g->uartRxBits = 0;
+			uint64_t startClocks = g->masterClocks;
 			for (int bit = 7; bit >= 0; bit--) {
 				gamateUartReceiveBit(g, (byte >> bit) & 1);
 			}
@@ -196,20 +201,109 @@ static void testNmi(struct Gamate* g) {
 				}
 				step(g);
 			}
-			if (!returned)
-				fprintf(stderr, "NMI enabled=%u byte=$%02X stopped PC=$%04X S=$%02X NMI=%d\n",
-					enabled, byte, g->cpu.pc, g->cpu.s, g->nmi);
+			assert(returned);
+			if (form == 0)
+				assert(g->masterClocks - startClocks == 66);
+			if (form == 1)
+				assert(g->masterClocks - startClocks == 110);
+			if (form == 2)
+				assert(g->masterClocks - startClocks == 116);
+
 			assert(g->cpu.pc == RETURN && g->cpu.s == 0xFF);
 			assert(g->cpu.a == 0xC1);
-			assert(g->cpu.x == 0x47);
-			assert(g->cpu.y == 0x19);
+			assert(g->cpu.x == (form ? 0x34 : 0x47));
+			assert(g->cpu.y == (form ? 0x56 : 0x19));
 			assert(g->cpu.p == 0xA1);
 			assert(g->ram[0x0A] == byte);
-			assert(g->ram[0x08] == enabled);
+			assert(g->ram[0x08] == (form == 0 ? 0 : 1));
 			assert(!g->nmi);
 			assert(!g->diagnostics.unsupportedOpcodes);
 		}
 	}
+
+	for (unsigned p = 0; p < 64; p++) {
+		memcpy(g->rom + 0x23, disabled, sizeof(disabled));
+		uint8_t entryP = 0x20;
+		if (p & 1) entryP |= 1;
+		if (p & 2) entryP |= 2;
+		if (p & 4) entryP |= 4;
+		if (p & 8) entryP |= 8;
+		if (p & 16) entryP |= 64;
+		if (p & 32) entryP |= 128;
+		g->cpu.pc = RETURN;
+		g->cpu.a = 0xC1;
+		g->cpu.x = 0x47;
+		g->cpu.y = 0x19;
+		g->cpu.s = 0xFF;
+		g->cpu.p = entryP;
+		g->cpu.stopped = false;
+		g->ram[0x0C] = 0;
+		g->irq = g->nmi = false;
+		for (int bit = 7; bit >= 0; bit--)
+			gamateUartReceiveBit(g, (0xA5 >> bit) & 1);
+		step(g);
+		for (unsigned i = 0; i < 1000 && g->cpu.pc != RETURN; i++) step(g);
+		assert(g->cpu.pc == RETURN && g->cpu.s == 0xFF);
+		assert(g->cpu.a == 0xC1 && g->cpu.x == 0x47 && g->cpu.y == 0x19);
+		assert(g->cpu.p == (uint8_t) (entryP | 0x20));
+		assert(g->ram[0x0A] == 0xA5);
+	}
+
+	memcpy(g->rom + 0x23, disabled, sizeof(disabled));
+	for (unsigned s = 0; s < 256; s++) {
+		g->cpu.pc = RETURN;
+		g->cpu.a = 0xC1;
+		g->cpu.x = 0x47;
+		g->cpu.y = 0x19;
+		g->cpu.s = (uint8_t) s;
+		g->cpu.p = 0x24;
+		g->cpu.stopped = false;
+		g->ram[0x0C] = 0;
+		g->irq = g->nmi = false;
+		for (int bit = 7; bit >= 0; bit--)
+			gamateUartReceiveBit(g, (0xA5 >> bit) & 1);
+		step(g);
+		for (unsigned i = 0; i < 1000 && g->cpu.pc != RETURN; i++) step(g);
+		assert(g->cpu.pc == RETURN && g->cpu.s == (uint8_t) s);
+		assert(g->cpu.a == 0xC1 && g->cpu.x == 0x47 && g->cpu.y == 0x19);
+		assert(g->cpu.p == 0x24);
+		assert(g->ram[0x0A] == 0xA5);
+	}
+
+	memcpy(g->rom + 0x23, disabled, sizeof(disabled));
+	g->cpu.pc = RETURN;
+	g->cpu.a = 0xC1;
+	g->cpu.x = 0x47;
+	g->cpu.y = 0x19;
+	g->cpu.s = 0xFF;
+	g->cpu.p = 0x24;
+	g->ram[0x0C] = 0;
+	g->irq = g->nmi = false;
+	for (int bit = 7; bit >= 5; bit--)
+		gamateUartReceiveBit(g, (0xA5 >> bit) & 1);
+	size_t stateSize = gamateStateSize(g);
+	uint8_t* state = malloc(stateSize);
+	assert(state);
+	assert(gamateSaveState(g, state, stateSize));
+	g->uartRx = g->uartRxBits = 0;
+	g->nmi = false;
+	assert(gamateLoadState(g, state, stateSize));
+	assert(g->uartRxBits == 3);
+	for (int bit = 4; bit >= 0; bit--)
+		gamateUartReceiveBit(g, (0xA5 >> bit) & 1);
+	step(g);
+	for (unsigned i = 0; i < 1000 && g->cpu.pc != RETURN; i++) step(g);
+	assert(g->cpu.pc == RETURN && g->cpu.s == 0xFF);
+	assert(g->ram[0x0A] == 0xA5);
+	assert(!g->nmi);
+	free(state);
+
+	g->rom[0x23] = 0x60;
+	g->rom[0x24] = 0;
+	g->rom[0x25] = 0;
+	g->rom[0x26] = 0x4C;
+	g->rom[0x27] = 0x30;
+	g->rom[0x28] = 0x60;
 }
 
 static void testWait(struct Gamate* g) {
