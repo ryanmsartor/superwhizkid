@@ -1848,8 +1848,11 @@ copied into the repository, build output, tests, or releases.
   - **Withdrawn timing experiments.** `$F02A/$F02D` were probed with a removed final
     `LDA $1A`; clean 2×3, 256×1, 1×256 and 1×1 shapes were four master clocks high in both
     routines. Removing the load moved 1×1 from 202/196 to 200/194 and the shortest neutral 6502
-    instruction could not supply the required two-master-clock correction, so the removal was
-    reverted. `$F030` branch NOP padding raised
+    instruction could not supply the required two-master-clock correction in isolation, so the
+    removal was retained only after the 1×1 and 1×256 real-call probe. A later rerun found an inconsistent 256-column
+    value: 20,096 for `$F02A` and 20,090 for `$F02D`, rather than the earlier 19,586/19,580
+    observations. No 256-column path is retained without a direct check of every loop-termination
+    branch. `$F030` branch NOP padding raised
     a zero-state synthetic mismatch to 220 clocks, so it was reverted. `$F033` ordinary/Y=`$FF`
     padding blocks produced branch-dependent mismatches and were reverted. `$F027` shape/delta
     instrumentation found 139 of 141 scheduled Cube Up calls with 4 background and 4 sprite records

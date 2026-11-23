@@ -1649,10 +1649,9 @@ fill_rectangle_common:
 	inc $18
 	dex
 	bne @column
-	lda $1A
+	clc
 	ldx #$00
 	ldy #$00
-	clc
 	rts
 
 overflow_flag:
