@@ -1743,6 +1743,12 @@ copied into the repository, build output, tests, or releases.
       the normal JSR return. Its first geometry pass also had to be corrected for source data
       advancement and plane switching; the synthetic suite now checks 1×8, 2×8, 3×8, 4×8 and
       page-crossing shapes. Timing remains deliberately provisional.
+    - `$F021` was initially implemented as a single row/literal loop and an initial synthetic stream
+      initially used `$FE` in the wrong grammar position. The test was corrected: `$FE` terminates
+      only as a row offset or following an escape, while `$FE` as literal data is written. Synthetic
+      RAM/ROM streams and the independent row-stream checker confirmed port, register, status, RAM
+      and peripheral behavior. Exact timing remains deliberately separate from this initial
+      implementation.
     - `$F018` tile-address handling was initially considered with PHP/CLD/ADC/PLP-style arithmetic.
       Emulator observations showed that preserving the stored P/B-bit convention requires a
       different implementation. The final `point_tile` routine uses independent high-byte increment
@@ -1807,6 +1813,13 @@ copied into the repository, build output, tests, or releases.
     1,000-frame run, with frame-1,000 video identical across all three. Initial timing remains
     slower than the authentic baseline; exact page-cross and timing formulas are not claimed by
     this implementation.
+  - **Initial `$F021` implementation validation.** A synthetic RAM stream and ROM stream exercised
+    two row commands, multiple literal bytes, `$FF` escape handling, and `$FE` termination. The
+    independent `gamatebiosrowstream` model matched VRAM/LCD port, returned-register, status, RAM,
+    and unrelated-peripheral behavior; only the deliberately unpadded timing differed. Volcano
+    Panic completed 25 `$F021` calls under UMC, Bit and SWK in a 1,000-frame run. All three call
+    counts matched, while the SWK frame-1,000 video diverged; this run does not establish
+    frame-identical gameplay or exact `$F021` timing.
   - **Interactive follow-up.** A RetroArch session loaded the rebuilt core with explicit SWK
     priority and ran the standalone Cube Up cartridge for 12 minutes 36 seconds. Gameplay began
     successfully, and the user-observed gameplay, score digits and piece behavior appeared correct

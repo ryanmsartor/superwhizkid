@@ -58,7 +58,7 @@ piece behavior appeared good.
 - The periodic IRQ handler increments the `$00B` wait counter and the big-endian `$00E-$011`
   counter, calling `$6026` when `$00C` is nonzero. Its register and callback behavior is tested
   with a synthetic cartridge; broader interrupt interference remains unverified.
-- The seventeen Cube Up and general service slots observed in title and gameplay runs have initial
+- The eighteen Cube Up and general service slots observed in title and gameplay runs have initial
   implementations:
   - `$F000`: fixed bitmap destination.
   - `$F003`: eight-IRQ wait.
@@ -71,6 +71,7 @@ piece behavior appeared good.
   - `$F018`: pair-tile stream.
   - `$F01B`: row-run stream.
   - `$F01E`: two-pass tile stream.
+  - `$F021`: plane-0 literal row stream.
   - `$F024`: record initialization.
   - `$F027`: object-record compositor.
   - `$F02A`: plane-0 rectangle fill.
@@ -84,7 +85,7 @@ piece behavior appeared good.
   interactions are not claimed to be equivalent. Decimal-mode calls, side-effectful or aliased
   sources, and unvisited game paths are not generally validated. `$F027` clears decimal mode
   internally and does not model decimal-mode entry.
-- All other slots enter the explicit `$F036` unsupported trap; this includes `$F021`.
+- All other slots enter the explicit `$F036` unsupported trap.
   Link NMI uses the same trap. Protection, identity,
   and checksum failures enter distinct traps at `$F039`, `$F03C`, and `$F03F`, respectively.
   Link reception and BRK-specific behavior are not implemented. Other games are not validated.
@@ -100,12 +101,13 @@ limitations are in [`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md
 
 The synthetic test suite checks successful and rejected boots, reset, dirty initial VRAM, IRQ
 counter carry, callback gating and register preservation, unsupported traps, IRQ waits, and the
-seventeen service implementations. It exercises all 256 glyph selectors with both incoming overflow
+eighteen service implementations. It exercises all 256 glyph selectors with both incoming overflow
 states, a 256-tile run, wrapped stacks and streams, both LCD-clear modes, and rectangle boundaries for both planes. The newer cases cover:
 
 - The short wait and the five-IRQ-threshold counter wait.
 - The fixed plane-0 `$F00F` 775-byte rectangle, with exact timing and scratch/register behavior.
 - `$F015` two-plane bitmap copies in 1×8, 2×8, 3×8, 4×8 and source-page-crossing shapes.
+- `$F021` literal row streams, escapes, terminating `$FE`, row clearing and register/status behavior.
 - The random step.
 - Digit formatting.
 - Opaque and transparent pair streams.

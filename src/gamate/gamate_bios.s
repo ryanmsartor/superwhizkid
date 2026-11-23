@@ -16,7 +16,7 @@
 	jmp draw_pair_stream        ; $F018
 	jmp draw_row_runs           ; $F01B
 	jmp draw_tile_stream        ; $F01E
-	jmp unsupported             ; $F021
+	jmp draw_row_literals       ; $F021
 	jmp initialize_records      ; $F024
 	jmp composite_objects       ; $F027
 	jmp fill_rectangle          ; $F02A
@@ -1051,6 +1051,93 @@ draw_row_runs:
 	ldx #$00
 	lda #$FE
 	cmp #$FE
+	rts
+
+; Clears plane-0 rows $E6-$FE, then writes literal stream bytes on absolute row offsets.
+draw_row_literals:
+	php
+	lda $15
+	sta $5001
+	clv
+	ldy #$E6
+@clear_row:
+	sty $5005
+	lda #$00
+	sta $5004
+	ldx #$20
+@clear:
+	sta $5007
+	dex
+	bne @clear
+	iny
+	cpy #$FF
+	bne @clear_row
+	ldy #$00
+@offset:
+	tya
+	clc
+	adc $00
+	bcc :+
+	inc $01
+:
+	lda ($00),y
+	bcc @offset_read_done
+	dec $01
+@offset_read_done:
+	cmp #$FE
+	beq @end
+	clc
+	adc #$E6
+	sta $5005
+	lda #$00
+	sta $5004
+@next_index:
+	iny
+	bne :+
+	inc $01
+:
+@value:
+	tya
+	clc
+	adc $00
+	bcc :+
+	inc $01
+:
+	lda ($00),y
+	bcc @value_read_done
+	dec $01
+@value_read_done:
+	cmp #$FF
+	beq @escape
+	sta $5007
+	jmp @next_index
+@escape:
+	iny
+	bne :+
+	inc $01
+:
+	jmp @offset
+@end:
+	php
+	pla
+	and #$40
+	tax
+	pla
+	and #$1C
+	ora #$23
+	cpx #$40
+	beq :+
+	jmp @finish
+:
+	clc
+	cld
+	adc #$40
+@finish:
+	pha
+	lda #$FE
+	tax
+	ldx #$00
+	plp
 	rts
 
 ; Selects graphics tile A from the base at $06,X; returns its low index and sets $02-$03 and $1A.

@@ -261,6 +261,7 @@ static void testGlyphs(struct Gamate* g) {
 			g->ram[0] = 0;
 			g->ram[1] = 3;
 			g->ram[0x15] = 0;
+			g->ram[0x1A] = 0xA5;
 			g->ram[0x300] = 1;
 			g->ram[0x301] = (uint8_t) selector;
 			uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
@@ -669,6 +670,35 @@ static void testRowRuns(struct Gamate* g) {
 	assert(g->ram[0] == 0 && g->ram[1] == 3 && g->ram[0x1A] == 0x33);
 }
 
+static void testRowLiterals(struct Gamate* g) {
+	static const uint8_t stream[] = {
+		2, 0x11, 0x22, 0xFF, 5, 0x33, 0xFF, 0xFE,
+	};
+	uint8_t expected[0x4000];
+	for (unsigned i = 0; i < sizeof(expected); i++) expected[i] = (uint8_t) (i * 37 + i / 5);
+	memcpy(g->vram, expected, sizeof(expected));
+	for (unsigned address = 0xE6 * 32; address < 0xFF * 32; address++)
+		putLinear(expected, address, 0);
+	putLinear(expected, 0xE8 * 32, 0x11);
+	putLinear(expected, 0xE8 * 32 + 1, 0x22);
+	putLinear(expected, 0xEB * 32, 0x33);
+	g->ram[0] = 0;
+	g->ram[1] = 3;
+	g->ram[0x15] = 0;
+	g->ram[0x1A] = 0xA5;
+	memcpy(g->ram + 0x300, stream, sizeof(stream));
+	uint64_t writes = g->diagnostics.vramWrites;
+	uint64_t lcd = g->diagnostics.lcdWrites;
+	call(g, 0xF021, 0x42, 0x55, 0x71, 0x24, 100000);
+	assert(!memcmp(g->vram, expected, sizeof(g->vram)));
+	assert(g->diagnostics.vramWrites - writes == 25 * 32 + 3);
+	assert(g->diagnostics.lcdWrites - lcd == 858);
+	assert(g->cpu.a == 0xFE && g->cpu.x == 0 && g->cpu.y == 7);
+	assert(g->cpu.p == 0x27);
+	assert(g->ram[0] == 0 && g->ram[1] == 3);
+	assert(g->ram[0x1A] == 0xA5);
+}
+
 static uint8_t vramAt(const uint8_t* vram, unsigned column, unsigned row) {
 	return vram[(((row & 0xFF) * 32 + (column & 31)) << 1) | ((column >> 7) & 1)];
 }
@@ -797,6 +827,7 @@ int main(int argc, char** argv) {
 	testDigits(&g);
 	testPairStream(&g);
 	testRowRuns(&g);
+	testRowLiterals(&g);
 	testCompositor(&g);
 	gamateFree(&g);
 	puts("experimental firmware synthetic tests passed");

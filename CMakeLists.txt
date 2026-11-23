@@ -79,11 +79,11 @@ if(SUPERWHIZKID_EXPERIMENTAL_BIOS)
 	set(EXPERIMENTAL_BIOS_OBJECT "${CMAKE_CURRENT_BINARY_DIR}/experimental-gamate-bios.o")
 	add_custom_command(OUTPUT "${EXPERIMENTAL_BIOS}"
 		COMMAND "${SUPERWHIZKID_CA65}" -o "${EXPERIMENTAL_BIOS_OBJECT}"
-			"${CMAKE_CURRENT_SOURCE_DIR}/src/gamategamate_bios.s"
+			"${CMAKE_CURRENT_SOURCE_DIR}/src/gamate/gamate_bios.s"
 		COMMAND "${SUPERWHIZKID_LD65}" -C
-			"${CMAKE_CURRENT_SOURCE_DIR}/src/gamategamate_bios.cfg"
+			"${CMAKE_CURRENT_SOURCE_DIR}/src/gamate/gamate_bios.cfg"
 			-o "${EXPERIMENTAL_BIOS}" "${EXPERIMENTAL_BIOS_OBJECT}"
-		DEPENDS src/gamategamate_bios.s src/gamategamate_bios.cfg
+		DEPENDS src/gamate/gamate_bios.s src/gamate/gamate_bios.cfg
 		BYPRODUCTS "${EXPERIMENTAL_BIOS_OBJECT}"
 		VERBATIM)
 	add_custom_target(gamate-experimental-bios DEPENDS "${EXPERIMENTAL_BIOS}")
