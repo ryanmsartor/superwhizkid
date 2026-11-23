@@ -1820,6 +1820,14 @@ copied into the repository, build output, tests, or releases.
     Panic completed 25 `$F021` calls under UMC, Bit and SWK in a 1,000-frame run. All three call
     counts matched, while the SWK frame-1,000 video diverged; this run does not establish
     frame-identical gameplay or exact `$F021` timing.
+  - **Initial NMI and `$6023` implementation validation.** The independent firmware now installs an
+    NMI vector wrapper that reads `$4800` and stores the completed byte at RAM `$00A`, dispatches
+    `$6023` through `$000C`, restores A, and uses RTI to restore P/PC/S. Synthetic callback tests
+    used two received bytes (`$A5` and `$3C`) with callback enable on and off. With dispatch enabled,
+    a purpose-written `$6023` code sequence incremented RAM `$08`; disabled dispatch left it unchanged.
+    Entry A/X/Y/P/PC/S and the received byte were checked. The test used direct NMI injection and
+    purpose-written cartridge bytes, not live UART traffic or commercial images. Callback clobber,
+    nested IRQ/NMI, absolute-JMP `$6023` stubs, byte-edge timing, and Netpacket delivery remain open.
   - **Interactive follow-up.** A RetroArch session loaded the rebuilt core with explicit SWK
     priority and ran the standalone Cube Up cartridge for 12 minutes 36 seconds. Gameplay began
     successfully, and the user-observed gameplay, score digits and piece behavior appeared correct

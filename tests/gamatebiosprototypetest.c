@@ -158,12 +158,58 @@ static void testIrq(struct Gamate* g) {
 		assert(g->ram[0x0E] == 1 && g->ram[0x0F] == 0);
 		assert(g->ram[0x10] == 0 && g->ram[0x11] == 0);
 	}
-	g->cpu.pc = RETURN;
-	g->nmi = true;
-	step(g);
-	assert(g->cpu.pc == UNSUPPORTED);
-	step(g);
-	assert(g->cpu.pc == UNSUPPORTED);
+}
+
+static void testNmi(struct Gamate* g) {
+	static const uint8_t disabled[] = { 0x60, 0xEA, 0xEA };
+	static const uint8_t callbackCode[] = { 0xE6, 0x08, 0x60 };
+	for (unsigned enabled = 0; enabled <= 1; enabled++) {
+		memcpy(g->rom + 0x23, enabled ? callbackCode : disabled,
+			enabled ? sizeof(callbackCode) : sizeof(disabled));
+		for (unsigned byteIndex = 0; byteIndex < 2; byteIndex++) {
+			uint8_t byte = byteIndex ? 0x3C : 0xA5;
+			g->cpu.pc = RETURN;
+			g->cpu.a = 0xC1;
+			g->cpu.x = 0x47;
+			g->cpu.y = 0x19;
+			g->cpu.s = 0xFF;
+			g->cpu.p = 0xA1;
+			g->cpu.irqMask = false;
+			g->cpu.stopped = false;
+			g->ram[0x0A] = 0;
+			g->ram[0x0C] = (uint8_t) enabled;
+			g->ram[0x08] = 0;
+			g->irq = false;
+			g->nmi = false;
+			g->uartRx = 0;
+			g->uartRxBits = 0;
+			for (int bit = 7; bit >= 0; bit--) {
+				gamateUartReceiveBit(g, (byte >> bit) & 1);
+			}
+			assert(g->nmi);
+			step(g);
+			bool returned = false;
+			for (unsigned instruction = 0; instruction < 1000; instruction++) {
+				if (g->cpu.pc == RETURN && g->cpu.s == 0xFF) {
+					returned = true;
+					break;
+				}
+				step(g);
+			}
+			if (!returned)
+				fprintf(stderr, "NMI enabled=%u byte=$%02X stopped PC=$%04X S=$%02X NMI=%d\n",
+					enabled, byte, g->cpu.pc, g->cpu.s, g->nmi);
+			assert(g->cpu.pc == RETURN && g->cpu.s == 0xFF);
+			assert(g->cpu.a == 0xC1);
+			assert(g->cpu.x == 0x47);
+			assert(g->cpu.y == 0x19);
+			assert(g->cpu.p == 0xA1);
+			assert(g->ram[0x0A] == byte);
+			assert(g->ram[0x08] == enabled);
+			assert(!g->nmi);
+			assert(!g->diagnostics.unsupportedOpcodes);
+		}
+	}
 }
 
 static void testWait(struct Gamate* g) {
@@ -812,6 +858,7 @@ int main(int argc, char** argv) {
 	assert(gamateLoad(&g, rom, sizeof(rom), bios, sizeof(bios)));
 	testBoot(&g);
 	testIrq(&g);
+	testNmi(&g);
 	testWait(&g);
 	testRecords(&g);
 	testClear(&g);

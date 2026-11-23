@@ -58,6 +58,10 @@ piece behavior appeared good.
 - The periodic IRQ handler increments the `$00B` wait counter and the big-endian `$00E-$011`
   counter, calling `$6026` when `$00C` is nonzero. Its register and callback behavior is tested
   with a synthetic cartridge; broader interrupt interference remains unverified.
+- The NMI wrapper reads the completed UART receive byte from `$4800` into RAM `$00A`, then
+  conditionally calls `$6023` when `$000C` is enabled. Synthetic tests cover enabled/disabled
+  dispatch and two received-byte values. Callback register clobber, nested interrupts, live
+  Netpacket traffic and physical timing remain unvalidated.
 - The eighteen Cube Up and general service slots observed in title and gameplay runs have initial
   implementations:
   - `$F000`: fixed bitmap destination.
@@ -86,11 +90,26 @@ piece behavior appeared good.
   sources, and unvisited game paths are not generally validated. `$F027` clears decimal mode
   internally and does not model decimal-mode entry.
 - All other slots enter the explicit `$F036` unsupported trap.
-  Link NMI uses the same trap. Protection, identity,
+  Link NMI is implemented independently below. Protection, identity,
   and checksum failures enter distinct traps at `$F039`, `$F03C`, and `$F03F`, respectively.
   Link reception and BRK-specific behavior are not implemented. Other games are not validated.
   Standalone Cube Up has received a successful interactive SWK run, but this is not a complete
   playthrough or a hardware-validation result.
+
+### Remaining implementation deficiencies
+
+This table tracks unresolved replacement-firmware work separately from the timing tracker. Status
+is "Open", "In progress", "Partially complete", or "Cleared".
+
+| # | Deficiency | Status | Current boundary |
+| --- | --- | --- | --- |
+| 1 | UART receive NMI and `$6023` cartridge callback dispatch | Partially complete | Initial implementation reads `$4800` into RAM `$00A`, dispatches through `$6023` only when `$000C` is enabled, restores A, and retains callback-modified X/Y. Synthetic no-op/counter callbacks and `$A5/$3C` received bytes pass. Live link timing, callback reentrancy, absolute-JMP stubs, UART byte-edge timing, and interrupt/callback stack interference remain open. |
+| 2 | BRK-specific cartridge and interrupt behavior | Open | The wrapper and synthetic IRQ path do not establish BRK-specific stack, vector, or callback behavior. |
+| 3 | Interrupt interference and callback aliasing | Open | Arbitrary callback modifications to RAM, LCD, streams, scratch, stack, nested IRQ/NMI, and callback register state are not fully modeled. |
+| 4 | Decimal-mode and aliased-source edges | Open | D-set behavior and mutable I/O/scratch/stack aliases are outside most validated ordinary contracts. |
+| 5 | Save/reset/NMI and in-flight UART lifecycle | Open | Core UART state is serialized, but successful SWK state load/reset paths with pending NMI, `$6023` callback, and partial receive bytes need firmware-specific validation. |
+| 6 | Authentic startup presentation and boot phase | Open | Reset performs protection, identity and checksum checks and enters `$6020`, but does not reproduce the authentic startup graphics or hardware/audio/frame phase. |
+| 7 | Broad cartridge and interactive hardware validation | Open | Cube Up is strongly exercised, while broad 4-in-1, network-link, save-state and complete-playthrough coverage remains incomplete. |
 
 The chosen low-RAM initialization is a compatibility policy, not measured physical power-on state.
 The common entry contract and its uncertainty are described in
@@ -150,7 +169,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | --- | --- | --- |
 | Reset and `$6020` entry | Unknown | SWK startup code, entry phase, frame/LCD/AY/audio phase, and boot duration are independently authored and not matched to UMC/Bit. UMC and Bit differ by 58 master clocks at `$6020`; SWK phase remains unmeasured broadly. |
 | Periodic IRQ wrapper and `$6026` callback | Partial | Counter carry and callback gating are synthetic-tested, and callback register effects are bounded, but arbitrary callback work, IRQ timing inside services, stack bus timing, and full frame-level phase are not established. |
-| Link NMI and `$6023` callback | Unknown | Not implemented. No NMI callback has been validated in the prototype or under unattended 1,000-frame runs. |
+| Link NMI and `$6023` callback | Partial | Initial wrapper/dispatch behavior passes synthetic callbacks and received-byte tests. Live UART edges, absolute-JMP stubs, timing and reentrancy are not validated. |
 | `$F000` fixed bitmap placeholder | Unknown | The blank placeholder has no authentic timing claim. It is intentionally not modeled as the authentic asset. |
 | `$F003` eight-IRQ wait | Exact ready path; partial wait path | 42-master-clock ready path and `8-n` IRQ wait values are tested across the byte domain. Interrupt/callback handler elapsed clocks are separate and remain untraced. |
 | `$F006` counter wait | Exact ready path; partial wait path | 42-master-clock ready path and `5-n` periodic-IRQ wait values are exact in synthetic probes. Callback work between IRQs is not modeled. |

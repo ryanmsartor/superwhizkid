@@ -238,6 +238,17 @@ irq:
 	pla
 	rti
 
+nmi:
+	pha
+	lda $4800
+	sta $0A
+	lda $0C
+	beq :+
+	jsr $6023
+:
+	pla
+	rti
+
 wait_8_irqs:
 	lda $0B
 	cmp #$08
@@ -1645,6 +1656,6 @@ cartridge_identity:
 	.byte "COPYRIGHT BIT CORPORATION"
 
 .segment "VECTORS"
-	.word unsupported
+	.word nmi
 	.word reset
 	.word irq
