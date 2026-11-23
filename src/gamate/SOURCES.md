@@ -1754,6 +1754,16 @@ copied into the repository, build output, tests, or releases.
     (`5 - n` IRQs for `$00-$04`). UMC and Bit agreed on all 261 observed call contexts in the
     trace fields compared here. SWK did not enter an unsupported trap. Frame-1,000 VRAM hashes
     matched UMC and Bit; audio hashes differed, as they did in prior BIOS comparisons.
+  - **`$F00F` fixed rectangle validation.** After implementing `$F00F` from the resolved
+    775-byte plane-0 contract, the synthetic suite matched the 25-row by 31-column coverage,
+    exact 15,930-master-clock timing, 775 VRAM writes, 829 LCD writes, final `$1FFE` pointer,
+    plane-0 and row-increment state, scratch values, and status/register contract across
+    representative LCD-control and P values.
+    Baseball, a 1,000-frame title that uses only `$F00F` beyond the implemented slots, called
+    `$F00F` once under UMC, Bit and SWK. UMC and Bit each took 15,930 master clocks; SWK matched
+    timing and completed the call without a trap. Whole-run timing and RAM differences shifted
+    the entry frame in SWK and produced a different frame-1,000 video hash; no physical or
+    complete-gameplay result is claimed.
   - **Interactive follow-up.** A RetroArch session loaded the rebuilt core with explicit SWK
     priority and ran the standalone Cube Up cartridge for 12 minutes 36 seconds. Gameplay began
     successfully, and the user-observed gameplay, score digits and piece behavior appeared correct

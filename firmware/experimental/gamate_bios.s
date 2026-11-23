@@ -10,7 +10,7 @@
 	jmp wait_counter            ; $F006
 	jmp wait_24_irqs            ; $F009
 	jmp clear_display           ; $F00C
-	jmp unsupported             ; $F00F
+	jmp clear_fixed_rectangle   ; $F00F
 	jmp draw_glyph_run          ; $F012
 	jmp unsupported             ; $F015
 	jmp draw_pair_stream        ; $F018
@@ -401,6 +401,53 @@ clear_display_plane:
 	iny
 	cpy #$C8
 	bne @row
+	rts
+
+clear_fixed_rectangle:
+	lda $15
+	and #$BF
+	sta $5001
+	lda #$00
+	sta $A8
+	sta $1A
+	lda #$1F
+	sta $18
+	lda #$E6
+	sta $19
+	lda #$FF
+	sta $1C
+	lda #$19
+	sta $1D
+	lda #$00
+	ldy #$E6
+@row:
+	sta $5004
+	tya
+	sta $5005
+	ldx #31
+	lda #$00
+@column:
+	sta $5007
+	dex
+	bne @column
+	iny
+	cpy #$FF
+	bne @row
+	lda $15
+	ora #$40
+	sta $5001
+	lda #$1E
+	sta $5004
+	lda #$FF
+	sta $5005
+	; Neutral cycle padding for the measured fixed-rectangle ready path.
+.repeat 206
+	nop
+.endrepeat
+	lda #$00
+	tax
+	tay
+	sec
 	rts
 
 draw_placeholder:

@@ -58,13 +58,14 @@ piece behavior appeared good.
 - The periodic IRQ handler increments the `$00B` wait counter and the big-endian `$00E-$011`
   counter, calling `$6026` when `$00C` is nonzero. Its register and callback behavior is tested
   with a synthetic cartridge; broader interrupt interference remains unverified.
-- The fifteen Cube Up and general service slots observed in title and gameplay runs have initial
+- The sixteen Cube Up and general service slots observed in title and gameplay runs have initial
   implementations:
   - `$F000`: fixed bitmap destination.
   - `$F003`: eight-IRQ wait.
   - `$F006`: five-IRQ-threshold counter wait.
   - `$F009`: IRQ wait.
   - `$F00C`: two-plane clear.
+  - `$F00F`: fixed plane-0 rectangle clear.
   - `$F012`: glyph run.
   - `$F018`: pair-tile stream.
   - `$F01B`: row-run stream.
@@ -82,7 +83,7 @@ piece behavior appeared good.
   interactions are not claimed to be equivalent. Decimal-mode calls, side-effectful or aliased
   sources, and unvisited game paths are not generally validated. `$F027` clears decimal mode
   internally and does not model decimal-mode entry.
-- All other slots enter the explicit `$F036` unsupported trap; these include `$F00F`, `$F015`
+- All other slots enter the explicit `$F036` unsupported trap; these include `$F015`
   and `$F021`. Link NMI uses the same trap. Protection, identity,
   and checksum failures enter distinct traps at `$F039`, `$F03C`, and `$F03F`, respectively.
   Link reception and BRK-specific behavior are not implemented. Other games are not validated.
@@ -102,6 +103,7 @@ fourteen service implementations. It exercises all 256 glyph selectors with both
 states, a 256-tile run, wrapped stacks and streams, both LCD-clear modes, and rectangle boundaries for both planes. The newer cases cover:
 
 - The short wait and the five-IRQ-threshold counter wait.
+- The fixed plane-0 `$F00F` 775-byte rectangle, with exact timing and scratch/register behavior.
 - The random step.
 - Digit formatting.
 - Opaque and transparent pair streams.

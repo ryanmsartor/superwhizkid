@@ -415,6 +415,48 @@ static void testRectangle(struct Gamate* g) {
 	}
 }
 
+static void testFixedRectangle(struct Gamate* g) {
+	static const uint8_t controls[] = { 0, 0x40, 0x80, 0xFF };
+	static const uint8_t ps[] = { 0x24, 0x28, 0x64, 0x68 };
+	for (unsigned c = 0; c < sizeof(controls); c++) {
+		for (unsigned p = 0; p < sizeof(ps); p++) {
+			uint8_t expected[0x4000];
+			memset(expected, 0xA5, sizeof(expected));
+			memset(g->vram, 0xA5, sizeof(g->vram));
+			g->ram[0x15] = controls[c];
+			g->ram[0x18] = 0x5A;
+			g->ram[0x19] = 0x5A;
+			g->ram[0x1A] = 0x5A;
+			g->ram[0x1C] = 0x5A;
+			g->ram[0x1D] = 0x5A;
+			g->ram[0xA8] = 0x5A;
+			uint64_t writes = g->diagnostics.vramWrites;
+			uint64_t lcd = g->diagnostics.lcdWrites;
+			uint64_t clocks = g->masterClocks;
+			prepareCall(g, 0xF00F, 0xA5, 0x35, 0x68, ps[p]);
+			for (unsigned instruction = 0; instruction < 20000 && g->cpu.pc != RETURN; instruction++)
+				step(g);
+			assert(g->cpu.pc == RETURN);
+			for (unsigned row = 0xE6; row <= 0xFE; row++) {
+				for (unsigned column = 0; column < 31; column++)
+					putExpected(expected, column, row, 0);
+			}
+			assert(!memcmp(g->vram, expected, sizeof(g->vram)));
+			assert(g->diagnostics.vramWrites - writes == 775);
+			assert(g->diagnostics.lcdWrites - lcd == 829);
+			assert(g->masterClocks - clocks == 15930);
+			assert(g->cpu.a == 0 && g->cpu.x == 0 && g->cpu.y == 0);
+			assert(g->cpu.p == (uint8_t) ((ps[p] & 0x7C) | 0x03));
+			assert(g->cpu.s == 0xFF);
+			assert(g->ram[0x18] == 0x1F && g->ram[0x19] == 0xE6);
+			assert(g->ram[0x1A] == 0 && g->ram[0x1C] == 0xFF);
+			assert(g->ram[0x1D] == 0x19 && g->ram[0xA8] == 0);
+			assert(g->vramAddress == 0x1FFE);
+			assert(!g->vramPlane && g->incrementRow);
+		}
+	}
+}
+
 static void testShortWait(struct Gamate* g) {
 	static const uint8_t counters[] = { 0, 7, 8, 0xFF };
 	for (size_t i = 0; i < sizeof(counters); i++) {
@@ -688,6 +730,7 @@ int main(int argc, char** argv) {
 	testGlyphs(&g);
 	testTileStream(&g);
 	testRectangle(&g);
+	testFixedRectangle(&g);
 	testShortWait(&g);
 	testCounterWait(&g);
 	testRandom(&g);
