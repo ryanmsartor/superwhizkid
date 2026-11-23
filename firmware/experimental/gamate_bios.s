@@ -12,7 +12,7 @@
 	jmp clear_display           ; $F00C
 	jmp clear_fixed_rectangle   ; $F00F
 	jmp draw_glyph_run          ; $F012
-	jmp unsupported             ; $F015
+	jmp copy_bitmap             ; $F015
 	jmp draw_pair_stream        ; $F018
 	jmp draw_row_runs           ; $F01B
 	jmp draw_tile_stream        ; $F01E
@@ -401,6 +401,110 @@ clear_display_plane:
 	iny
 	cpy #$C8
 	bne @row
+	rts
+
+copy_plane:
+@column:
+	lda $018
+	sta $5004
+	lda $019
+	sta $5005
+	ldy #$00
+	ldx $01D
+@row:
+	lda ($1E),y
+	sta $5007
+	sta $01B
+	iny
+	dex
+	bne @row
+	lda $01D
+	bne @advance
+	inc $1F
+	jmp @next_column
+@advance:
+	lda $1E
+	clc
+	adc $01D
+	sta $1E
+	bcc @next_column
+	inc $1F
+@next_column:
+	lda $018
+	clc
+	adc #$01
+	sta $018
+	dec $01C
+	bne @column
+	rts
+
+copy_bitmap:
+	txa
+	pha
+	php
+	pla
+	sta $01A
+	lda $015
+	ora #$40
+	sta $5001
+	lda $01C
+	lsr a
+	lsr a
+	lsr a
+	sta $01C
+	sty $019
+	txa
+	lsr a
+	lsr a
+	lsr a
+	sta $018
+	lda $000
+	sta $1E
+	lda $001
+	sta $1F
+	lda $01C
+	pha
+	jsr copy_plane
+	pla
+	sta $01C
+	lda $002
+	sta $000
+	lda $003
+	sta $001
+	lda $002
+	sta $1E
+	lda $003
+	sta $1F
+	lda $018
+	sec
+	sbc $01C
+	ora #$80
+	sta $018
+	lda $01C
+	pha
+	jsr copy_plane
+	pla
+	sta $01C
+	lda $002
+	sta $000
+	lda $003
+	sta $001
+	lda #$00
+	ldy $01C
+@multiply:
+	clc
+	adc $01D
+	dey
+	bne @multiply
+	tay
+	pla
+	tax
+	lda $01A
+	and #$4C
+	ora #$02
+	pha
+	lda $01B
+	plp
 	rts
 
 clear_fixed_rectangle:

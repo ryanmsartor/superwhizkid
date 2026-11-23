@@ -1764,6 +1764,13 @@ copied into the repository, build output, tests, or releases.
     timing and completed the call without a trap. Whole-run timing and RAM differences shifted
     the entry frame in SWK and produced a different frame-1,000 video hash; no physical or
     complete-gameplay result is claimed.
+  - **Initial `$F015` implementation validation.** Synthetic 1×8, 2×8, 3×8, 4×8 and page-crossing
+    two-plane copies match the resolved copy geometry, two source pointers, final byte, width/height
+    return values, scratch roles and unrelated hardware model. Tennis, which contains a tail-JMP
+    entry form for `$F015`, completed 73 `$F015` calls under each of UMC, Bit and SWK in a
+    1,000-frame run, with frame-1,000 video identical across all three. Initial timing remains
+    slower than the authentic baseline; exact page-cross and timing formulas are not claimed by
+    this implementation.
   - **Interactive follow-up.** A RetroArch session loaded the rebuilt core with explicit SWK
     priority and ran the standalone Cube Up cartridge for 12 minutes 36 seconds. Gameplay began
     successfully, and the user-observed gameplay, score digits and piece behavior appeared correct

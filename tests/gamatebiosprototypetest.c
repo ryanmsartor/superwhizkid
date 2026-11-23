@@ -415,6 +415,65 @@ static void testRectangle(struct Gamate* g) {
 	}
 }
 
+static void testBitmapCopy(struct Gamate* g) {
+	static const struct {
+		uint8_t horizontal;
+		uint8_t rows;
+		uint16_t plane0;
+		uint16_t plane1;
+	} shapes[] = {
+		{ 8, 8, 0x6000, 0x6100 },
+		{ 8, 1, 0x6000, 0x6100 },
+		{ 16, 8, 0x6000, 0x6100 },
+		{ 24, 8, 0x6000, 0x6100 },
+		{ 32, 8, 0x6000, 0x6100 },
+		{ 24, 8, 0x6000, 0x60FE },
+	};
+	for (size_t s = 0; s < sizeof(shapes) / sizeof(shapes[0]); s++) {
+		for (unsigned i = 0; i < 0x4000; i++)
+			g->rom[i] = (uint8_t) (i * 73 + i / 7);
+		uint8_t expected[0x4000];
+		memset(expected, 0xA5, sizeof(expected));
+		memset(g->vram, 0xA5, sizeof(g->vram));
+		g->ram[0x00] = (uint8_t) shapes[s].plane0;
+		g->ram[0x01] = (uint8_t) (shapes[s].plane0 >> 8);
+		g->ram[0x02] = (uint8_t) shapes[s].plane1;
+		g->ram[0x03] = (uint8_t) (shapes[s].plane1 >> 8);
+		g->ram[0x15] = 0x20;
+		g->ram[0x1C] = shapes[s].horizontal;
+		g->ram[0x1D] = shapes[s].rows;
+		unsigned columns = shapes[s].horizontal >> 3;
+		unsigned rows = shapes[s].rows;
+		unsigned plane0Offset = shapes[s].plane0 - 0x6000;
+		unsigned plane1Offset = shapes[s].plane1 - 0x6000;
+		uint8_t finalByte = 0;
+		for (unsigned column = 0; column < columns; column++) {
+			for (unsigned row = 0; row < rows; row++) {
+				uint8_t source0 = g->rom[(plane0Offset + column * rows + row) & 0x3FFF];
+				uint8_t source1 = g->rom[(plane1Offset + column * rows + row) & 0x3FFF];
+				putExpected(expected, column + 2, row + 0xF8, source0);
+				putExpected(expected, 0x80 + column + 2, row + 0xF8, source1);
+				if (column == columns - 1 && row == rows - 1)
+					finalByte = source1;
+			}
+		}
+		uint64_t writes = g->diagnostics.vramWrites;
+		uint64_t lcd = g->diagnostics.lcdWrites;
+		call(g, 0xF015, 0xA5, 0x13, 0xF8, 0x64, 100000);
+		assert(!memcmp(g->vram, expected, sizeof(g->vram)));
+		assert(g->diagnostics.vramWrites - writes == 2 * columns * rows);
+		assert(g->diagnostics.lcdWrites - lcd == 1 + 2 * columns * (2 + rows));
+		assert(g->cpu.a == finalByte);
+		assert(g->cpu.x == 0x13);
+		assert(g->cpu.y == (columns * rows & 0xFF));
+		assert(g->cpu.p == 0x66);
+		assert(g->ram[0x000] == (uint8_t) shapes[s].plane1);
+		assert(g->ram[0x001] == (uint8_t) (shapes[s].plane1 >> 8));
+		assert(g->ram[0x002] == (uint8_t) shapes[s].plane1);
+		assert(g->ram[0x003] == (uint8_t) (shapes[s].plane1 >> 8));
+	}
+}
+
 static void testFixedRectangle(struct Gamate* g) {
 	static const uint8_t controls[] = { 0, 0x40, 0x80, 0xFF };
 	static const uint8_t ps[] = { 0x24, 0x28, 0x64, 0x68 };
@@ -730,6 +789,7 @@ int main(int argc, char** argv) {
 	testGlyphs(&g);
 	testTileStream(&g);
 	testRectangle(&g);
+	testBitmapCopy(&g);
 	testFixedRectangle(&g);
 	testShortWait(&g);
 	testCounterWait(&g);
