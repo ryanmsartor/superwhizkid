@@ -1477,7 +1477,7 @@ For `columns = $01C >> 3` and `rows = $01D`, with ordinary nonzero counts:
 | --- | --- |
 | VRAM writes | `columns * rows`, all in plane 0. |
 | LCD writes | `1 + columns * (2 + rows)`. |
-| Master clocks | `126 + columns * (58 + 18 * rows)`. |
+| Master clocks | `126 + 58 * columns + 18 * columns * rows`. |
 | Registers | A and S are preserved; X and Y return zero. |
 | Status | C and N clear, Z sets, I and D are preserved, and V is preserved. |
 | Scratch | `$018-$01A` hold service scratch and `$0A8` receives the plane-0 selector. |
@@ -1485,7 +1485,8 @@ For `columns = $01C >> 3` and `rows = $01D`, with ordinary nonzero counts:
 
 The baseline 1×1 call writes A once at `(X >> 3, Y)` and takes 202 master clocks. Width and height
 perturbations produce the corresponding column-major coverage and the LCD/write/timing equations
-above. As with the 8-bit loops in the neighboring fill services, a derived zero count is interpreted
+above. The expanded form is equivalent to `126 + columns * (58 + 18 * rows)` for ordinary
+nonzero dimensions. As with the 8-bit loops in the neighboring fill services, a derived zero count is interpreted
 through 256 iterations; a 256×256 controlled probe therefore reaches 65,536 writes, but the general
 normal-dimension formula should remain the primary contract. The plane-0 description applies to
 ordinary nonzero widths: a zero-derived 256-column probe beginning at X=`$F8`, Y=`$FE`, with one
@@ -2190,11 +2191,15 @@ For `columns = $01C >> 3` and `rows = $01D`, interpreted with zero as 256 for th
 | --- | --- |
 | VRAM writes | `columns * rows`, normally all to plane 1. |
 | LCD writes | `1 + columns * (2 + rows)`: one control write, two address writes per column, then the data writes. |
-| Master clocks | `120 + columns * (58 + 18 * rows)`. |
+| Master clocks | `120 + 58 * columns + 18 * columns * rows`. |
 | Registers | A and S preserved; X and Y return zero. |
 | Status | C and N clear, Z set; I, D, and V preserved. |
 | Scratch | `$018` is the raw plane/column byte and finishes one column past the last start; `$019` caches Y, `$01A` caches A, and `$0A8` receives the plane-1 selector. |
 | Other hardware | Scroll, AY, mapper, and UART state are preserved. |
+
+For a derived 256-loop count in the replacement implementation, plane 1 adds `118` instead of
+`120` in both 256×1 and 1×256 controlled shapes. The observed synthetic clocks are 19,574 and
+4,784 respectively; the corresponding plane-0 values are 19,582 and 4,792.
 
 The most common observed shape is 1×1 byte (205,796 clean calls), but the corpus includes widths up
 to 21 byte columns and heights up to 200 rows. Mighty Boxer's first authentic call demonstrates a

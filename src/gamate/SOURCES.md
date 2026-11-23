@@ -1849,11 +1849,15 @@ copied into the repository, build output, tests, or releases.
     `LDA $1A`; clean 2×3, 256×1, 1×256 and 1×1 shapes were four master clocks high in both
     routines. Removing the load moved 1×1 from 202/196 to 200/194 and the shortest neutral 6502
     instruction could not supply the required two-master-clock correction in isolation, so the
-    removal was retained only after the 1×1 and 1×256 real-call probe. A later rerun found an inconsistent 256-column
-    value: 20,096 for `$F02A` and 20,090 for `$F02D`, rather than the earlier 19,586/19,580
-    observations. No 256-column path is retained without a direct check of every loop-termination
-    branch. `$F030` branch NOP padding raised
-    a zero-state synthetic mismatch to 220 clocks, so it was reverted. `$F033` ordinary/Y=`$FF`
+    removal was retained only after the 1×1 and 1×256 real-call probe. A direct synthetic rerun
+    then resolved the 256-wrap values: `$F02A` measured 19,582 for 256×1 and 4,792 for 1×256;
+    `$F02D` measured 19,574 and 4,784. Plane 0 follows `126 + 58*c + 18*c*r`; plane 1 follows
+    the same expanded form with an additive 118 in 256-wrap shapes. These are retained as exact
+    SWK synthetic shape assertions. Ordinary plane-1 timing uses base 120. 1×1 authentic residuals and broad interrupt
+    timing remain open. `$F030` branch NOP padding raised
+    a zero-state synthetic mismatch to 220 clocks, so it was reverted. Later NOP/branch attempts
+    measured 190 and 238 for the zero state while the documented target remained 188, so they were
+    also reverted. `$F033` ordinary/Y=`$FF`
     padding blocks produced branch-dependent mismatches and were reverted. `$F027` shape/delta
     instrumentation found 139 of 141 scheduled Cube Up calls with 4 background and 4 sprite records
     at a 30,588-clock shortfall, plus 0/3 and 0/8 classes with 62,544 and 53,684 shortfalls. No

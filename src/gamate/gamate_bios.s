@@ -279,19 +279,40 @@ wait_counter:
 next_random:
 	lda $12
 	ora $13
-	bne :+
+	bne @nonzero
 	lda #$FF
 	sta $12
 	sta $13
-:
 	lda #$00
 	sta $14
 	lda $13
 	and #$04
-	beq :+
+	beq @zero_finish
 	lda #$80
 	sta $14
-:
+@zero_finish:
+	.repeat 10
+	nop
+	.endrepeat
+	bne @calculated
+@nonzero:
+	lda #$00
+	sta $14
+	lda $13
+	and #$04
+	bne @bit4
+	.repeat 12
+	nop
+	.endrepeat
+	beq @calculated
+@bit4:
+	lda #$80
+	sta $14
+	.repeat 10
+	nop
+	.endrepeat
+	bne @calculated
+@calculated:
 	lda $12
 	asl a
 	asl a

@@ -184,8 +184,8 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | `$F021` row-literal stream | Partial | Port, register, status, RAM and peripheral behavior match the independent model. Initial implementation timing differs, and exact formula/page-cross behavior has not yet been fitted. |
 | `$F024` record initialization | Exact for the controlled contract | Synthetic D-clear record initialization matches 824 master clocks, 32 `$FF` writes, register/status and no peripheral effects. D-set, later callback and interrupt-spanning contexts remain open. |
 | `$F027` sprite/background compositor | Poor timing match | Cube Up corpus calls averaged about 88,900 master clocks versus 54,800 under UMC; a 33,000–68,000-clock disadvantage appeared in the corpus. Pixel and access behavior is resolved. |
-| `$F02A` plane-0 rectangle fill | Partial | A structural tail substitution preserves A/X/Y and closes common 1×1 cost to 200 instead of 204; the authentic formula is 202. Ordinary dimensions close much of the 4/8-clock discrepancy, but 256-column and broad IRQ combinations remain open. |
-| `$F02D` plane-1 rectangle fill | Partial | A structural tail substitution closes the common 1×1 cost to 194 instead of 200; the authentic formula is 196. Ordinary dimensions improve, but 256-column and broad IRQ combinations remain open. |
+| `$F02A` plane-0 rectangle fill | Partial | Ordinary synthetic timing is `126 + 58*c + 18*c*r`, and direct 256×1/1×256 checks measure 19,582/4,792 clocks. The 1×1 authentic residual remains 202 versus 200 in the replacement, and broad IRQ combinations remain open. |
+| `$F02D` plane-1 rectangle fill | Partial | Ordinary synthetic timing is `120 + 58*c + 18*c*r`, and direct 256×1/1×256 checks measure 19,574/4,784 clocks. The 1×1 authentic residual remains 196 versus 194 in the replacement, and broad IRQ combinations remain open. |
 | `$F030` pseudorandom step | Unknown exact timing | The timing-removed checker matched 138,688 calls. Exact implementation timing and interrupt-interleaving remain unvalidated. |
 | `$F033` digit formatter | Exact for the documented formula | The full 526,848-call matrix matched the authentic formula. Y=`$FF` adds 2 NOP (8 master clocks); ordinary Y adds 3 NOP (12 master clocks). Stack-slot and interrupt-spanning timing remain outside the ordinary matrix. |
 
@@ -212,8 +212,10 @@ targeted timing equations or could not be defended across the tested shape class
   retained; it is not listed here as withdrawn.
 - **`$F030` branch NOP padding:** state-dependent padding was probed in a first synthetic mismatch
   at input `$0000`; the measured SWK clock was 138 and the documented emulator-model clock was 188.
-  A 25-NOP candidate overshot because repeat expansion and branch/path accounting were not yet isolated.
-  The work was reverted; `$F030` remains timing-unclosed.
+  Multiple zero/bit4 branches were tested, including 10- and 11-NOP blocks combined with taken
+  branches. The first attempt measured 238/190 instead of 188, and further attempts could not
+  isolate a 50/58-master-clock block without changing state or branch control. The work was
+  reverted; `$F030` remains timing-unclosed.
 - **`$F033` initial separate branch padding:** an earlier ordinary/Y=`$FF` experiment used branch
   blocks that produced 428/372-clock mismatches and was reverted. A later narrower measurement
   proved that two NOP instructions (8 master clocks) are required for Y=`$FF` and three NOP
