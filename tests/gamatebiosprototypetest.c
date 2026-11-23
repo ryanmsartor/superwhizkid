@@ -330,7 +330,9 @@ static void testRecords(struct Gamate* g) {
 	for (unsigned i = 0; i < sizeof(expected); i++) expected[i] = (uint8_t) (i ^ 0x5A);
 	memcpy(g->ram, expected, sizeof(expected));
 	for (unsigned i = 0; i < 16; i++) expected[0x23 + 8 * i] = expected[0x28 + 8 * i] = 0xFF;
+	uint64_t clocks = g->masterClocks;
 	call(g, 0xF024, 0x13, 0x49, 0x72, 0x24, 10000);
+	assert(g->masterClocks - clocks == 824);
 	assert(!memcmp(g->ram, expected, sizeof(expected)));
 	assert(g->cpu.a == 0x80 && g->cpu.x == 0 && g->cpu.y == 0x80);
 	assert(g->cpu.p == 0x66);
@@ -532,15 +534,15 @@ static void testTileStream(struct Gamate* g) {
 
 static void testRectangle(struct Gamate* g) {
 	for (unsigned plane = 0; plane < 2; plane++) {
-		for (unsigned shape = 0; shape < 3; shape++) {
+		for (unsigned shape = 0; shape < 4; shape++) {
 			uint8_t expected[0x4000];
 			memset(expected, 0xA5, sizeof(expected));
 			memset(g->vram, 0xA5, sizeof(g->vram));
 			g->ram[0x15] = 0;
-			g->ram[0x1C] = shape == 0 ? 16 : shape == 1 ? 0 : 8;
-			g->ram[0x1D] = shape == 0 ? 3 : shape == 1 ? 1 : 0;
+			g->ram[0x1C] = shape == 0 ? 16 : shape == 1 ? 0 : shape == 2 ? 8 : 8;
+			g->ram[0x1D] = shape == 0 ? 3 : shape == 1 ? 1 : shape == 2 ? 0 : 1;
 			unsigned columns = shape == 0 ? 2 : shape == 1 ? 256 : 1;
-			unsigned rows = shape == 0 ? 3 : shape == 1 ? 1 : 256;
+			unsigned rows = shape == 0 ? 3 : shape == 1 ? 1 : shape == 2 ? 256 : 1;
 			for (unsigned column = 0; column < columns; column++) {
 				for (unsigned row = 0; row < rows; row++)
 					putExpected(expected, (0x80 * plane + 31 + column) & 0xFF, 0xFE + row, 0x5A);

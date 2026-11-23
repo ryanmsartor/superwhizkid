@@ -378,6 +378,9 @@ initialize_records:
 	lda #$80
 	bit overflow_flag
 	clc
+	.repeat 11
+	nop
+	.endrepeat
 	rts
 
 clear_display:

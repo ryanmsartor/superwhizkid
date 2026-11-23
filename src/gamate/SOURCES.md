@@ -1833,6 +1833,12 @@ copied into the repository, build output, tests, or releases.
     not physical hardware timing. The test used direct NMI injection and purpose-written cartridge
     bytes, not live UART traffic or commercial images. Live Netpacket timing, callback reentrancy,
     nested IRQ/NMI, and physical byte-edge timing remain open.
+  - **`$F024` timing padding validation.** The documented strided-record initializer takes 824
+    master clocks in D-clear synthetic calls. The independent firmware measured 780 before a focused
+    NOP block was added; 11 6502 `NOP` instructions add 44 master clocks under this emulator and
+    close the controlled timing gap. The synthetic test now asserts 824 clocks, 32 `$FF` writes,
+    and the documented register/status effect. D-set arithmetic and interrupt-spanning timing remain
+    outside this result.
   - **Interactive follow-up.** A RetroArch session loaded the rebuilt core with explicit SWK
     priority and ran the standalone Cube Up cartridge for 12 minutes 36 seconds. Gameplay began
     successfully, and the user-observed gameplay, score digits and piece behavior appeared correct

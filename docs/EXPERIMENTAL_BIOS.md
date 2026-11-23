@@ -182,7 +182,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | `$F01B` row-run stream | Partial | Synthetic ordinary and escape/wrap cases matched UMC timing. Later callbacks, RAM aliases, decimal mode and interrupt-handler work are not fully timing-equivalent. |
 | `$F01E` tile-literal stream | Partial | A sampled context was 314,334 prototype clocks versus 324,556 authentic clocks; exact timing and broad stream variation remain open. |
 | `$F021` row-literal stream | Partial | Port, register, status, RAM and peripheral behavior match the independent model. Initial implementation timing differs, and exact formula/page-cross behavior has not yet been fitted. |
-| `$F024` record initialization | Unknown | Ordinary RAM-write behavior is implemented, but exact timing across all strided-record contexts is not established by the prototype tests. |
+| `$F024` record initialization | Exact for the controlled contract | Synthetic D-clear record initialization matches 824 master clocks, 32 `$FF` writes, register/status and no peripheral effects. D-set, later callback and interrupt-spanning contexts remain open. |
 | `$F027` sprite/background compositor | Poor timing match | Cube Up corpus calls averaged about 88,900 master clocks versus 54,800 under UMC; a 33,000–68,000-clock disadvantage appeared in the corpus. Pixel and access behavior is resolved. |
 | `$F02A` plane-0 rectangle fill | Partial | A single controlled prototype/authentic probe measured 1,532 versus 1,540 master clocks. The 8-clock difference and broader dimension/IRQ combinations remain open. |
 | `$F02D` plane-1 rectangle fill | Partial | Geometry and ordinary output are implemented, but exact timing across dimensions and callback boundaries is not fully matched. |
