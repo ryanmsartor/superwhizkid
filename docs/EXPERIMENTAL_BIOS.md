@@ -135,7 +135,44 @@ prototype/authentic durations were 314,334/324,556, 3,218/2,300, and 1,532/1,540
 The probe covered one call context per service, not every possible call.
 
 The gameplay services were then compared against the existing authentic-call checkers and
-contract models. All comparisons ignore timing.
+contract models. The table below distinguishes checked service and callback timing from
+non-timing behavior.
+
+### Runtime callback and timing tracker
+
+This table tracks emulator-observation timing status. "Exact" means a synthetic or controlled
+probe matched the documented/authentic value in the listed scope. "Partial" means ordinary
+geometry or register behavior is established but timing still varies, spans callbacks, or lacks
+broad coverage. "Unknown" means exact elapsed clocks or all interrupt/callback contexts are not
+measured or modeled. These labels are not claims of physical Gamate timing.
+
+| Area | Timing status | Remaining issue |
+| --- | --- | --- |
+| Reset and `$6020` entry | Unknown | SWK startup code, entry phase, frame/LCD/AY/audio phase, and boot duration are independently authored and not matched to UMC/Bit. UMC and Bit differ by 58 master clocks at `$6020`; SWK phase remains unmeasured broadly. |
+| Periodic IRQ wrapper and `$6026` callback | Partial | Counter carry and callback gating are synthetic-tested, and callback register effects are bounded, but arbitrary callback work, IRQ timing inside services, stack bus timing, and full frame-level phase are not established. |
+| Link NMI and `$6023` callback | Unknown | Not implemented. No NMI callback has been validated in the prototype or under unattended 1,000-frame runs. |
+| `$F000` fixed bitmap placeholder | Unknown | The blank placeholder has no authentic timing claim. It is intentionally not modeled as the authentic asset. |
+| `$F003` eight-IRQ wait | Exact ready path; partial wait path | 42-master-clock ready path and `8-n` IRQ wait values are tested across the byte domain. Interrupt/callback handler elapsed clocks are separate and remain untraced. |
+| `$F006` counter wait | Exact ready path; partial wait path | 42-master-clock ready path and `5-n` periodic-IRQ wait values are exact in synthetic probes. Callback work between IRQs is not modeled. |
+| `$F009` long wait | Exact ready path; partial wait path | 42-master-clock ready path and `24-n` periodic-IRQ wait values are exact. Callback-modified X and callback elapsed time remain context-dependent. |
+| `$F00C` two-plane clear | Partial | One controlled context and ordinary VRAM/LCD effects are compared; exact broad timing formulas and callback-interference timing remain open. |
+| `$F00F` fixed plane-0 clear | Exact for the controlled contract | Synthetic 775-byte VRAM, 829-LCD-write and 15,930-master-clock results agree; broader interrupt and side-effectful contexts are not claimed. NOP padding is an implementation convenience, not a timing substitute. |
+| `$F012` glyph run | Partial | A sampled prototype/authentic context was 3,218 versus 2,300 master clocks. Selector, address and write behavior are resolved, but exact implementation timing remains unresolved. |
+| `$F015` two-plane bitmap copy | Partial | Geometry, LCD writes, page crossing and tail-JMP behavior are implemented and tested, but exact page-cross formulas and authentic elapsed clocks are not matched. |
+| `$F018` pair stream | Partial | Corpus and synthetic non-timing properties match. Timing differs; complete caller, alias and interrupt-spanning timing remain open. |
+| `$F01B` row-run stream | Partial | Synthetic ordinary and escape/wrap cases matched UMC timing. Later callbacks, RAM aliases, decimal mode and interrupt-handler work are not fully timing-equivalent. |
+| `$F01E` tile-literal stream | Partial | A sampled context was 314,334 prototype clocks versus 324,556 authentic clocks; exact timing and broad stream variation remain open. |
+| `$F021` row-literal stream | Partial | Port, register, status, RAM and peripheral behavior match the independent model. Initial implementation timing differs, and exact formula/page-cross behavior has not yet been fitted. |
+| `$F024` record initialization | Unknown | Ordinary RAM-write behavior is implemented, but exact timing across all strided-record contexts is not established by the prototype tests. |
+| `$F027` sprite/background compositor | Poor timing match | Cube Up corpus calls averaged about 88,900 master clocks versus 54,800 under UMC; a 33,000–68,000-clock disadvantage appeared in the corpus. Pixel and access behavior is resolved. |
+| `$F02A` plane-0 rectangle fill | Partial | A single controlled prototype/authentic probe measured 1,532 versus 1,540 master clocks. The 8-clock difference and broader dimension/IRQ combinations remain open. |
+| `$F02D` plane-1 rectangle fill | Partial | Geometry and ordinary output are implemented, but exact timing across dimensions and callback boundaries is not fully matched. |
+| `$F030` pseudorandom step | Unknown exact timing | The timing-removed checker matched 138,688 calls. Exact implementation timing and interrupt-interleaving remain unvalidated. |
+| `$F033` digit formatter | Unknown exact timing | The timing-removed checker matched 526,848 calls. Exact implementation timing and stack-slot behavior remain unvalidated. |
+
+The prototype has intentionally not padded most services except `$F00F`'s controlled ready path.
+NOP padding is not itself proof of exact timing and can shift IRQ or NMI boundaries if applied
+without a measured formula and call-context review.
 
 | Service | Corpus or input set | Result (non-timing properties) |
 | --- | --- | --- |
