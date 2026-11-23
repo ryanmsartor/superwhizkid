@@ -1934,6 +1934,17 @@ copied into the repository, build output, tests, or releases.
   applies its restored mask immediately. The then-current 58-cartridge/two-BIOS/1,000-frame matrix was
   116/116. This validates compatibility and the tested CPU boundary cases, but not
   the NCR 65CX02's unmeasured interrupt-vector bus cycle.
+- BRK cartridge-callback matrix: purpose-written BRK and `$6026` callback programs were installed
+  only in private in-memory cartridge copies, never in local ROM/BIOS files. The
+  `gamatebiosbrk` checker ran 65,536 cases for each of UMC, Bit, and the independently authored SWK
+  BIOS: all 64 P combinations, all 256 S values, callback enabled and disabled, and direct plus
+  absolute-JMP callback forms. A controlled `S=$FF` capture checked the BRK pushed status, low PC,
+  and high PC; the matrix checked PC/stack restoration, entry P to post-RTI P, entry A/Y restoration,
+  callback-modified X, `$0B` callback-counter behavior, and zero added hardware-IRQ/NMI diagnostics.
+  This establishes emulator-level BRK vector and callback behavior against both authentic revisions
+  and the replacement BIOS. It does not establish physical BRK/timer side effects, arbitrary callback
+  reentrancy, callback-modified stack aliases, or nested interrupts. No authentic or commercial
+  firmware instruction sequence or cartridge payload was copied or retained.
 
 ### LCD boundary validation
 

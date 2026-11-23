@@ -54,6 +54,8 @@ add_executable(gamatebiosf027 tests/gamatebiosf027.c)
 target_link_libraries(gamatebiosf027 superwhizkid_diagnostics)
 add_executable(gamatebiosrowstream tests/gamatebiosrowstream.c)
 target_link_libraries(gamatebiosrowstream superwhizkid_diagnostics)
+add_executable(gamatebiosbrk tests/gamatebiosbrk.c)
+target_link_libraries(gamatebiosbrk superwhizkid_diagnostics)
 
 add_executable(gamatebiosf018 tests/gamatebiostilestream.c)
 target_link_libraries(gamatebiosf018 superwhizkid_diagnostics)
