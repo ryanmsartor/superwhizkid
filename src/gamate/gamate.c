@@ -753,7 +753,7 @@ size_t gamateStateSize(const struct Gamate* g) {
 }
 
 bool gamateSaveState(const struct Gamate* g, void* data, size_t size) {
-	if (!data || size < sizeof(struct GamateState)) {
+	if (!data || size != sizeof(struct GamateState)) {
 		return false;
 	}
 	struct GamateState state = {
@@ -785,7 +785,7 @@ bool gamateSaveState(const struct Gamate* g, void* data, size_t size) {
 }
 
 bool gamateLoadState(struct Gamate* g, const void* data, size_t size) {
-	if (!data || size < sizeof(struct GamateState)) {
+	if (!data || size != sizeof(struct GamateState)) {
 		return false;
 	}
 	struct GamateState state;

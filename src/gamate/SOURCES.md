@@ -1833,6 +1833,16 @@ copied into the repository, build output, tests, or releases.
     not physical hardware timing. The test used direct NMI injection and purpose-written cartridge
     bytes, not live UART traffic or commercial images. Live Netpacket timing, callback reentrancy,
     nested IRQ/NMI, and physical byte-edge timing remain open.
+  - **Reset and state-load lifecycle validation.** Save/load now requires an exact
+    `gamateStateSize` buffer; undersized and oversized buffers are rejected. A corrupt or
+    wrong-size load leaves machine state unchanged. The core test verifies transmit progress,
+    MSB-first partial receive bytes, pending receive-complete NMI, pending IRQ/NMI serialization,
+    and reset clearing of transmit/receive state. The libretro frontend test also rejects exact
+    and short/long state sizes and clears transient link/presentation state only after successful
+    machine-state load. The SWK prototype pauses inside a purpose-written direct `$6023` callback,
+    saves state, mutates registers/RAM, restores state, and completes the callback; this verifies
+    in-flight emulator callback resume. It does not establish live Netpacket queue timing,
+    arbitrary nested callback mutation, or physical UART edge timing.
   - **`$F024` timing padding validation.** The documented strided-record initializer takes 824
     master clocks in D-clear synthetic calls. The independent firmware measured 780 before a focused
     NOP block was added; 11 6502 `NOP` instructions add 44 master clocks under this emulator and

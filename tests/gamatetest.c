@@ -169,7 +169,15 @@ static void testUart(void) {
 	size_t stateSize = gamateStateSize(&g);
 	void* state = malloc(stateSize);
 	assert(state && gamateSaveState(&g, state, stateSize));
+	assert(!gamateSaveState(&g, state, stateSize - 1));
+	assert(!gamateSaveState(&g, state, stateSize + 1));
+	assert(!gamateLoadState(&g, state, stateSize - 1));
+	assert(!gamateLoadState(&g, state, stateSize + 1));
 	gamateWrite(&g, 0x4400, 0);
+	((uint8_t*) state)[0] ^= 1;
+	assert(!gamateLoadState(&g, state, stateSize));
+	assert(g.uartTx == 0 && g.uartTxBits == 0 && g.uartTxLine == false);
+	((uint8_t*) state)[0] ^= 1;
 	assert(gamateLoadState(&g, state, stateSize));
 	assert(g.uartTx == 0x80 && g.uartTxBits == 1 && g.uartTxLine);
 	free(state);

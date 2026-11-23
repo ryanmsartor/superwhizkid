@@ -298,6 +298,45 @@ static void testNmi(struct Gamate* g) {
 	assert(!g->nmi);
 	free(state);
 
+	memcpy(g->rom + 0x23, direct, sizeof(direct));
+	g->cpu.pc = RETURN;
+	g->cpu.a = 0xC1;
+	g->cpu.x = 0x47;
+	g->cpu.y = 0x19;
+	g->cpu.s = 0xFF;
+	g->cpu.p = 0x24;
+	g->ram[0x0C] = 1;
+	g->ram[0x08] = 0;
+	g->irq = g->nmi = false;
+	for (int bit = 7; bit >= 0; bit--)
+		gamateUartReceiveBit(g, (0xA5 >> bit) & 1);
+	assert(g->nmi);
+	step(g);
+	stateSize = gamateStateSize(g);
+	state = malloc(stateSize);
+	assert(state);
+	bool savedInCallback = false;
+	for (unsigned i = 0; i < 100 && g->cpu.pc != RETURN; i++) {
+		if (g->cpu.pc >= 0x6023 && g->cpu.pc < 0x602C) {
+			assert(gamateSaveState(g, state, stateSize));
+			savedInCallback = true;
+			break;
+		}
+		step(g);
+	}
+	assert(savedInCallback);
+	g->cpu.a = 0;
+	g->cpu.x = 0;
+	g->cpu.y = 0;
+	g->ram[0x08] = 0xFF;
+	assert(gamateLoadState(g, state, stateSize));
+	for (unsigned i = 0; i < 1000 && g->cpu.pc != RETURN; i++) step(g);
+	assert(g->cpu.pc == RETURN && g->cpu.s == 0xFF);
+	assert(g->cpu.a == 0xC1 && g->cpu.x == 0x34 && g->cpu.y == 0x56);
+	assert(g->cpu.p == 0x24 && g->ram[0x08] == 1);
+	assert(g->ram[0x0A] == 0xA5 && !g->nmi);
+	free(state);
+
 	g->rom[0x23] = 0x60;
 	g->rom[0x24] = 0;
 	g->rom[0x25] = 0;

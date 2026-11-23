@@ -728,6 +728,7 @@ int main(int argc, char** argv) {
 	assert(state);
 	assert(p_retro_serialize(state, stateSizeBeforeLoad));
 	assert(!p_retro_unserialize(state, stateSizeBeforeLoad - 1));
+	assert(!p_retro_unserialize(state, stateSizeBeforeLoad + 1));
 	p_retro_run();
 	assert(firstVideoPixel != 0xFFFF); // failed load did not force the LCD response to snap
 
