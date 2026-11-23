@@ -7,7 +7,7 @@
 .segment "TABLE"
 	jmp draw_placeholder        ; $F000
 	jmp wait_8_irqs             ; $F003
-	jmp unsupported             ; $F006
+	jmp wait_counter            ; $F006
 	jmp wait_24_irqs            ; $F009
 	jmp clear_display           ; $F00C
 	jmp unsupported             ; $F00F
@@ -254,6 +254,14 @@ wait_24_irqs:
 	lda #$00
 	sta $0B
 	sec
+	rts
+
+wait_counter:
+	lda $0B
+	cmp #$05
+	bcc wait_counter
+	lda #$00
+	sta $0B
 	rts
 
 ; Advances the 16-bit state at $12-$13: feedback is bit 4 XOR bit 10, and zero restarts at $FFFF.

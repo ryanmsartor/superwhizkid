@@ -429,6 +429,31 @@ static void testShortWait(struct Gamate* g) {
 	}
 }
 
+static void testCounterWait(struct Gamate* g) {
+	for (unsigned counter = 0; counter <= 0xFF; counter++) {
+		static const uint8_t waitPs[] = { 0x20, 0x28, 0x60 };
+		static const uint8_t readyPs[] = { 0x24, 0x28, 0x60, 0x64 };
+		const uint8_t* ps = counter < 5 ? waitPs : readyPs;
+		unsigned count = counter < 5 ? sizeof(waitPs) : sizeof(readyPs);
+		for (unsigned i = 0; i < count; i++) {
+			g->ram[0x0B] = (uint8_t) counter;
+			g->ram[0x0C] = 0;
+			uint64_t irqs = g->diagnostics.irqsTaken;
+			uint64_t clocks = g->masterClocks;
+			uint8_t p = ps[i];
+			call(g, 0xF006, 0xA5, 0x35, 0x68, p, 1000000);
+			unsigned expected = counter < 5 ? 5 - counter : 0;
+			assert(g->diagnostics.irqsTaken - irqs == (uint64_t) expected);
+			assert(g->ram[0x0B] == 0);
+			assert(g->cpu.a == 0 && g->cpu.x == 0x35 && g->cpu.y == 0x68);
+			assert(g->cpu.p == (uint8_t) ((p & 0x7C) | 0x03));
+			assert(g->cpu.s == 0xFF);
+			if (counter >= 5)
+				assert(g->masterClocks - clocks == 42);
+		}
+	}
+}
+
 static void testRandom(struct Gamate* g) {
 	static const uint16_t states[] = { 0, 1, 0x0010, 0x0400, 0x8000, 0x1234, 0xFFFF };
 	for (size_t i = 0; i < sizeof(states) / sizeof(states[0]); i++) {
@@ -664,15 +689,12 @@ int main(int argc, char** argv) {
 	testTileStream(&g);
 	testRectangle(&g);
 	testShortWait(&g);
+	testCounterWait(&g);
 	testRandom(&g);
 	testDigits(&g);
 	testPairStream(&g);
 	testRowRuns(&g);
 	testCompositor(&g);
-	prepareCall(&g, 0xF006, 0, 0, 0, 0x24);
-	runUntil(&g, UNSUPPORTED, 10);
-	step(&g);
-	assert(g.cpu.pc == UNSUPPORTED);
 	gamateFree(&g);
 	puts("experimental firmware synthetic tests passed");
 	return 0;

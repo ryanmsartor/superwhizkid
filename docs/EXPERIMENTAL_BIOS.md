@@ -45,8 +45,9 @@ This integration enables testing; it is not a compatibility claim.
 
 An earlier interactive check reached only Cube Up's title and setup screens. Starting a game halted
 in the `$F036` unsupported trap because seven gameplay slots were missing. Those slots are now
-implemented, and automated runs reach and continue gameplay. A repeat interactive check is still
-pending.
+implemented, and automated runs reach and continue gameplay. A follow-up RetroArch session started
+play successfully and continued for 12 minutes 36 seconds; user-observed gameplay, score digits and
+piece behavior appeared good.
 
 ## Implemented subset
 
@@ -57,10 +58,11 @@ pending.
 - The periodic IRQ handler increments the `$00B` wait counter and the big-endian `$00E-$011`
   counter, calling `$6026` when `$00C` is nonzero. Its register and callback behavior is tested
   with a synthetic cartridge; broader interrupt interference remains unverified.
-- The fourteen Cube Up service slots observed in title, setup and gameplay runs have initial
+- The fifteen Cube Up and general service slots observed in title and gameplay runs have initial
   implementations:
   - `$F000`: fixed bitmap destination.
   - `$F003`: eight-IRQ wait.
+  - `$F006`: five-IRQ-threshold counter wait.
   - `$F009`: IRQ wait.
   - `$F00C`: two-plane clear.
   - `$F012`: glyph run.
@@ -80,11 +82,12 @@ pending.
   interactions are not claimed to be equivalent. Decimal-mode calls, side-effectful or aliased
   sources, and unvisited game paths are not generally validated. `$F027` clears decimal mode
   internally and does not model decimal-mode entry.
-- All other slots enter the explicit `$F036` unsupported trap; these include `$F006`, `$F00F`,
-  `$F015` and `$F021`. Link NMI uses the same trap. Protection, identity,
+- All other slots enter the explicit `$F036` unsupported trap; these include `$F00F`, `$F015`
+  and `$F021`. Link NMI uses the same trap. Protection, identity,
   and checksum failures enter distinct traps at `$F039`, `$F03C`, and `$F03F`, respectively.
-  Link reception and BRK-specific behavior are not implemented. Other games are not validated, and
-  interactive gameplay has not yet been rechecked.
+  Link reception and BRK-specific behavior are not implemented. Other games are not validated.
+  Standalone Cube Up has received a successful interactive SWK run, but this is not a complete
+  playthrough or a hardware-validation result.
 
 The chosen low-RAM initialization is a compatibility policy, not measured physical power-on state.
 The common entry contract and its uncertainty are described in
@@ -98,7 +101,7 @@ counter carry, callback gating and register preservation, unsupported traps, IRQ
 fourteen service implementations. It exercises all 256 glyph selectors with both incoming overflow
 states, a 256-tile run, wrapped stacks and streams, both LCD-clear modes, and rectangle boundaries for both planes. The newer cases cover:
 
-- The short wait.
+- The short wait and the five-IRQ-threshold counter wait.
 - The random step.
 - Digit formatting.
 - Opaque and transparent pair streams.

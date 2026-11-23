@@ -1747,10 +1747,21 @@ copied into the repository, build output, tests, or releases.
   - **Input-phase sensitivity.** The 8,000-frame run diverged at frame 1,506. Delaying the UMC
     run's later scripted inputs by one frame reproduced SWK's divergent call frame. This identifies
     input-phase sensitivity to service timing rather than a data mismatch.
+  - **`$F006` Bao Qing Tian validation.** After implementing `$F006` from the existing
+    byte-domain contract, a 1,000-frame run of Bao Qing Tian completed 261 `$F006` calls under SWK,
+    matching UMC and Bit's call counts. The synthetic suite tested all 256 entry-counter values,
+    representative D/I/V/P variants, the exact 42-master-clock ready path, and the wait count
+    (`5 - n` IRQs for `$00-$04`). UMC and Bit agreed on all 261 observed call contexts in the
+    trace fields compared here. SWK did not enter an unsupported trap. Frame-1,000 VRAM hashes
+    matched UMC and Bit; audio hashes differed, as they did in prior BIOS comparisons.
+  - **Interactive follow-up.** A RetroArch session loaded the rebuilt core with explicit SWK
+    priority and ran the standalone Cube Up cartridge for 12 minutes 36 seconds. Gameplay began
+    successfully, and the user-observed gameplay, score digits and piece behavior appeared correct
+    with no reported freeze or halt. This is a qualitative, emulator-only session; it was not a
+    complete playthrough and no intermediate frames or state were retained.
   - **Limitations.** Timing differs; `$F027` is about 1.6× slower on average. Stack layout and
-    decimal-mode entry are not modeled. Only Cube Up was exercised, interactive play is unconfirmed,
-    and no physical hardware was used. Reports, harnesses and traces stayed under `/tmp` and
-    retained no ROM or BIOS bytes.
+    decimal-mode entry are not modeled. Only Cube Up was exercised, and no physical hardware was
+    used. Reports, harnesses and traces stayed under `/tmp` and retained no ROM or BIOS bytes.
 
 ### Corpus sweep and title-specific validation
 
