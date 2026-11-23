@@ -41,7 +41,12 @@ Invalid option values use UMC priority. Reset retains the BIOS loaded with the c
 
 The frontend displays an experimental-BIOS notice when SWK is loaded, including through fallback.
 It does not detect the prototype's unsupported-service traps, which can leave the game halted.
-Interactive gameplay remains unvalidated; this integration enables testing, not a compatibility claim.
+This integration enables testing; it is not a compatibility claim.
+
+An earlier interactive check reached only Cube Up's title and setup screens. Starting a game halted
+in the `$F036` unsupported trap because seven gameplay slots were missing. Those slots are now
+implemented, and automated runs reach and continue gameplay. A repeat interactive check is still
+pending.
 
 ## Implemented subset
 
@@ -52,18 +57,34 @@ Interactive gameplay remains unvalidated; this integration enables testing, not 
 - The periodic IRQ handler increments the `$00B` wait counter and the big-endian `$00E-$011`
   counter, calling `$6026` when `$00C` is nonzero. Its register and callback behavior is tested
   with a synthetic cartridge; broader interrupt interference remains unverified.
-- The seven observed Cube Up service slots have initial implementations: `$F000` (fixed bitmap
-  destination), `$F009` (IRQ wait), `$F00C` (two-plane clear), `$F012` (glyph run), `$F01E`
-  (two-pass tile stream), `$F024` (record initialization) and `$F02A` (rectangle fill).
+- The fourteen Cube Up service slots observed in title, setup and gameplay runs have initial
+  implementations:
+  - `$F000`: fixed bitmap destination.
+  - `$F003`: eight-IRQ wait.
+  - `$F009`: IRQ wait.
+  - `$F00C`: two-plane clear.
+  - `$F012`: glyph run.
+  - `$F018`: pair-tile stream.
+  - `$F01B`: row-run stream.
+  - `$F01E`: two-pass tile stream.
+  - `$F024`: record initialization.
+  - `$F027`: object-record compositor.
+  - `$F02A`: plane-0 rectangle fill.
+  - `$F02D`: plane-1 rectangle fill.
+  - `$F030`: random-number step.
+  - `$F033`: decimal digit formatting.
+
   `$F000` writes a deliberately **blank, independently authored placeholder** rather than the
   authentic asset. The other services implement their documented ordinary data effects, not their
-  exact instruction or event timings; scratch and arbitrary interrupt interactions are not claimed
-  equivalent. Decimal-mode calls, side-effectful or aliased sources, and unvisited game paths are
-  not generally validated.
-- All other slots and link NMI enter the explicit `$F036` unsupported trap. Protection, identity,
+  exact instruction or event timings. Their scratch use, stack layout and arbitrary interrupt
+  interactions are not claimed to be equivalent. Decimal-mode calls, side-effectful or aliased
+  sources, and unvisited game paths are not generally validated. `$F027` clears decimal mode
+  internally and does not model decimal-mode entry.
+- All other slots enter the explicit `$F036` unsupported trap; these include `$F006`, `$F00F`,
+  `$F015` and `$F021`. Link NMI uses the same trap. Protection, identity,
   and checksum failures enter distinct traps at `$F039`, `$F03C`, and `$F03F`, respectively.
-  Link reception and BRK-specific behavior are not implemented; other games and interactive
-  gameplay are not validated.
+  Link reception and BRK-specific behavior are not implemented. Other games are not validated, and
+  interactive gameplay has not yet been rechecked.
 
 The chosen low-RAM initialization is a compatibility policy, not measured physical power-on state.
 The common entry contract and its uncertainty are described in
@@ -74,8 +95,19 @@ limitations are in [`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md
 
 The synthetic test suite checks successful and rejected boots, reset, dirty initial VRAM, IRQ
 counter carry, callback gating and register preservation, unsupported traps, IRQ waits, and the
-seven service implementations. It exercises all 256 glyph selectors with both incoming overflow
-states, a 256-tile run, wrapped stacks and streams, both LCD-clear modes, and rectangle boundaries.
+fourteen service implementations. It exercises all 256 glyph selectors with both incoming overflow
+states, a 256-tile run, wrapped stacks and streams, both LCD-clear modes, and rectangle boundaries for both planes. The newer cases cover:
+
+- The short wait.
+- The random step.
+- Digit formatting.
+- Opaque and transparent pair streams.
+- Row runs.
+- `$F027`: an all-terminator table, plus large-redraw, small-redraw-plus-object and large-object
+  cases. These are compared against reference models derived from the documented contract.
+
+Mutation checks confirmed that removing the compositor mask, or changing the row-run base, fails
+the suite.
 The synthetic cartridge and firmware are purpose-written and contain no commercial images.
 
 Four 1,000-frame post-entry runs of standalone Cube Up were compared with the same runs under each
@@ -84,7 +116,8 @@ analysis. The prototype reached the same per-slot call counts in every campaign,
 unsupported trap or NMI. Frame numbers, execution timing, PCs, RAM and audio hashes differ. In the
 three input-driven runs, the frame-1,000 video and final VRAM hashes matched both authentic BIOSes;
 the unattended title-screen hashes differed. Hash equality at one endpoint does not imply matching
-intermediate frames, audio, timing, complete game state, or successful interactive play.
+intermediate frames, audio, timing, complete game state, or successful interactive play. None of
+these campaigns started a game, so they exercised only the title and setup flow.
 
 For the first observed `$F01E`, `$F012`, and `$F02A` calls, controlled IRQ-masked probes used
 the same VRAM fill and compared output registers/status, final VRAM hash and address, and LCD/VRAM
@@ -92,6 +125,47 @@ write counts against both BIOS revisions. Those properties matched, while their 
 prototype/authentic durations were 314,334/324,556, 3,218/2,300, and 1,532/1,540 master clocks.
 The probe covered one call context per service, not every possible call.
 
-These are emulator observations of one standalone cartridge, not physical measurements. No full
-gameplay, other cartridges, 4-in-1 selection, save-state continuity, link/network behavior,
+The gameplay services were then compared against the existing authentic-call checkers and
+contract models. All comparisons ignore timing.
+
+| Service | Corpus or input set | Result (non-timing properties) |
+| --- | --- | --- |
+| `$F027` | 141 Cube Up gameplay calls | All matched: pixels, VRAM access sequence, registers, RAM, peripherals, LCD sequence and cartridge reads |
+| `$F018` | Gameplay corpus; 1,373 selftest, 1,280 open-bus and 131,072 flag cases | All matched |
+| `$F01B` | Gameplay corpus; 772 synthetic cases covering offsets, flags, escapes and wraps | All matched |
+| `$F033` | 526,848 input combinations | All matched |
+| `$F030` | 138,688 calls | All matched |
+
+The `$F030` and `$F033` comparisons used temporary copies of the checkers with timing and
+stack-slot checks removed.
+
+Timing differs from the authentic BIOSes:
+
+- `$F027` averages about 88,900 master clocks per gameplay call, against 54,800 under UMC (about
+  1.6×). In the corpus it is 33,000–68,000 clocks slower per call.
+- `$F018` timing also differs.
+- `$F01B` matched UMC timing in the synthetic cases.
+
+A 1,000-frame run used this schedule: Start at frame 90 for 20 frames, then A at frames 300, 450,
+600 and 750 for 30 frames each. Gameplay began near frame 467. UMC, Bit and SWK made the same
+per-slot calls, with 389 completed calls each and no trap. Their frame-1,000 video hashes were
+identical; their audio hashes differ, as they also do between UMC and Bit.
+
+A 1,600-frame per-frame video comparison with movement inputs produced the same sequence of 31
+settled gameplay screens under all three BIOSes. SWK showed more transient, partially redrawn
+frames: 339, against 225 under UMC. These come from its slower `$F027` and are visible as
+additional mid-redraw flicker.
+
+An 8,000-frame varied-input run under SWK called only implemented slots. It completed 2,343 calls,
+against 2,345 under UMC. The call sequences diverged at frame 1,506, when UMC first called the
+game's `$6685` routine and SWK made the same call 29 frames later. Every completed call entered
+within one frame of its UMC counterpart until that point. Replaying the UMC run with the scripted
+inputs after frame 800 delayed by one frame reproduced SWK's `$6685` call at frame 1,535.
+Advancing them by one frame moved the call to frame 1,502. The game is therefore sensitive to the
+frame on which input is sampled. The divergence is attributed to SWK's different service timing,
+not to a service data mismatch. Scripted runs longer than a few hundred gameplay frames cannot
+expect identical game state.
+
+These are emulator observations of one standalone cartridge, not physical measurements. No complete
+playthrough, other cartridges, 4-in-1 selection, save-state continuity, link/network behavior,
 arbitrary callbacks, or exhaustive runtime ABI coverage is established.

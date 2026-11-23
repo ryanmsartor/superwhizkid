@@ -6,23 +6,23 @@
 
 .segment "TABLE"
 	jmp draw_placeholder        ; $F000
-	jmp unsupported             ; $F003
+	jmp wait_8_irqs             ; $F003
 	jmp unsupported             ; $F006
 	jmp wait_24_irqs            ; $F009
 	jmp clear_display           ; $F00C
 	jmp unsupported             ; $F00F
 	jmp draw_glyph_run          ; $F012
 	jmp unsupported             ; $F015
-	jmp unsupported             ; $F018
-	jmp unsupported             ; $F01B
+	jmp draw_pair_stream        ; $F018
+	jmp draw_row_runs           ; $F01B
 	jmp draw_tile_stream        ; $F01E
 	jmp unsupported             ; $F021
 	jmp initialize_records      ; $F024
-	jmp unsupported             ; $F027
+	jmp composite_objects       ; $F027
 	jmp fill_rectangle          ; $F02A
-	jmp unsupported             ; $F02D
-	jmp unsupported             ; $F030
-	jmp unsupported             ; $F033
+	jmp fill_rectangle_plane1   ; $F02D
+	jmp next_random             ; $F030
+	jmp format_digits           ; $F033
 
 .segment "TRAPS"
 unsupported:
@@ -238,6 +238,15 @@ irq:
 	pla
 	rti
 
+wait_8_irqs:
+	lda $0B
+	cmp #$08
+	bcc wait_8_irqs
+	lda #$00
+	sta $0B
+	sec
+	rts
+
 wait_24_irqs:
 	lda $0B
 	cmp #$18
@@ -245,6 +254,92 @@ wait_24_irqs:
 	lda #$00
 	sta $0B
 	sec
+	rts
+
+; Advances the 16-bit state at $12-$13: feedback is bit 4 XOR bit 10, and zero restarts at $FFFF.
+next_random:
+	lda $12
+	ora $13
+	bne :+
+	lda #$FF
+	sta $12
+	sta $13
+:
+	lda #$00
+	sta $14
+	lda $13
+	and #$04
+	beq :+
+	lda #$80
+	sta $14
+:
+	lda $12
+	asl a
+	asl a
+	asl a
+	eor $14
+	asl a
+	rol $12
+	rol $13
+	lda $12
+	rts
+
+; Formats six packed nibbles from A, X and Y as a length-prefixed string at $A1-$A7.
+format_digits:
+	pha
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	ora #$30
+	sta $A2
+	pla
+	and #$0F
+	ora #$30
+	sta $A3
+	txa
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	ora #$30
+	sta $A4
+	txa
+	and #$0F
+	ora #$30
+	sta $A5
+	cpy #$FF
+	bne @digits
+	lda #$20
+	sta $A6
+	sta $A7
+	bne @blank
+@digits:
+	tya
+	lsr a
+	lsr a
+	lsr a
+	lsr a
+	ora #$30
+	sta $A6
+	tya
+	and #$0F
+	ora #$30
+	sta $A7
+@blank:
+	ldy #$00
+@scan:
+	lda $00A2,y
+	cmp #$30
+	bne @done
+	lda #$20
+	sta $00A2,y
+	iny
+	cpy #$05
+	bne @scan
+@done:
+	lda #$06
+	sta $A1
 	rts
 
 initialize_records:
@@ -602,16 +697,670 @@ tile_stream_pass:
 	pla
 	rts
 
+; Two-pass row stream of (tile, count) pairs; tile zero advances the column by count.
+draw_pair_stream:
+	lda $15
+	ora #$40
+	sta $5001
+	lda $01
+	pha
+	lda $00
+	pha
+	lda #$00
+	jsr pair_stream_pass
+	pla
+	sta $00
+	pla
+	sta $01
+	lda #$02
+	jsr pair_stream_pass
+	lda #$FE
+	cmp #$FE
+	rts
+
+pair_stream_pass:
+	pha
+	ldy #$00
+@row:
+	lda ($00),y
+	cmp #$FE
+	bne :+
+	jmp @end
+:
+	sta $19
+	txa
+	pha
+	tsx
+	lda $0102,x
+	beq :+
+	lda #$80
+:
+	sta $18
+	pla
+	tax
+@pair:
+	iny
+	bne :+
+	inc $01
+:
+	lda ($00),y
+	cmp #$FF
+	bne :+
+	jmp @end_row
+:
+	sta $1A
+	iny
+	bne :+
+	inc $01
+:
+	lda ($00),y
+	sta $1B
+	txa
+	pha
+	tsx
+	lda $0102,x
+	tax
+	lda $1A
+	jsr point_tile
+	pla
+	tax
+	lda $1A
+	bne @opaque
+	lda $18
+	clc
+	adc $1B
+	sta $18
+	jmp @pair
+@opaque:
+	cmp #$20
+	bcc :+
+	clv
+:
+	asl a
+	asl a
+	asl a
+	sta $1A
+	tya
+	pha
+	ldx $1B
+	lda #$00
+	sta $1B
+@repeat:
+	lda $18
+	sta $5004
+	lda $19
+	asl a
+	asl a
+	asl a
+	sta $5005
+	ldy $1A
+	lda ($02),y
+	sta $5007
+	iny
+	lda ($02),y
+	sta $5007
+	iny
+	lda ($02),y
+	sta $5007
+	iny
+	lda ($02),y
+	sta $5007
+	iny
+	lda ($02),y
+	sta $5007
+	iny
+	lda ($02),y
+	sta $5007
+	iny
+	lda ($02),y
+	sta $5007
+	iny
+	lda ($02),y
+	sta $5007
+	inc $18
+	dex
+	bne @repeat
+	pla
+	tay
+	ldx #$FF
+	jmp @pair
+@end_row:
+	iny
+	bne :+
+	inc $01
+:
+	jmp @row
+@end:
+	pla
+	rts
+
+; Clears plane-0 rows $E6-$FE, then decodes (value, count) runs on rows relative to $E6.
+draw_row_runs:
+	lda $15
+	sta $5001
+	ldy #$E6
+@clear_row:
+	sty $5005
+	lda #$00
+	sta $5004
+	ldx #$20
+@clear:
+	sta $5007
+	dex
+	bne @clear
+	iny
+	cpy #$FF
+	bne @clear_row
+	ldy #$00
+@offset:
+	lda ($00),y
+	cmp #$FE
+	beq @end
+	clc
+	adc #$E6
+	sta $5005
+	lda #$00
+	sta $5004
+@value:
+	iny
+	bne :+
+	inc $01
+:
+	lda ($00),y
+	cmp #$FF
+	beq @escape
+	sta $1A
+	iny
+	bne :+
+	inc $01
+:
+	lda ($00),y
+	tax
+	lda $1A
+@run:
+	sta $5007
+	dex
+	bne @run
+	jmp @value
+@escape:
+	iny
+	bne :+
+	inc $01
+:
+	jmp @offset
+@end:
+	ldx #$00
+	lda #$FE
+	cmp #$FE
+	rts
+
+; Selects graphics tile A from the base at $06,X; returns its low index and sets $02-$03 and $1A.
+; Uses INC rather than ADC so V, D and the stored B bit are untouched; C is changed.
+point_tile:
+	sta $1A
+	lda $06,x
+	sta $02
+	lda $07,x
+	sta $03
+	lda $1A
+	asl a
+	bcc :+
+	inc $03
+	inc $03
+	inc $03
+	inc $03
+:
+	asl a
+	bcc :+
+	inc $03
+	inc $03
+:
+	asl a
+	bcc :+
+	inc $03
+:
+	rts
+
+; Redraws enabled background records, then composites enabled objects, in record order.
+composite_objects:
+	pha
+	txa
+	pha
+	tya
+	pha
+	php
+	cld
+	ldx #$00
+@redraw:
+	jsr copy_record
+	lda $0307
+	cmp #$FF
+	beq @redraw_next
+	txa
+	pha
+	ldy #$03
+	cpx #$40
+	bcc :+
+	ldy #$02
+:
+	sty $1C
+	jsr redraw_record
+	pla
+	tax
+@redraw_next:
+	txa
+	clc
+	adc #$08
+	tax
+	cpx #$80
+	bne @redraw
+	ldx #$00
+@object:
+	jsr copy_record
+	lda $0302
+	cmp #$FF
+	beq @object_next
+	txa
+	pha
+	ldy #$10
+	cpx #$40
+	bcc :+
+	ldy #$08
+:
+	sty $1C
+	jsr draw_object
+	pla
+	tax
+@object_next:
+	txa
+	clc
+	adc #$08
+	tax
+	cpx #$80
+	bne @object
+	plp
+	pla
+	tay
+	pla
+	tax
+	sec
+	clv
+	pla
+	rts
+
+copy_record:
+	ldy #$00
+@byte:
+	lda $21,x
+	sta $0300,y
+	inx
+	iny
+	cpy #$08
+	bne @byte
+	txa
+	sec
+	sbc #$08
+	tax
+	rts
+
+; Redraws a $1C-by-$1C tile area from selectors captured in the plane-0 map rows.
+redraw_record:
+	lda $15
+	ora #$40
+	sta $5001
+	lda $0305
+	lsr a
+	lsr a
+	lsr a
+	sta $1E
+	lda $0306
+	lsr a
+	lsr a
+	lsr a
+	clc
+	adc #$E6
+	sta $1F
+	lda $0306
+	and #$F8
+	sta $19
+	ldx #$00
+	stx $18
+@capture_column:
+	lda #$00
+	sta $1B
+@capture_row:
+	lda $1F
+	clc
+	adc $1B
+	sta $5005
+	lda $1E
+	clc
+	adc $18
+	sta $5004
+	lda $5006
+	sta $0308,x
+	inx
+	inc $1B
+	lda $1B
+	cmp $1C
+	bne @capture_row
+	inc $18
+	lda $18
+	cmp $1C
+	bne @capture_column
+	lda #$00
+	sta $1D
+@plane:
+	ldy #$00
+	sty $18
+@column:
+	lda $1E
+	clc
+	adc $18
+	ldx $1D
+	beq :+
+	ora #$80
+:
+	sta $5004
+	lda $19
+	sta $5005
+	lda #$00
+	sta $1B
+@tile:
+	tya
+	pha
+	lda $0308,y
+	ldx $1D
+	jsr point_tile
+	tay
+	ldx #$08
+@tile_row:
+	lda ($02),y
+	sta $5007
+	iny
+	dex
+	bne @tile_row
+	pla
+	tay
+	iny
+	inc $1B
+	lda $1B
+	cmp $1C
+	bne @tile
+	inc $18
+	lda $18
+	cmp $1C
+	bne @column
+	lda $1D
+	bne :+
+	lda #$02
+	sta $1D
+	jmp @plane
+:
+	lda $1E
+	ora #$80
+	sta $18
+	lda #$00
+	sta $1B
+	sta $1C
+	sta $1D
+	rts
+
+; Draws a $1C-row object whose source is shifted right by X & 7 and composited over VRAM.
+; Pre-draw bytes go to $308 + 48*plane + $1C*column + row; composited bytes go to $368 + ...
+draw_object:
+	lda $0301
+	sta $19
+	lda $0300
+	and #$07
+	sta $1B
+	ldx #$00
+	stx $00
+@source_plane:
+	lda #$00
+	sta $01
+@source_column:
+	lda #$00
+	sta $18
+@source_row:
+	lda $18
+	lsr a
+	lsr a
+	lsr a
+	asl a
+	clc
+	adc $01
+	clc
+	adc $0302
+	jsr fetch_row
+	sta $0368,x
+	inx
+	inc $18
+	lda $18
+	cmp $1C
+	bne @source_row
+	inc $01
+	lda $1C
+	lsr a
+	lsr a
+	lsr a
+	cmp $01
+	bne @source_column
+	ldy $1C
+	lda #$00
+@zero_column:
+	sta $0368,x
+	inx
+	dey
+	bne @zero_column
+	lda $00
+	bne :+
+	lda #$02
+	sta $00
+	ldx #$30
+	bne @source_plane
+:
+	ldy $1B
+	beq @shifted
+@shift:
+	ldx $1C
+@shift_row:
+	dex
+	lda $1C
+	cmp #$10
+	bne @shift_small
+	lsr $0368,x
+	ror $0378,x
+	ror $0388,x
+	lsr $0398,x
+	ror $03A8,x
+	ror $03B8,x
+	jmp @shift_next
+@shift_small:
+	lsr $0368,x
+	ror $0370,x
+	lsr $0398,x
+	ror $03A0,x
+@shift_next:
+	txa
+	bne @shift_row
+	dey
+	bne @shift
+@shifted:
+	lda $15
+	ora #$40
+	sta $5001
+	ldx #$00
+	stx $00
+@read_plane:
+	lda #$00
+	sta $01
+@read_column:
+	lda #$00
+	sta $18
+@read_row:
+	lda $19
+	clc
+	adc $18
+	sta $5005
+	jsr object_column
+	sta $5004
+	lda $5006
+	sta $0308,x
+	inx
+	inc $18
+	lda $18
+	cmp $1C
+	bne @read_row
+	inc $01
+	jsr object_columns
+	cmp $01
+	bne @read_column
+	lda $00
+	bne :+
+	lda #$80
+	sta $00
+	ldx #$30
+	bne @read_plane
+:
+	lda #$30
+	ldy $1C
+	cpy #$10
+	beq :+
+	lda #$10
+:
+	sta $18
+	ldx #$00
+@composite:
+	lda $0368,x
+	ora $0398,x
+	eor #$FF
+	sta $01
+	and $0308,x
+	ora $0368,x
+	sta $0368,x
+	lda $01
+	and $0338,x
+	ora $0398,x
+	sta $0398,x
+	inx
+	cpx $18
+	bne @composite
+	lda $15
+	ora #$40
+	sta $5001
+	lda $1C
+	cmp #$10
+	bne :+
+	lda $15
+	ora #$40
+	sta $5001
+:
+	ldx #$00
+	stx $00
+@write_plane:
+	lda #$00
+	sta $01
+@write_column:
+	lda $19
+	sta $5005
+	jsr object_column
+	sta $5004
+	ldy $1C
+@write_row:
+	lda $0368,x
+	sta $5007
+	inx
+	dey
+	bne @write_row
+	inc $01
+	jsr object_columns
+	cmp $01
+	bne @write_column
+	lda $00
+	bne :+
+	lda #$80
+	sta $00
+	ldx #$30
+	bne @write_plane
+:
+	lda #$B0
+	ldy $1C
+	cpy #$10
+	beq :+
+	lda #$A0
+:
+	sta $00
+	lda #$03
+	sta $01
+	lda $0300
+	lsr a
+	lsr a
+	lsr a
+	ora #$80
+	sta $18
+	lda #$01
+	sta $1B
+	lda #$00
+	sta $1C
+	rts
+
+; Returns the raw LCD column for object column $01 in plane $00.
+object_column:
+	lda $0300
+	lsr a
+	lsr a
+	lsr a
+	clc
+	adc $01
+	ora $00
+	rts
+
+; Returns the destination column count: 3 for a large object or 2 for a small one.
+object_columns:
+	lda $1C
+	lsr a
+	lsr a
+	lsr a
+	sec
+	adc #$00
+	rts
+
+; Reads source row $18 & 7 of tile A from the base at $06,$00; preserves X.
+fetch_row:
+	sta $1A
+	txa
+	pha
+	ldx $00
+	lda $1A
+	jsr point_tile
+	eor $18
+	and #$F8
+	eor $18
+	tay
+	lda ($02),y
+	tay
+	pla
+	tax
+	tya
+	rts
+
 fill_rectangle:
 	sta $1A
+	lda #$00
+	beq fill_rectangle_common
+fill_rectangle_plane1:
+	sta $1A
+	lda #$80
+fill_rectangle_common:
+	sta $A8
 	txa
 	lsr a
 	lsr a
 	lsr a
+	ora $A8
 	sta $18
 	sty $19
-	lda #$00
-	sta $A8
 	lda $15
 	ora #$40
 	sta $5001

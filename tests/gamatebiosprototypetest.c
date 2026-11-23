@@ -390,26 +390,253 @@ static void testTileStream(struct Gamate* g) {
 }
 
 static void testRectangle(struct Gamate* g) {
-	for (unsigned shape = 0; shape < 3; shape++) {
-		uint8_t expected[0x4000];
-		memset(expected, 0xA5, sizeof(expected));
-		memset(g->vram, 0xA5, sizeof(g->vram));
-		g->ram[0x15] = 0;
-		g->ram[0x1C] = shape == 0 ? 16 : shape == 1 ? 0 : 8;
-		g->ram[0x1D] = shape == 0 ? 3 : shape == 1 ? 1 : 0;
-		unsigned columns = shape == 0 ? 2 : shape == 1 ? 256 : 1;
-		unsigned rows = shape == 0 ? 3 : shape == 1 ? 1 : 256;
-		for (unsigned column = 0; column < columns; column++) {
-			for (unsigned row = 0; row < rows; row++)
-				putExpected(expected, (31 + column) & 0xFF, 0xFE + row, 0x5A);
+	for (unsigned plane = 0; plane < 2; plane++) {
+		for (unsigned shape = 0; shape < 3; shape++) {
+			uint8_t expected[0x4000];
+			memset(expected, 0xA5, sizeof(expected));
+			memset(g->vram, 0xA5, sizeof(g->vram));
+			g->ram[0x15] = 0;
+			g->ram[0x1C] = shape == 0 ? 16 : shape == 1 ? 0 : 8;
+			g->ram[0x1D] = shape == 0 ? 3 : shape == 1 ? 1 : 0;
+			unsigned columns = shape == 0 ? 2 : shape == 1 ? 256 : 1;
+			unsigned rows = shape == 0 ? 3 : shape == 1 ? 1 : 256;
+			for (unsigned column = 0; column < columns; column++) {
+				for (unsigned row = 0; row < rows; row++)
+					putExpected(expected, (0x80 * plane + 31 + column) & 0xFF, 0xFE + row, 0x5A);
+			}
+			uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
+			call(g, plane ? 0xF02D : 0xF02A, 0x5A, 0xF8, 0xFE, 0x64, 100000);
+			assert(!memcmp(g->vram, expected, sizeof(expected)));
+			assert(g->diagnostics.vramWrites - writes == columns * rows);
+			assert(g->diagnostics.lcdWrites - lcd == 1 + columns * (2 + rows));
+			assert(g->cpu.a == 0x5A && g->cpu.x == 0 && g->cpu.y == 0 && g->cpu.p == 0x66);
+			assert(g->ram[0xA8] == 0x80 * plane && g->ram[0x19] == 0xFE && g->ram[0x1A] == 0x5A);
 		}
-		uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
-		call(g, 0xF02A, 0x5A, 0xF8, 0xFE, 0x64, 100000);
-		assert(!memcmp(g->vram, expected, sizeof(expected)));
-		assert(g->diagnostics.vramWrites - writes == columns * rows);
-		assert(g->diagnostics.lcdWrites - lcd == 1 + columns * (2 + rows));
-		assert(g->cpu.a == 0x5A && g->cpu.x == 0 && g->cpu.y == 0 && g->cpu.p == 0x66);
 	}
+}
+
+static void testShortWait(struct Gamate* g) {
+	static const uint8_t counters[] = { 0, 7, 8, 0xFF };
+	for (size_t i = 0; i < sizeof(counters); i++) {
+		g->ram[0x0B] = counters[i];
+		g->ram[0x0C] = 0;
+		uint64_t irqs = g->diagnostics.irqsTaken;
+		call(g, 0xF003, 0xA5, 0x35, 0x68, 0x68, 1000000);
+		unsigned expected = counters[i] < 8 ? 8 - counters[i] : 0;
+		assert(g->diagnostics.irqsTaken - irqs == expected);
+		assert(g->ram[0x0B] == 0);
+		assert(g->cpu.a == 0 && g->cpu.x == 0x35 && g->cpu.y == 0x68 && g->cpu.p == 0x6B);
+	}
+}
+
+static void testRandom(struct Gamate* g) {
+	static const uint16_t states[] = { 0, 1, 0x0010, 0x0400, 0x8000, 0x1234, 0xFFFF };
+	for (size_t i = 0; i < sizeof(states) / sizeof(states[0]); i++) {
+		for (unsigned p = 0x24; p <= 0x6C; p += 0x48) {
+			g->ram[0x12] = (uint8_t) states[i];
+			g->ram[0x13] = (uint8_t) (states[i] >> 8);
+			g->ram[0x14] = 0x5A;
+			call(g, 0xF030, 0x11, 0x22, 0x33, (uint8_t) p, 1000);
+			uint16_t state = states[i] ? states[i] : 0xFFFF;
+			uint16_t next = (uint16_t) ((state << 1) | (((state >> 4) ^ (state >> 10)) & 1));
+			assert(g->ram[0x12] == (uint8_t) next && g->ram[0x13] == next >> 8);
+			assert(g->ram[0x14] == ((state >> 3) & 0x80));
+			assert(g->cpu.a == (uint8_t) next && g->cpu.x == 0x22 && g->cpu.y == 0x33);
+			assert(g->cpu.p == (uint8_t) (0x20 | (p & 0x4C) | (state >> 15) |
+				(next & 0x80) | ((next & 0xFF) ? 0 : 2)));
+		}
+	}
+}
+
+static void testDigits(struct Gamate* g) {
+	static const uint32_t inputs[] = { 0x123456, 0x000001, 0x000000, 0x0012FF, 0x0000FF, 0x090807 };
+	for (size_t i = 0; i < sizeof(inputs) / sizeof(inputs[0]); i++) {
+		uint32_t input = inputs[i];
+		memset(g->ram + 0xA1, 0xA5, 8);
+		call(g, 0xF033, (uint8_t) (input >> 16), (uint8_t) (input >> 8), (uint8_t) input,
+			0x6C, 1000);
+		bool blankSuffix = (uint8_t) input == 0xFF;
+		unsigned first = 0, limit = blankSuffix ? 4 : 5;
+		while (first < limit && !((input >> (20 - 4 * first)) & 15)) first++;
+		for (unsigned j = 0; j < 6; j++) {
+			uint8_t digit = (uint8_t) (0x30 | ((input >> (20 - 4 * j)) & 15));
+			assert(g->ram[0xA2 + j] == (j < first || (blankSuffix && j >= 4) ? 0x20 : digit));
+		}
+		assert(g->ram[0xA1] == 6 && g->ram[0xA8] == 0xA5);
+		assert(g->cpu.a == 6 && g->cpu.x == (uint8_t) (input >> 8) && g->cpu.y == first);
+		assert(g->cpu.p == (0x6C | (blankSuffix && first == 4 ? 0 : 1)));
+	}
+}
+
+static void testPairStream(struct Gamate* g) {
+	static const uint8_t stream[] = {
+		2, 0, 3, 0x21, 2, 0xFF, 5, 1, 1, 0xFF, 0xFE,
+	};
+	uint8_t expected[0x4000];
+	memset(expected, 0xA5, sizeof(expected));
+	memset(g->vram, 0xA5, sizeof(g->vram));
+	g->ram[0] = 0;
+	g->ram[1] = 3;
+	g->ram[6] = 0xF9;
+	g->ram[7] = 0x62;
+	g->ram[8] = 0x7F;
+	g->ram[9] = 0x6B;
+	g->ram[0x15] = 0;
+	memcpy(g->ram + 0x300, stream, sizeof(stream));
+	for (unsigned plane = 0; plane < 2; plane++) {
+		unsigned base = plane ? 0x6B7F : 0x62F9;
+		const uint8_t tiles[] = { 0x21, 0x21, 1 };
+		const uint8_t columns[] = { 3, 4, 0 };
+		const uint8_t rows[] = { 2, 2, 5 };
+		for (unsigned i = 0; i < 3; i++) {
+			for (unsigned row = 0; row < 8; row++) {
+				putExpected(expected, 0x80 * plane + columns[i], 8 * rows[i] + row,
+					g->rom[base + 8 * tiles[i] + row - 0x6000]);
+			}
+		}
+	}
+	uint64_t writes = g->diagnostics.vramWrites;
+	call(g, 0xF018, 0x42, 0x55, 0x71, 0x74, 100000);
+	assert(!memcmp(g->vram, expected, sizeof(expected)));
+	assert(g->diagnostics.vramWrites - writes == 48);
+	assert(g->cpu.a == 0xFE && g->cpu.x == 0xFF && g->cpu.y == 10 && g->cpu.p == 0x37);
+	assert(g->ram[0] == 0 && g->ram[1] == 3 && g->ram[2] == 0x7F && g->ram[3] == 0x6B);
+	assert(g->ram[0x18] == 0x81 && g->ram[0x19] == 5);
+	assert(g->ram[0x1A] == 8 && g->ram[0x1B] == 0);
+
+	static const uint8_t transparent[] = { 1, 0, 0x80, 0xFF, 0xFE };
+	memcpy(g->ram + 0x300, transparent, sizeof(transparent));
+	writes = g->diagnostics.vramWrites;
+	call(g, 0xF018, 0x42, 0x55, 0x71, 0x24, 100000);
+	assert(g->diagnostics.vramWrites == writes);
+	assert(g->cpu.a == 0xFE && g->cpu.x == 0x55 && g->cpu.y == 4 && g->cpu.p == 0x67);
+	assert(g->ram[0x18] == 0 && g->ram[0x19] == 1 && g->ram[0x1A] == 0 && g->ram[0x1B] == 0x80);
+}
+
+static void putLinear(uint8_t* vram, unsigned address, uint8_t value) {
+	vram[(address & 0x1FFF) << 1] = value;
+}
+
+static void testRowRuns(struct Gamate* g) {
+	static const uint8_t stream[] = {
+		2, 0x11, 3, 0x22, 0, 0xFF, 0x80, 0x33, 1, 0xFF, 0xFE,
+	};
+	uint8_t expected[0x4000];
+	for (size_t i = 0; i < sizeof(expected); i++) expected[i] = (uint8_t) (i * 37 + i / 5);
+	memcpy(g->vram, expected, sizeof(expected));
+	for (unsigned address = 0xE6 * 32; address < 0xFF * 32; address++)
+		putLinear(expected, address, 0);
+	unsigned address = 0xE8 * 32;
+	for (unsigned i = 0; i < 3; i++) putLinear(expected, address++, 0x11);
+	for (unsigned i = 0; i < 256; i++) putLinear(expected, address++, 0x22);
+	putLinear(expected, 0x66 * 32, 0x33);
+	g->ram[0] = 0;
+	g->ram[1] = 3;
+	g->ram[0x15] = 0;
+	g->ram[0x1A] = 0xA5;
+	memcpy(g->ram + 0x300, stream, sizeof(stream));
+	uint64_t writes = g->diagnostics.vramWrites;
+	call(g, 0xF01B, 0x42, 0x55, 0x71, 0x34, 100000);
+	assert(!memcmp(g->vram, expected, sizeof(expected)));
+	assert(g->diagnostics.vramWrites - writes == 25 * 32 + 260);
+	assert(g->cpu.a == 0xFE && g->cpu.x == 0 && g->cpu.y == 10 && g->cpu.p == 0x77);
+	assert(g->ram[0] == 0 && g->ram[1] == 3 && g->ram[0x1A] == 0x33);
+}
+
+static uint8_t vramAt(const uint8_t* vram, unsigned column, unsigned row) {
+	return vram[(((row & 0xFF) * 32 + (column & 31)) << 1) | ((column >> 7) & 1)];
+}
+
+static uint8_t sourceRow(const struct Gamate* g, unsigned plane, uint8_t selector, unsigned row) {
+	unsigned base = g->ram[6 + 2 * plane] | g->ram[7 + 2 * plane] << 8;
+	return g->rom[((base + 8 * selector + row) & 0xFFFF) - 0x6000];
+}
+
+static void modelRedraw(const struct Gamate* g, uint8_t* vram, const uint8_t* record, unsigned q) {
+	uint8_t selectors[9];
+	for (unsigned c = 0; c < q; c++) {
+		for (unsigned r = 0; r < q; r++)
+			selectors[c * q + r] = vramAt(vram, (record[5] >> 3) + c, 0xE6 + (record[6] >> 3) + r);
+	}
+	for (unsigned plane = 0; plane < 2; plane++) {
+		for (unsigned c = 0; c < q; c++) {
+			for (unsigned r = 0; r < q; r++) {
+				for (unsigned k = 0; k < 8; k++) {
+					putExpected(vram, 0x80 * plane + (((record[5] >> 3) + c) & 31),
+						(record[6] & 0xF8) + 8 * r + k,
+						sourceRow(g, plane, selectors[c * q + r], k));
+				}
+			}
+		}
+	}
+}
+
+static void modelObject(const struct Gamate* g, uint8_t* vram, const uint8_t* record, bool large) {
+	unsigned height = large ? 16 : 8, columns = large ? 3 : 2, shift = record[0] & 7;
+	for (unsigned row = 0; row < height; row++) {
+		uint8_t source[2][3];
+		for (unsigned plane = 0; plane < 2; plane++) {
+			uint32_t bits;
+			if (large) {
+				uint8_t s = (uint8_t) (record[2] + 2 * (row >> 3));
+				bits = (uint32_t) sourceRow(g, plane, s, row & 7) << 16 |
+					(uint32_t) sourceRow(g, plane, (uint8_t) (s + 1), row & 7) << 8;
+			} else {
+				bits = (uint32_t) sourceRow(g, plane, record[2], row) << 16;
+			}
+			bits >>= shift;
+			for (unsigned c = 0; c < columns; c++) source[plane][c] = (uint8_t) (bits >> (16 - 8 * c));
+		}
+		for (unsigned c = 0; c < columns; c++) {
+			unsigned column = (record[0] >> 3) + c, y = record[1] + row;
+			uint8_t mask = (uint8_t) ~(source[0][c] | source[1][c]);
+			for (unsigned plane = 0; plane < 2; plane++) {
+				uint8_t old = vramAt(vram, 0x80 * plane + column, y);
+				putExpected(vram, 0x80 * plane + (column & 31), y,
+					(uint8_t) (source[plane][c] | (old & mask)));
+			}
+		}
+	}
+}
+
+static void testCompositor(struct Gamate* g) {
+	g->ram[6] = 0xF9;
+	g->ram[7] = 0x62;
+	g->ram[8] = 0x7F;
+	g->ram[9] = 0x6B;
+	g->ram[0x15] = 0;
+	memset(g->ram + 0x21, 0xFF, 0x80);
+	memset(g->ram + 0x300, 0xA5, 0xC8);
+	uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
+	call(g, 0xF027, 0x8C, 0x47, 0x19, 0x64, 100000);
+	assert(g->diagnostics.vramWrites == writes && g->diagnostics.lcdWrites == lcd);
+	assert(g->cpu.a == 0x8C && g->cpu.x == 0x47 && g->cpu.y == 0x19 && g->cpu.p == 0xA5);
+	for (unsigned i = 0; i < 8; i++) assert(g->ram[0x300 + i] == 0xFF);
+	assert(g->ram[0x308] == 0xA5);
+
+	static const uint8_t largeObject[8] = { 0x46, 0x70, 0x1E, 0, 0, 0, 0, 0xFF };
+	static const uint8_t largeRedraw[8] = { 0, 0, 0xFF, 0, 0, 0x50, 0x58, 0 };
+	static const uint8_t smallBoth[8] = { 0x2B, 0x31, 0x05, 0, 0, 0x13, 0x0A, 0 };
+	memcpy(g->ram + 0x21, largeObject, 8);
+	memcpy(g->ram + 0x29, largeRedraw, 8);
+	memcpy(g->ram + 0x21 + 8 * 8, smallBoth, 8);
+	uint8_t expected[0x4000];
+	for (size_t i = 0; i < sizeof(expected); i++) expected[i] = (uint8_t) (i * 37 + i / 5);
+	memcpy(g->vram, expected, sizeof(expected));
+	modelRedraw(g, expected, largeRedraw, 3);
+	modelRedraw(g, expected, smallBoth, 2);
+	modelObject(g, expected, largeObject, true);
+	modelObject(g, expected, smallBoth, false);
+	writes = g->diagnostics.vramWrites;
+	call(g, 0xF027, 0x0C, 0x47, 0x19, 0x65, 1000000);
+	assert(!memcmp(g->vram, expected, sizeof(expected)));
+	assert(g->diagnostics.vramWrites - writes == 144 + 64 + 96 + 32);
+	assert(g->cpu.a == 0x0C && g->cpu.x == 0x47 && g->cpu.y == 0x19 && g->cpu.p == 0x25);
+	for (unsigned i = 0; i < 8; i++) assert(g->ram[0x300 + i] == 0xFF);
+	assert(g->ram[0] == 0xA0 && g->ram[1] == 3 && g->ram[2] == 0x7F && g->ram[3] == 0x6B);
+	assert(g->ram[0x18] == 0x85 && g->ram[0x19] == 0x31 && g->ram[0x1A] == 5);
+	assert(g->ram[0x1B] == 1 && g->ram[0x1C] == 0 && g->ram[0x1D] == 0);
+	assert(g->ram[0x1E] == 2 && g->ram[0x1F] == 0xE7);
 }
 
 int main(int argc, char** argv) {
@@ -436,7 +663,13 @@ int main(int argc, char** argv) {
 	testGlyphs(&g);
 	testTileStream(&g);
 	testRectangle(&g);
-	prepareCall(&g, 0xF027, 0, 0, 0, 0x24);
+	testShortWait(&g);
+	testRandom(&g);
+	testDigits(&g);
+	testPairStream(&g);
+	testRowRuns(&g);
+	testCompositor(&g);
+	prepareCall(&g, 0xF006, 0, 0, 0, 0x24);
 	runUntil(&g, UNSUPPORTED, 10);
 	step(&g);
 	assert(g.cpu.pc == UNSUPPORTED);

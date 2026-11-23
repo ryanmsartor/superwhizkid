@@ -1706,6 +1706,51 @@ copied into the repository, build output, tests, or releases.
   no commercial BIOS or cartridge bytes are used or copied. This is frontend discovery policy,
   not hardware evidence or validation of interactive Cube Up gameplay. Unsupported prototype
   service/NMI traps remain firmware halts rather than frontend error notifications.
+- SWK interactive Cube Up check (local experiment, RetroArch plus emulator diagnostics): a user
+  session under SWK reached the setup screen with plausible audio and video but could not start
+  play. A temporary, uncommitted harness then logged only per-frame controller-read counts, poll
+  PCs and end-of-frame PCs; it retained no ROM or BIOS bytes. Under UMC and SWK, the setup screen
+  polled the controller at the same cadence, about every 21-22 frames. A 12-frame scripted Up
+  press was missed only because SWK's poll fell one frame earlier, so it was not an input fault.
+  Holding each button for 30 frames gave identical poll-site responses under both BIOSes except A.
+  Under UMC, A starts play. Under SWK, A halts in the `$F036` unsupported-service trap within a few
+  frames. `gamatebioscalls` under UMC shows that starting play calls `$F030`, `$F00C`, `$F018`,
+  `$F01B`, `$F012`, `$F033`, `$F024` and `$F027`, then `$F02A`, `$F02D` and `$F003`. Seven of
+  these slots are unimplemented in SWK. The earlier four 1,000-frame campaigns never entered
+  gameplay, so their equal per-slot counts covered only the title and setup flow.
+- SWK gameplay services (independently authored firmware; local emulator experiments):
+  - **Implementation basis.** `$F003`, `$F018`, `$F01B`, `$F027`, `$F02D`, `$F030` and `$F033`
+    were written from the executable contracts in `docs/BIOS_RUNTIME_API_ANALYSIS.md`. Those
+    contracts derive from observed register, memory, VRAM and peripheral behavior. No authentic BIOS
+    instruction sequence, table or graphic was read, translated or reproduced. MAME was not
+    consulted for this step.
+  - **Synthetic tests.** New cases in `tests/gamatebiosprototypetest.c` compare each service against
+    purpose-written reference models of the same contracts. The models use synthetic data only.
+    Mutation checks showed the suite fails when the `$F027` mask or the `$F01B` row base is
+    broken.
+  - **Corpus comparisons.** The existing `gamatebiosf027`, `gamatebiosf018` and `gamatebiosf01b`
+    checkers ran against SWK on locally supplied, read-only Cube Up gameplay. They matched every
+    non-timing property:
+    - `$F027`: 141 of 141 calls.
+    - `$F018`: the corpus, plus 1,373 selftest, 1,280 open-bus and 131,072 flag cases.
+    - `$F01B`: the corpus, plus 772 synthetic cases.
+
+    Temporary, uncommitted copies of the `$F030` and `$F033` checkers, with timing and stack-slot
+    checks removed, matched 138,688 and 526,848 calls respectively.
+  - **Differential runs.** `gamatebioscalls`, `gamateboot` and a temporary per-frame hash harness
+    compared UMC, Bit and SWK:
+    - Over 1,000 frames with gameplay, all three made identical per-slot calls and had equal
+      frame-1,000 video hashes.
+    - Over 1,600 frames, all three showed the same 31 settled gameplay screens. SWK produced more
+      transient redraw frames: 339 against 225.
+    - Over 8,000 frames, SWK called only implemented slots.
+  - **Input-phase sensitivity.** The 8,000-frame run diverged at frame 1,506. Delaying the UMC
+    run's later scripted inputs by one frame reproduced SWK's divergent call frame. This identifies
+    input-phase sensitivity to service timing rather than a data mismatch.
+  - **Limitations.** Timing differs; `$F027` is about 1.6× slower on average. Stack layout and
+    decimal-mode entry are not modeled. Only Cube Up was exercised, interactive play is unconfirmed,
+    and no physical hardware was used. Reports, harnesses and traces stayed under `/tmp` and
+    retained no ROM or BIOS bytes.
 
 ### Corpus sweep and title-specific validation
 
