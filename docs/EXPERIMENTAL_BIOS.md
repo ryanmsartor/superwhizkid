@@ -84,8 +84,8 @@ piece behavior appeared good.
   interactions are not claimed to be equivalent. Decimal-mode calls, side-effectful or aliased
   sources, and unvisited game paths are not generally validated. `$F027` clears decimal mode
   internally and does not model decimal-mode entry.
-- All other slots enter the explicit `$F036` unsupported trap; these include `$F015`
-  and `$F021`. Link NMI uses the same trap. Protection, identity,
+- All other slots enter the explicit `$F036` unsupported trap; this includes `$F021`.
+  Link NMI uses the same trap. Protection, identity,
   and checksum failures enter distinct traps at `$F039`, `$F03C`, and `$F03F`, respectively.
   Link reception and BRK-specific behavior are not implemented. Other games are not validated.
   Standalone Cube Up has received a successful interactive SWK run, but this is not a complete

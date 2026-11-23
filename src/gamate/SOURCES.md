@@ -1723,7 +1723,43 @@ copied into the repository, build output, tests, or releases.
     were written from the executable contracts in `docs/BIOS_RUNTIME_API_ANALYSIS.md`. Those
     contracts derive from observed register, memory, VRAM and peripheral behavior. No authentic BIOS
     instruction sequence, table or graphic was read, translated or reproduced. MAME was not
-    consulted for this step.
+    consulted for this step. `$F006`, `$F00F`, and `$F015` were added later from their independently
+    derived contracts in the same document.
+  - **Iteration-informed implementation process.** Synthetic tests and differential runs were used
+    as feedback, not as a substitute for the written contracts. The implementation was never
+    generated or repaired by reading or reconstructing authentic BIOS instructions:
+    - `$F006` initially retained an unnecessary ready-path zero/load instruction sequence. Timing
+      measurements showed 50 instead of 42 master clocks; removing that sequence yielded the
+      complete threshold and exact ready-path contract.
+    - `$F00F` began with a per-column/per-row LCD address setup that wrote outside the intended
+      rectangle and gave an incorrect timing profile. The implementation was reduced to the
+      measured row/31-column geometry and exact 15,930-clock result. Its final code uses neutral
+      NOP padding for the single ready path only as an implementation convenience; the observable
+      contract, not the padding, is the design authority, and a loop or equivalent output can
+      replace it later if it produces identical peripheral and timing behavior.
+    - `$F015` initially used `$02-$03` as copy-loop scratch. Synthetic mismatch checks showed that
+      this aliases two caller source-pointer fields and corrupts plane-1 setup. The implementation
+      moved its pointer scratch to `$01E-$01F`, preserved `$000-$003`, and retained entry X for
+      the normal JSR return. Its first geometry pass also had to be corrected for source data
+      advancement and plane switching; the synthetic suite now checks 1×8, 2×8, 3×8, 4×8 and
+      page-crossing shapes. Timing remains deliberately provisional.
+    - `$F018` tile-address handling was initially considered with PHP/CLD/ADC/PLP-style arithmetic.
+      Emulator observations showed that preserving the stored P/B-bit convention requires a
+      different implementation. The final `point_tile` routine uses independent high-byte increment
+      logic and does not restore P through PLP, so I/D/V/B and unrelated entry flags are not
+      accidentally rewritten.
+    - `$F027` was likewise driven by synthetic reference models of the executable record and VRAM
+      contract, then checked against the independent corpus. No sprite, background, glyph or
+      cartridge image was copied into the firmware. `$F000` remains a deliberately blank
+      independently authored placeholder.
+
+    Temporary diagnostic copies and synthetic ROM inputs never exposed commercial BIOS or cartridge
+    payloads in source files or retained reports. Reports retained derived counts, hashes, addresses
+    and register state. Discarded implementation attempts were not promoted to research conclusions
+    unless a measured behavior demonstrated them. These development iterations reduce the likelihood
+    of accidental reconstruction: they explain why tests, observed boundaries and public contracts
+    control the implementation, rather than authentic instruction text or an external emulator
+    implementation.
   - **Synthetic tests.** New cases in `tests/gamatebiosprototypetest.c` compare each service against
     purpose-written reference models of the same contracts. The models use synthetic data only.
     Mutation checks showed the suite fails when the `$F027` mask or the `$F01B` row base is
