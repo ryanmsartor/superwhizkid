@@ -793,15 +793,12 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 #### Corpus and general method
 
-- SWK startup logo: the user-supplied PNG attached to this development session is a 160×150, 2×2
-  block-scaled image. It is downsampled to 65×46 source pixels and encoded as one bit per source
-  pixel in `src/gamate/gamate_bios_logo.bin` (414 bytes). The reset routine expands each 65×46 row
-  through 9 packed bytes and writes 2×2 output pixels, holds the final centered image, clears both
-  planes, and jumps to `$6020`.
-  A left-slide animation remains a planned presentation step. This is an independently authored visual
-  presentation policy, not a representation of authentic Gamate boot graphics or hardware timing.
-  The generated binary contains the original logo pixels only in purpose-built derived form and is
-  documented as a synthetic replacement asset. No commercial BIOS or cartridge payload is embedded.
+- SWK startup timing: the reset routine now performs 36 repeated 24-IRQ waits plus one 20-IRQ wait
+  before clearing VRAM and continuing initialization to `$6020`. Brick Blaster measured entry at
+  `30,228,402` master clocks, while UMC measured `30,239,372` and Bit `30,239,430`. All three are
+  in frame floor `414` of the 72,900-clock frame model, within `109,970` master clocks of UMC.
+  This is emulator-observed timing work, not a physical-hardware measurement or claim of exact
+  frame-aligned BIOS timing. Logo rendering and image assets are not retained as part of this result.
 
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add

@@ -28,7 +28,9 @@ static void runUntil(struct Gamate* g, uint16_t address, unsigned limit) {
 		assert(!g->cpu.stopped && !g->diagnostics.unsupportedOpcodes);
 		step(g);
 	}
-	fprintf(stderr, "did not reach $%04X; PC=$%04X\n", address, g->cpu.pc);
+	fprintf(stderr, "did not reach $%04X; PC=$%04X 0B=%02X IRQ=%u IRQCLOCKS=%u MASTER=%llu\n",
+		address, g->cpu.pc, g->ram[0x0B], g->irq, g->irqClocks,
+		(unsigned long long) g->masterClocks);
 	abort();
 }
 

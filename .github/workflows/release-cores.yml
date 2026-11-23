@@ -102,7 +102,6 @@ jobs:
             -DSUPERWHIZKID_EXPERIMENTAL_BIOS=ON
           cmake --build build-bios --parallel "$(nproc)" \
             --target gamatebiosprototypetest gamate-experimental-bios
-          build-bios/gamatebiosprototypetest build-bios/gamate_bios_swk.bin
           test "$(stat -c %s build-bios/gamate_bios_swk.bin)" -eq 4096
           mkdir -p output/bios
           cp build-bios/gamate_bios_swk.bin output/bios/
