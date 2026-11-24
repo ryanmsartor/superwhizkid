@@ -93,6 +93,99 @@ BIOS-service scratch; these bytes must not be treated as permanently allocated c
 
 ## Known VRAM layout
 
+Gamate VRAM (16 KiB physical backing)
+══════════════════════════════════════════════════════════════════
+
+Two 8 KiB logical planes, interleaved byte-by-byte in backing RAM.
+Each plane is a 256 × 256 pixel, 1-bpp bitmap.
+
+Logical address    Plane 0       Plane 1       Physical backing
+──────────────────────────────────────────────────────────────────
+$0000-$001F        Row 0         Row 0         $0000-$003F
+$0020-$003F        Row 1         Row 1         $0040-$007F
+$0040-$005F        Row 2         Row 2         $0080-$00BF
+   ...              ...           ...              ...
+$1FC0-$1FDF        Row 254       Row 254       $3F80-$3FBF
+$1FE0-$1FFF        Row 255       Row 255       $3FC0-$3FFF
+──────────────────────────────────────────────────────────────────
+
+Physical backing byte layout (one scanline):
+
+        Plane 0             Plane 1
+      ┌──────────┐        ┌──────────┐
+      │ Byte  0  │        │ Byte  0  │
+      │ Byte  1  │        │ Byte  1  │
+      │   ...    │        │   ...    │
+      │ Byte 31  │        │ Byte 31  │
+      └──────────┘        └──────────┘
+       32 bytes             32 bytes
+       256 pixels           256 pixels
+
+Interleaved physical layout:
+
+$0000  P0 Row 0, Byte 0
+$0001  P1 Row 0, Byte 0
+$0002  P0 Row 0, Byte 1
+$0003  P1 Row 0, Byte 1
+  ...
+$003E  P0 Row 0, Byte 31
+$003F  P1 Row 0, Byte 31
+
+$0040  P0 Row 1, Byte 0
+$0041  P1 Row 1, Byte 0
+  ...
+$3FFE  P0 Row 255, Byte 31
+$3FFF  P1 Row 255, Byte 31
+
+──────────────────────────────────────────────────────────────────
+
+Display organization (256 × 256 backing bitmap):
+
+  Y=$00 ┌──────────────────────────────────────┐
+        │                                      │
+        │                                      │
+        │                                      │
+        │                                      │
+        │     Normal scrollable region         │
+        │     Y=$00-$C7 (200 rows)             │
+        │                                      │
+        │                                      │
+        │                                      │
+        │                                      │
+  Y=$C8 ├──────────────────────────────────────┤
+        │     Other backing rows               │
+  Y=$CF ├──────────────────────────────────────┤
+        │     Window region Y=$D0-$DF (16 rows)│
+        │     Replaces top 16 displayed rows   │
+        │     when window mode is enabled      │
+  Y=$E0 ├──────────────────────────────────────┤
+        │     Other backing rows               │
+  Y=$F7 ├──────────────────────────────────────┤
+        │     Fixed Y-scroll region            │
+        │     Y=$F8-$FF (8 rows)               │
+  Y=$FF └──────────────────────────────────────┘
+
+Normal viewport: 160 × 150 pixels
+Horizontal backing width: 256 pixels
+Vertical scrolling: wraps within normal Y=$00-$C7 range
+
+══════════════════════════════════════════════════════════════════
+
+```
+// Logical VRAM address: 0x0000-0x1FFF
+// Plane: 0 or 1
+
+physical_offset = (logical_address << 1) | plane;
+
+// Row and byte position within a plane
+row         = logical_address / 32;
+byte_column = logical_address % 32;
+
+// Physical backing offset for the start of a row
+plane0_row = row * 0x40;
+plane1_row = row * 0x40 + 1;
+```
+
 The LCD backing VRAM is 16 KiB: `$0000-$3FFF` in a byte-oriented emulator array representing two
 8 KiB logical planes. The LCD address registers expose a 13-bit logical VRAM address
 `$0000-$1FFF`, and the selected plane selects which byte is written or read:
