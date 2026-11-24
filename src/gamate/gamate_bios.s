@@ -4,6 +4,26 @@
 
 .setcpu "6502"
 
+; Hardware and cartridge addresses, as seen by the CPU (see docs/MEMORY_MAP.md).
+AY_REGISTERS         = $4000 ; write-only; address bits 0-3 select the AY register
+UART_RX_DATA         = $4800 ; completed link receive byte, read by the NMI wrapper
+
+LCD_CONTROL          = $5001 ; bit 7 blank, 6 row increment, 5 window, 4 swap planes, 0 stop
+LCD_SCROLL_X         = $5002
+LCD_SCROLL_Y         = $5003
+LCD_VRAM_ADDR_LO     = $5004 ; bit 7 selects the plane, bits 0-4 are VRAM address bits 0-4
+LCD_VRAM_ADDR_HI     = $5005 ; VRAM address bits 5-12
+LCD_VRAM_READ        = $5006 ; auto-increments the VRAM address
+LCD_VRAM_WRITE       = $5007 ; auto-increments the VRAM address
+
+CART_PROTECTION_PORT = $6000 ; bit-serial handshake; reads as cartridge ROM once unlocked
+CART_CHECKSUM_LO     = $6000 ; cartridge header, ROM offset 0
+CART_CHECKSUM_HI     = $6001
+CART_IDENTITY        = $6005 ; "COPYRIGHT BIT CORPORATION" string
+CART_ENTRY           = $6020 ; cartridge start vector
+CART_NMI_CALLBACK    = $6023 ; called from the NMI wrapper while $0C is nonzero
+CART_IRQ_CALLBACK    = $6026 ; called from the IRQ wrapper while $0C is nonzero
+
 .segment "TABLE"
 	jmp draw_placeholder        ; $F000
 	jmp wait_8_irqs             ; $F003
@@ -68,10 +88,10 @@ reset:
 	rol a
 	asl a
 	asl a
-	sta $6000
+	sta CART_PROTECTION_PORT
 	dey
 	bne @send_bit
-	sta $6000
+	sta CART_PROTECTION_PORT
 	inx
 	cpx #$0F
 	bne @send_byte
@@ -80,7 +100,7 @@ reset:
 	sta $04
 	ldy #$08
 @receive_bit:
-	lda $6000
+	lda CART_PROTECTION_PORT
 	lsr a
 	lsr a
 	rol $04
@@ -93,7 +113,7 @@ reset:
 :
 	ldx #$18
 @check_identity:
-	lda $6005,x
+	lda CART_IDENTITY,x
 	cmp cartridge_identity,x
 	beq :+
 	jmp bad_identity
@@ -123,19 +143,19 @@ reset:
 	cmp #$80
 	bne @checksum_byte
 	lda $00
-	cmp $6000
+	cmp CART_CHECKSUM_LO
 	beq :+
 	jmp bad_checksum
 :
 	lda $01
-	cmp $6001
+	cmp CART_CHECKSUM_HI
 	beq :+
 	jmp bad_checksum
 :
-	lda $6000
+	lda CART_CHECKSUM_LO
 	sta $E0
 	sta $E5
-	lda $6001
+	lda CART_CHECKSUM_HI
 	sta $E1
 	sta $E6
 
@@ -144,7 +164,7 @@ reset:
 	sta $0B
 	ldx #$0F
 @clear_ay:
-	sta $4000,x
+	sta AY_REGISTERS,x
 	dex
 	bpl @clear_ay
 	cli
@@ -155,7 +175,7 @@ reset:
 	jsr wait_24_irqs
 
 	lda #$00
-	sta $5001
+	sta LCD_CONTROL
 	jsr clear_plane
 	lda #$80
 	jsr clear_plane
@@ -170,7 +190,7 @@ reset:
 	lda #$FF
 	sta $20
 	lda #$00
-	sta $5002
+	sta LCD_SCROLL_X
 	lda #$47
 	sta $04
 	lda #$FF
@@ -189,13 +209,13 @@ reset:
 	lda #$35
 	sta $13
 	lda #$5F
-	sta $5003
+	sta LCD_SCROLL_Y
 	lda #$40
-	sta $5001
+	sta LCD_CONTROL
 	lda #$8E
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	lda #$C6
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	lda #$01
 	sta $0C
 	ldx #$28
@@ -204,7 +224,7 @@ reset:
 	clv
 	cld
 	sec
-	jmp $6020
+	jmp CART_ENTRY
 
 animate_logo:
 	ldx #$24
@@ -216,13 +236,13 @@ animate_logo:
 	rts
 
 clear_plane:
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	lda #$00
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	ldx #$20
 	ldy #$00
 @byte:
-	sta $5007
+	sta LCD_VRAM_WRITE
 	iny
 	bne @byte
 	dex
@@ -244,7 +264,7 @@ irq:
 @callback:
 	lda $0C
 	beq :+
-	jsr $6026
+	jsr CART_IRQ_CALLBACK
 :
 	pla
 	tay
@@ -253,11 +273,11 @@ irq:
 
 nmi:
 	pha
-	lda $4800
+	lda UART_RX_DATA
 	sta $0A
 	lda $0C
 	beq :+
-	jsr $6023
+	jsr CART_NMI_CALLBACK
 :
 	pla
 	rti
@@ -435,7 +455,7 @@ initialize_records:
 clear_display:
 	lda $15
 	ora #$80
-	sta $5001
+	sta LCD_CONTROL
 	lda #$00
 	sta $1E
 	jsr clear_display_plane
@@ -444,7 +464,7 @@ clear_display:
 	jsr clear_display_plane
 	lda $15
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 	sec
 	rts
 
@@ -452,13 +472,13 @@ clear_display_plane:
 	ldy #$00
 @row:
 	lda $1E
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	tya
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	ldx #$20
 	lda #$00
 @column:
-	sta $5007
+	sta LCD_VRAM_WRITE
 	dex
 	bne @column
 	iny
@@ -469,14 +489,14 @@ clear_display_plane:
 copy_plane:
 @column:
 	lda $018
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	lda $019
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	ldy #$00
 	ldx $01D
 @row:
 	lda ($1E),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	sta $01B
 	iny
 	dex
@@ -509,7 +529,7 @@ copy_bitmap:
 	sta $01A
 	lda $015
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 	lda $01C
 	lsr a
 	lsr a
@@ -573,7 +593,7 @@ copy_bitmap:
 clear_fixed_rectangle:
 	lda $15
 	and #$BF
-	sta $5001
+	sta LCD_CONTROL
 	lda #$00
 	sta $A8
 	sta $1A
@@ -588,13 +608,13 @@ clear_fixed_rectangle:
 	lda #$00
 	ldy #$E6
 @row:
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	tya
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	ldx #31
 	lda #$00
 @column:
-	sta $5007
+	sta LCD_VRAM_WRITE
 	dex
 	bne @column
 	iny
@@ -602,11 +622,11 @@ clear_fixed_rectangle:
 	bne @row
 	lda $15
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 	lda #$1E
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	lda #$FF
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	; Neutral cycle padding for the measured fixed-rectangle ready path.
 .repeat 206
 	nop
@@ -620,7 +640,7 @@ clear_fixed_rectangle:
 draw_placeholder:
 	lda $15
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 	ldx #$00
 @column:
 	txa
@@ -630,13 +650,13 @@ draw_placeholder:
 	bcc :+
 	ora #$80
 :
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	lda #$8C
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	lda #$00
 	ldy #$08
 @row:
-	sta $5007
+	sta LCD_VRAM_WRITE
 	dey
 	bne @row
 	inx
@@ -664,11 +684,11 @@ draw_glyph_run:
 @tile:
 	lda $15
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 	lda $1A
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	lda $1B
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	lda ($00),y
 	pha
 	tya
@@ -722,7 +742,7 @@ draw_glyph_run:
 	ldx #$08
 @glyph_row:
 	lda ($18),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	iny
 	dex
 	bne @glyph_row
@@ -796,7 +816,7 @@ draw_glyph_run:
 draw_tile_stream:
 	lda $15
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 	lda $01
 	pha
 	lda #$00
@@ -873,19 +893,19 @@ tile_stream_pass:
 	lda #$00
 	sta $1B
 	lda $18
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	lda $19
 	asl a
 	asl a
 	asl a
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	tya
 	pha
 	ldy $1A
 	ldx #$08
 @tile_row:
 	lda ($02),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	iny
 	dex
 	bne @tile_row
@@ -923,7 +943,7 @@ tile_stream_pass:
 draw_pair_stream:
 	lda $15
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 	lda $01
 	pha
 	lda $00
@@ -1009,36 +1029,36 @@ pair_stream_pass:
 	sta $1B
 @repeat:
 	lda $18
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	lda $19
 	asl a
 	asl a
 	asl a
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	ldy $1A
 	lda ($02),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	iny
 	lda ($02),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	iny
 	lda ($02),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	iny
 	lda ($02),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	iny
 	lda ($02),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	iny
 	lda ($02),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	iny
 	lda ($02),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	iny
 	lda ($02),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	inc $18
 	dex
 	bne @repeat
@@ -1059,15 +1079,15 @@ pair_stream_pass:
 ; Clears plane-0 rows $E6-$FE, then decodes (value, count) runs on rows relative to $E6.
 draw_row_runs:
 	lda $15
-	sta $5001
+	sta LCD_CONTROL
 	ldy #$E6
 @clear_row:
-	sty $5005
+	sty LCD_VRAM_ADDR_HI
 	lda #$00
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	ldx #$20
 @clear:
-	sta $5007
+	sta LCD_VRAM_WRITE
 	dex
 	bne @clear
 	iny
@@ -1080,9 +1100,9 @@ draw_row_runs:
 	beq @end
 	clc
 	adc #$E6
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	lda #$00
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 @value:
 	iny
 	bne :+
@@ -1100,7 +1120,7 @@ draw_row_runs:
 	tax
 	lda $1A
 @run:
-	sta $5007
+	sta LCD_VRAM_WRITE
 	dex
 	bne @run
 	jmp @value
@@ -1120,16 +1140,16 @@ draw_row_runs:
 draw_row_literals:
 	php
 	lda $15
-	sta $5001
+	sta LCD_CONTROL
 	clv
 	ldy #$E6
 @clear_row:
-	sty $5005
+	sty LCD_VRAM_ADDR_HI
 	lda #$00
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	ldx #$20
 @clear:
-	sta $5007
+	sta LCD_VRAM_WRITE
 	dex
 	bne @clear
 	iny
@@ -1151,9 +1171,9 @@ draw_row_literals:
 	beq @end
 	clc
 	adc #$E6
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	lda #$00
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 @next_index:
 	iny
 	bne :+
@@ -1172,7 +1192,7 @@ draw_row_literals:
 @value_read_done:
 	cmp #$FF
 	beq @escape
-	sta $5007
+	sta LCD_VRAM_WRITE
 	jmp @next_index
 @escape:
 	iny
@@ -1316,7 +1336,7 @@ copy_record:
 redraw_record:
 	lda $15
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 	lda $0305
 	lsr a
 	lsr a
@@ -1341,12 +1361,12 @@ redraw_record:
 	lda $1F
 	clc
 	adc $1B
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	lda $1E
 	clc
 	adc $18
-	sta $5004
-	lda $5006
+	sta LCD_VRAM_ADDR_LO
+	lda LCD_VRAM_READ
 	sta $0308,x
 	inx
 	inc $1B
@@ -1370,9 +1390,9 @@ redraw_record:
 	beq :+
 	ora #$80
 :
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	lda $19
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	lda #$00
 	sta $1B
 @tile:
@@ -1385,7 +1405,7 @@ redraw_record:
 	ldx #$08
 @tile_row:
 	lda ($02),y
-	sta $5007
+	sta LCD_VRAM_WRITE
 	iny
 	dex
 	bne @tile_row
@@ -1498,7 +1518,7 @@ draw_object:
 @shifted:
 	lda $15
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 	ldx #$00
 	stx $00
 @read_plane:
@@ -1511,10 +1531,10 @@ draw_object:
 	lda $19
 	clc
 	adc $18
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	jsr object_column
-	sta $5004
-	lda $5006
+	sta LCD_VRAM_ADDR_LO
+	lda LCD_VRAM_READ
 	sta $0308,x
 	inx
 	inc $18
@@ -1557,13 +1577,13 @@ draw_object:
 	bne @composite
 	lda $15
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 	lda $1C
 	cmp #$10
 	bne :+
 	lda $15
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 :
 	ldx #$00
 	stx $00
@@ -1572,13 +1592,13 @@ draw_object:
 	sta $01
 @write_column:
 	lda $19
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	jsr object_column
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	ldy $1C
 @write_row:
 	lda $0368,x
-	sta $5007
+	sta LCD_VRAM_WRITE
 	inx
 	dey
 	bne @write_row
@@ -1672,7 +1692,7 @@ fill_rectangle_common:
 	sty $19
 	lda $15
 	ora #$40
-	sta $5001
+	sta LCD_CONTROL
 	lda $1C
 	lsr a
 	lsr a
@@ -1680,13 +1700,13 @@ fill_rectangle_common:
 	tax
 @column:
 	lda $18
-	sta $5004
+	sta LCD_VRAM_ADDR_LO
 	lda $19
-	sta $5005
+	sta LCD_VRAM_ADDR_HI
 	ldy $1D
 	lda $1A
 @row:
-	sta $5007
+	sta LCD_VRAM_WRITE
 	dey
 	bne @row
 	inc $18
