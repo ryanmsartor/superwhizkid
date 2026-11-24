@@ -98,7 +98,7 @@ Gamate VRAM (16 KiB physical backing)
 
 Two 8 KiB logical planes, interleaved byte-by-byte in backing RAM.
 Each plane is a 256 × 256 pixel, 1-bpp bitmap.
-
+```
 Logical address    Plane 0       Plane 1       Physical backing
 ──────────────────────────────────────────────────────────────────
 $0000-$001F        Row 0         Row 0         $0000-$003F
@@ -108,9 +108,11 @@ $0040-$005F        Row 2         Row 2         $0080-$00BF
 $1FC0-$1FDF        Row 254       Row 254       $3F80-$3FBF
 $1FE0-$1FFF        Row 255       Row 255       $3FC0-$3FFF
 ──────────────────────────────────────────────────────────────────
+```
 
 Physical backing byte layout (one scanline):
 
+```
         Plane 0             Plane 1
       ┌──────────┐        ┌──────────┐
       │ Byte  0  │        │ Byte  0  │
@@ -120,6 +122,7 @@ Physical backing byte layout (one scanline):
       └──────────┘        └──────────┘
        32 bytes             32 bytes
        256 pixels           256 pixels
+```
 
 Interleaved physical layout:
 
