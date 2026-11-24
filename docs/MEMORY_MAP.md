@@ -140,7 +140,7 @@ $3FFF  P1 Row 255, Byte 31
 ──────────────────────────────────────────────────────────────────
 
 Display organization (256 × 256 backing bitmap):
-
+```
   Y=$00 ┌──────────────────────────────────────┐
         │                                      │
         │                                      │
@@ -164,7 +164,7 @@ Display organization (256 × 256 backing bitmap):
         │     Fixed Y-scroll region            │
         │     Y=$F8-$FF (8 rows)               │
   Y=$FF └──────────────────────────────────────┘
-
+```
 Normal viewport: 160 × 150 pixels
 Horizontal backing width: 256 pixels
 Vertical scrolling: wraps within normal Y=$00-$C7 range
