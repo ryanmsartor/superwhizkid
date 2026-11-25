@@ -936,8 +936,103 @@ static void testSampleEventBatching(void) {
 	}
 }
 
+static void assertPeekMatchesRead(const struct Gamate* g, uint16_t address) {
+	struct Gamate copy = *g; // reads on the copy leave the machine under test untouched
+	assert(gamatePeek(g, address) == gamateRead(&copy, address));
+}
+
+static void testDebugAccess(void) {
+	struct Gamate g;
+	gamateInit(&g);
+	uint8_t bios[GAMATE_BIOS_SIZE], rom[0x10000];
+	for (size_t i = 0; i < sizeof(bios); i++) bios[i] = (uint8_t) (i * 3);
+	for (size_t i = 0; i < sizeof(rom); i++) rom[i] = (uint8_t) (i >> 8);
+	assert(gamateLoad(&g, rom, sizeof(rom), bios, sizeof(bios)));
+	g.ram[0x123] = 0x5A;
+	g.buttons = 0xFE;
+	g.vramAddress = 0x42;
+	g.vramPlane = true;
+	g.vram[(0x42 << 1) | 1] = 0x77;
+	assert(gamatePeek(&g, 0x6000) == 0); // no protection reply before the handshake
+
+	static const char key[] = "BIT CORPORATION";
+	for (size_t byte = 0; byte < sizeof(key) - 1; byte++) {
+		for (int bit = 7; bit >= 0; bit--) {
+			gamateWrite(&g, 0x6000, (key[byte] >> bit & 1) << 2);
+		}
+		gamateWrite(&g, 0x6000, 0);
+	}
+
+	uint16_t addresses[] = {
+		0x0000, 0x0523, 0x1FFF, 0x2000, 0x4000, 0x4100, 0x4400, 0x4800, 0x4C00, 0x5001,
+		0x5006, 0x5400, 0x5800, 0x5A00, 0x5FFF, 0x6000, 0x6001, 0x8000, 0xC000, 0xDFFF,
+		0xE000, 0xFFFF,
+	};
+	size_t addressCount = sizeof(addresses) / sizeof(addresses[0]);
+
+	size_t stateSize = gamateStateSize(&g);
+	uint8_t* stateBefore = malloc(stateSize);
+	uint8_t* stateAfter = malloc(stateSize);
+	assert(stateBefore && stateAfter);
+	assert(gamateSaveState(&g, stateBefore, stateSize));
+	struct GamateDiagnostics diagnosticsBefore = g.diagnostics;
+	uint8_t openBusBefore = g.openBus;
+	for (size_t i = 0; i < addressCount; i++) {
+		(void) gamatePeek(&g, addresses[i]);
+	}
+	assert(gamateSaveState(&g, stateAfter, stateSize));
+	assert(memcmp(stateBefore, stateAfter, stateSize) == 0);
+	assert(memcmp(&diagnosticsBefore, &g.diagnostics, sizeof(diagnosticsBefore)) == 0);
+	assert(g.openBus == openBusBefore);
+	free(stateBefore);
+	free(stateAfter);
+
+	for (size_t i = 0; i < addressCount; i++) {
+		assertPeekMatchesRead(&g, addresses[i]);
+	}
+	// The protection reply is consumed by reads, not by peeks: each peek shows the next bit.
+	for (int bit = 0; bit < 8; bit++) {
+		uint8_t peeked = gamatePeek(&g, 0x6000);
+		assert(peeked == gamateRead(&g, 0x6000));
+	}
+	assert(g.protectionPassed);
+	assert(gamatePeek(&g, 0x6100) == 1 && gamateRead(&g, 0x6100) == 1);
+
+	gamateResetRamDiagnostics(&g);
+	struct RamAccessCapture capture = { 0 };
+	uint64_t ramWritesBefore = g.diagnostics.ramTrackedWrites[0];
+	gamateSetRamDiagnosticWatch(&g, 0x123, captureRamAccess, &capture);
+	assert(gamatePoke(&g, 0x0523, 0x11));
+	assert(g.ram[0x123] == 0x11 && gamatePeek(&g, 0x0123) == 0x11);
+	assert(capture.count == 0 && g.diagnostics.ramTrackedWrites[0] == ramWritesBefore);
+	gamateSetRamDiagnosticWatch(&g, 0, NULL, NULL);
+
+	assert(gamatePoke(&g, 0xF123, 0x99));
+	assert(g.bios[0x123] == 0x99 && gamateRead(&g, 0xE123) == 0x99);
+	assert(gamatePoke(&g, 0x8000, 0xAB));
+	assert(g.rom[0x2000] == 0xAB && gamateRead(&g, 0x8000) == 0xAB);
+
+	bool displayBlankBefore = g.displayBlank;
+	uint8_t ayRegisterBefore = g.ayRegisters[0];
+	assert(!gamatePoke(&g, 0x4000, 0x01));
+	assert(!gamatePoke(&g, 0x5001, 0x80));
+	assert(!gamatePoke(&g, 0x5006, 0x12));
+	assert(g.displayBlank == displayBlankBefore && g.ayRegisters[0] == ayRegisterBefore);
+	assert(g.vramAddress == 0x42);
+
+	assert(gamateRomOffset(&g, 0x6000) == 0 && gamateRomOffset(&g, 0x8000) == 0x2000);
+	gamateWrite(&g, 0xC000, 3);
+	assert(gamateRomOffset(&g, 0xA123) == 0xC123);
+	gamateSetMapper(&g, GAMATE_MAPPER_4IN1);
+	gamateWrite(&g, 0x8000, 2);
+	assert(gamateRomOffset(&g, 0x6123) == 0x8123);
+	assert(gamateRomOffset(&g, 0x5FFF) == SIZE_MAX && gamateRomOffset(&g, 0xE000) == SIZE_MAX);
+	gamateFree(&g);
+}
+
 int main(void) {
 	testMemory();
+	testDebugAccess();
 	testUart();
 	testVideo();
 	testVideoWindows();

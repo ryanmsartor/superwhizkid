@@ -132,6 +132,17 @@ void gamateReset(struct Gamate* gamate);
 
 uint8_t gamateRead(struct Gamate* gamate, uint16_t address);
 void gamateWrite(struct Gamate* gamate, uint16_t address, uint8_t value);
+// Debugger access. None of these change machine state, openBus, or diagnostics counters.
+// gamatePeek returns the value a gamateRead would return, without advancing VRAM, UART, or
+// protection state.
+uint8_t gamatePeek(const struct Gamate* gamate, uint16_t address);
+// Writes the storage behind an address: RAM, cartridge ROM ($6000-$DFFF), or BIOS ($E000-$FFFF).
+// Hardware registers are not writable here. Returns false for addresses with no such storage.
+// Save states do not capture ROM or BIOS bytes, so these edits are lost on a state load.
+bool gamatePoke(struct Gamate* gamate, uint16_t address, uint8_t value);
+// Physical cartridge ROM offset that a read of address maps to under the current bank, or SIZE_MAX
+// outside the cartridge window ($6000-$DFFF).
+size_t gamateRomOffset(const struct Gamate* gamate, uint16_t address);
 void gamateRunClocks(struct Gamate* gamate, unsigned clocks);
 void gamateRunFrame(struct Gamate* gamate);
 // Connect the outgoing UART data sampled by each local transmit-clock access.

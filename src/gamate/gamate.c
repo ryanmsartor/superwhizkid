@@ -507,6 +507,45 @@ void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
 	}
 }
 
+uint8_t gamatePeek(const struct Gamate* g, uint16_t address) {
+	if (address < 0x2000) return g->ram[address & 0x3FF];
+	if (address >= 0x6000) {
+		if (address >= 0xE000) return g->bios[address & 0x0FFF];
+		if (g->protectionPassed && g->rom) return g->rom[romOffset(g, address)];
+		// The next protection read returns this bit; peeking must not advance the stream.
+		return g->protectionReply ? ((g->protectionByte >> (7 - g->protectionPosition)) & 1) << 1 : 0;
+	}
+	if ((address & 0xFC00) == 0x4000) return address >> 8;
+	if ((address & 0xFC00) == 0x4400) return g->buttons;
+	if ((address & 0xFC00) == 0x4800) return g->uartRx;
+	if ((address & 0xFC00) == 0x4C00) return address >> 8;
+	if ((address & 0xFC00) == 0x5000 && (address & 7) == 6) {
+		return g->vram[(g->vramAddress << 1) | g->vramPlane];
+	}
+	if ((address & 0xFF00) == 0x5A00) return (address >> 8) | 3;
+	return address >= 0x5400 && address < 0x5800 ? 0xFF : address >> 8;
+}
+
+bool gamatePoke(struct Gamate* g, uint16_t address, uint8_t value) {
+	if (address < 0x2000) {
+		g->ram[address & 0x3FF] = value;
+		return true;
+	}
+	if (address >= 0xE000) {
+		g->bios[address & 0x0FFF] = value;
+		return true;
+	}
+	if (address >= 0x6000 && g->rom) {
+		g->rom[romOffset(g, address)] = value;
+		return true;
+	}
+	return false;
+}
+
+size_t gamateRomOffset(const struct Gamate* g, uint16_t address) {
+	return address >= 0x6000 && address < 0xE000 ? romOffset(g, address) : SIZE_MAX;
+}
+
 static int channelLevel(const struct Gamate* g, int channel) {
 	static const uint8_t levels[16] = { 0, 1, 2, 3, 5, 7, 11, 15, 22, 31, 45, 63, 90, 127, 180, 255 };
 	bool toneDisabled = g->ayRegisters[7] & (1 << channel);
