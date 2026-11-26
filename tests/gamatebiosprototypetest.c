@@ -640,9 +640,12 @@ static void testBitmapCopy(struct Gamate* g) {
 		unsigned rows = shapes[s].rows;
 		unsigned plane0Offset = shapes[s].plane0 - 0x6000;
 		unsigned plane1Offset = shapes[s].plane1 - 0x6000;
+		unsigned crossingReads = 0, pointerCarries = 0;
 		uint8_t finalByte = 0;
 		for (unsigned column = 0; column < columns; column++) {
 			for (unsigned row = 0; row < rows; row++) {
+				crossingReads += ((shapes[s].plane0 + column * rows) & 0xFF) + row > 0xFF;
+				crossingReads += ((shapes[s].plane1 + column * rows) & 0xFF) + row > 0xFF;
 				uint8_t source0 = g->rom[(plane0Offset + column * rows + row) & 0x3FFF];
 				uint8_t source1 = g->rom[(plane1Offset + column * rows + row) & 0x3FFF];
 				putExpected(expected, column + 2, row + 0xF8, source0);
@@ -650,10 +653,15 @@ static void testBitmapCopy(struct Gamate* g) {
 				if (column == columns - 1 && row == rows - 1)
 					finalByte = source1;
 			}
+			pointerCarries += ((shapes[s].plane0 + column * rows) & 0xFF) + rows > 0xFF;
+			pointerCarries += ((shapes[s].plane1 + column * rows) & 0xFF) + rows > 0xFF;
 		}
 		uint64_t writes = g->diagnostics.vramWrites;
 		uint64_t lcd = g->diagnostics.lcdWrites;
+		uint64_t clocks = g->masterClocks;
 		call(g, 0xF015, 0xA5, 0x13, 0xF8, 0x64, 100000);
+		assert(g->masterClocks - clocks == 390u + columns * (224u + 76u * rows) +
+			2u * crossingReads + 8u * pointerCarries);
 		assert(!memcmp(g->vram, expected, sizeof(g->vram)));
 		assert(g->diagnostics.vramWrites - writes == 2 * columns * rows);
 		assert(g->diagnostics.lcdWrites - lcd == 1 + 2 * columns * (2 + rows));

@@ -526,17 +526,16 @@ copy_plane:
 	inc $1F
 	jmp @next_column
 @advance:
-	lda $1E
+	tya
 	clc
-	adc $01D
+	adc $1E
 	sta $1E
 	bcc @next_column
 	inc $1F
 @next_column:
-	lda $018
-	clc
-	adc #$01
-	sta $018
+	; The destination column is an eight-bit counter; INC preserves its wrap behavior while
+	; avoiding redundant accumulator setup on every column of both planes.
+	inc $018
 	dec $01C
 	bne @column
 	rts

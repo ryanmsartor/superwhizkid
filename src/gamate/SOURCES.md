@@ -1920,6 +1920,20 @@ copied into the repository, build output, tests, or releases.
     clocks respectively. The full 526,848-call matrix then matched the documented formula for
     every input, including first-nibble branches and Y=`$FF`. Interrupt-spanning and callback
     interference remain outside the matrix.
+  - **`$F015` replacement timing decomposition.** Six purpose-written synthetic shapes compared
+    the independently authored firmware with the resolved authentic formula: 1x8, 1x1, 2x8,
+    3x8, 4x8, and a 3x8 case whose second-plane source begins at `$60FE`. With no source-pointer
+    carry, SWK follows `390 + columns * (248 + 76 * rows)` master clocks, compared with the
+    authentic `234 + columns * (132 + 76 * rows)`. Replacing the destination's load/add/store with
+    the equivalent eight-bit `INC`, and reusing the completed row index for source-pointer addition,
+    reduces 24 master clocks per column. The resulting SWK formula is
+    `390 + columns * (224 + 76 * rows)`. The identical 76-clock byte-row coefficient now isolates
+    the remaining mismatch to 156 clocks of fixed setup and 92 clocks per column. In the `$60FE`
+    case, the authentic indexed-read crossings account for 12 clocks while SWK adds another eight
+    when its explicit source-pointer update carries. Implementation impact: retain the row-copy
+    loop, but replace the stack/setup and per-column pointer/address bookkeeping; do not compensate
+    with global padding. These are emulator observations using synthetic data, not physical timing.
+    No BIOS or cartridge instructions or payload bytes were retained or copied.
   - **Rectangle-fill timing correction.** `$F02A/$F02D` were probed with a removed final
     `LDA $1A`; clean 2×3, 256×1, 1×256 and 1×1 shapes were four master clocks high in both
     routines. Removing the load moved 1×1 from 202/196 to 200/194 and the shortest neutral 6502
