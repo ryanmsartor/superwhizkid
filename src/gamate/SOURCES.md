@@ -850,6 +850,16 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   do not add a global compositor delay. The matrix uses only purpose-written cartridge data and is
   an emulator timing result, not physical measurement.
 
+- SWK `$F027` first large-object timing correction: the large shifter now processes two rows per
+  loop, reducing its slope by the measured 32 CPU cycles per horizontal shift, with separate fixed
+  timing for zero and nonzero shifts. The isolated matrix now measures zero residual at shift 0 and
+  +4 master clocks at shifts 1-7, replacing the former -394 through +66 range without changing
+  pixels or modeled state. Moving the code changed instruction-page placement in later paths: the
+  untouched small-object residuals are now `+466,+320,+176,+32,-112,-256,-400,-544`, and the 141-call
+  Cube Up replay shapes are +4,088, +3,728, and +288 clocks. This confirms that isolated arm timing
+  and mixed selector/source-alignment timing must both be rechecked after each layout change. No
+  commercial payload was retained; the local inputs remained read-only.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

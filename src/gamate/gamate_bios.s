@@ -1546,9 +1546,23 @@ draw_object:
 	bne @source_plane
 :
 	ldy $1B
-	bne :+
+	bne @shift_nonzero
+	lda $1C
+	cmp #$10
+	beq @large_zero_shift
 	jmp @shifted
-:
+@large_zero_shift:
+	; The paired-row loop below removes 32 CPU cycles per large-object shift. A zero-shift
+	; large object bypasses it, so retain its separately measured fixed cost here.
+	ldx #$1C
+@large_zero_timing:
+	dex
+	bne @large_zero_timing
+	.repeat 3
+	nop
+	.endrepeat
+	jmp @shifted
+@shift_nonzero:
 	lda $1C
 	cmp #$10
 	beq @shift_large
@@ -1572,10 +1586,26 @@ draw_object:
 	lsr $0398,x
 	ror $03A8,x
 	ror $03B8,x
+	dex
+	lsr $0368,x
+	ror $0378,x
+	ror $0388,x
+	lsr $0398,x
+	ror $03A8,x
+	ror $03B8,x
 	txa
 	bne @shift_large_row
+	; Pairing rows saves 40 CPU cycles per shift; four NOPs retain the measured net 32-cycle
+	; reduction. The remaining loop supplies the measured fixed nonzero-shift cost.
+	.repeat 4
+	nop
+	.endrepeat
 	dey
 	bne @shift_large
+	ldx #$1E
+@large_shift_timing:
+	dex
+	bne @large_shift_timing
 @shifted:
 	lda LCD_CONTROL_BASE
 	ora #$40
