@@ -1939,6 +1939,17 @@ copied into the repository, build output, tests, or releases.
     loop, but replace the stack/setup and per-column pointer/address bookkeeping; do not compensate
     with global padding. These are emulator observations using synthetic data, not physical timing.
     No BIOS or cartridge instructions or payload bytes were retained or copied.
+  - **Replacement wait-service consolidation.** The independently authored `$F003`, `$F006`, and
+    `$F009` loops were checked through one synthetic matrix covering all 256 entry values, multiple
+    preserved-status combinations, and thresholds 8, 5, and 24. Removing redundant `SEC`
+    instructions from `$F003/$F009` reduced their ready paths from 46 to the measured 42 master
+    clocks; the successful `CMP` already supplies carry, while `LDA #$00` supplies the returned Z/N
+    state. Every service waited for exactly `threshold - n` IRQs below threshold, zeroed `$00B`,
+    preserved Y/S, and made no direct LCD or VRAM writes. A purpose-written one-IRQ callback for
+    each slot confirmed that callback-modified X remains observable while A and Y follow the wrapper
+    and service contracts. Callback execution time and IRQ phase are deliberately not attributed to
+    the wait loop. This validation used only synthetic cartridge code and the previously documented
+    execution contracts; no commercial implementation code or payload was consulted or copied.
   - **Rectangle-fill timing correction.** `$F02A/$F02D` were probed with a removed final
     `LDA $1A`; clean 2×3, 256×1, 1×256 and 1×1 shapes were four master clocks high in both
     routines. Removing the load moved 1×1 from 202/196 to 200/194 and the shortest neutral 6502

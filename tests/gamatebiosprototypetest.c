@@ -348,23 +348,54 @@ static void testNmi(struct Gamate* g) {
 	g->rom[0x28] = 0x60;
 }
 
-static void testWait(struct Gamate* g) {
-	static const uint8_t counters[] = { 0, 23, 24, 0xFF };
-	for (size_t i = 0; i < sizeof(counters); i++) {
-		g->ram[0x0B] = counters[i];
-		g->ram[0x0C] = 0;
+static void testIrqWaits(struct Gamate* g) {
+	static const struct {
+		uint16_t slot;
+		uint8_t threshold;
+	} services[] = {
+		{ 0xF003, 8 },
+		{ 0xF006, 5 },
+		{ 0xF009, 24 },
+	};
+	static const uint8_t waitPs[] = { 0x20, 0x28, 0x60 };
+	static const uint8_t readyPs[] = { 0x24, 0x28, 0x60, 0x64 };
+
+	for (size_t service = 0; service < sizeof(services) / sizeof(services[0]); service++) {
+		for (unsigned counter = 0; counter <= 0xFF; counter++) {
+			const uint8_t* ps = counter < services[service].threshold ? waitPs : readyPs;
+			unsigned count = counter < services[service].threshold ?
+				sizeof(waitPs) : sizeof(readyPs);
+			for (unsigned i = 0; i < count; i++) {
+				g->ram[0x0B] = (uint8_t) counter;
+				g->ram[0x0C] = 0;
+				uint64_t irqs = g->diagnostics.irqsTaken;
+				uint64_t clocks = g->masterClocks;
+				uint64_t vramWrites = g->diagnostics.vramWrites;
+				uint64_t lcdWrites = g->diagnostics.lcdWrites;
+				uint8_t p = ps[i];
+				call(g, services[service].slot, 0xA5, 0x35, 0x68, p, 1000000);
+				unsigned expected = counter < services[service].threshold ?
+					services[service].threshold - counter : 0;
+				assert(g->diagnostics.irqsTaken - irqs == expected);
+				assert(g->ram[0x0B] == 0);
+				assert(g->cpu.a == 0 && g->cpu.x == 0x35 && g->cpu.y == 0x68);
+				assert(g->cpu.p == (uint8_t) ((p & 0x7C) | 0x03));
+				assert(g->cpu.s == 0xFF);
+				assert(g->diagnostics.vramWrites == vramWrites);
+				assert(g->diagnostics.lcdWrites == lcdWrites);
+				if (!expected) assert(g->masterClocks - clocks == 42);
+			}
+		}
+
+		g->ram[0x0B] = (uint8_t) (services[service].threshold - 1);
+		g->ram[0x0C] = 1;
 		uint64_t irqs = g->diagnostics.irqsTaken;
-		call(g, 0xF009, 0xA5, 0x35, 0x68, 0x60, 1000000);
-		unsigned expected = counters[i] < 24 ? 24 - counters[i] : 0;
-		assert(g->diagnostics.irqsTaken - irqs == expected);
+		call(g, services[service].slot, 0xA5, 0x35, 0x68, 0x20, 100000);
+		assert(g->diagnostics.irqsTaken - irqs == 1);
 		assert(g->ram[0x0B] == 0);
-		assert(g->cpu.a == 0 && g->cpu.x == 0x35 && g->cpu.y == 0x68);
-		assert(g->cpu.p == 0x63);
+		assert(g->cpu.a == 0 && g->cpu.x == 0x44 && g->cpu.y == 0x68);
+		assert(g->cpu.p == 0x23 && g->cpu.s == 0xFF);
 	}
-	g->ram[0x0B] = 23;
-	g->ram[0x0C] = 1;
-	call(g, 0xF009, 0xA5, 0x35, 0x68, 0x20, 100000);
-	assert(g->cpu.a == 0 && g->cpu.x == 0x44 && g->cpu.y == 0x68 && g->cpu.p == 0x23);
 }
 
 static void testRecords(struct Gamate* g) {
@@ -718,45 +749,6 @@ static void testFixedRectangle(struct Gamate* g) {
 	}
 }
 
-static void testShortWait(struct Gamate* g) {
-	static const uint8_t counters[] = { 0, 7, 8, 0xFF };
-	for (size_t i = 0; i < sizeof(counters); i++) {
-		g->ram[0x0B] = counters[i];
-		g->ram[0x0C] = 0;
-		uint64_t irqs = g->diagnostics.irqsTaken;
-		call(g, 0xF003, 0xA5, 0x35, 0x68, 0x68, 1000000);
-		unsigned expected = counters[i] < 8 ? 8 - counters[i] : 0;
-		assert(g->diagnostics.irqsTaken - irqs == expected);
-		assert(g->ram[0x0B] == 0);
-		assert(g->cpu.a == 0 && g->cpu.x == 0x35 && g->cpu.y == 0x68 && g->cpu.p == 0x6B);
-	}
-}
-
-static void testCounterWait(struct Gamate* g) {
-	for (unsigned counter = 0; counter <= 0xFF; counter++) {
-		static const uint8_t waitPs[] = { 0x20, 0x28, 0x60 };
-		static const uint8_t readyPs[] = { 0x24, 0x28, 0x60, 0x64 };
-		const uint8_t* ps = counter < 5 ? waitPs : readyPs;
-		unsigned count = counter < 5 ? sizeof(waitPs) : sizeof(readyPs);
-		for (unsigned i = 0; i < count; i++) {
-			g->ram[0x0B] = (uint8_t) counter;
-			g->ram[0x0C] = 0;
-			uint64_t irqs = g->diagnostics.irqsTaken;
-			uint64_t clocks = g->masterClocks;
-			uint8_t p = ps[i];
-			call(g, 0xF006, 0xA5, 0x35, 0x68, p, 1000000);
-			unsigned expected = counter < 5 ? 5 - counter : 0;
-			assert(g->diagnostics.irqsTaken - irqs == (uint64_t) expected);
-			assert(g->ram[0x0B] == 0);
-			assert(g->cpu.a == 0 && g->cpu.x == 0x35 && g->cpu.y == 0x68);
-			assert(g->cpu.p == (uint8_t) ((p & 0x7C) | 0x03));
-			assert(g->cpu.s == 0xFF);
-			if (counter >= 5)
-				assert(g->masterClocks - clocks == 42);
-		}
-	}
-}
-
 static void testRandom(struct Gamate* g) {
 	for (uint32_t input = 0; input <= UINT16_MAX; input++) {
 		for (unsigned p = 0x24; p <= 0x6C; p += 0x48) {
@@ -1015,7 +1007,7 @@ int main(int argc, char** argv) {
 	testBoot(&g);
 	testIrq(&g);
 	testNmi(&g);
-	testWait(&g);
+	testIrqWaits(&g);
 	testRecords(&g);
 	testClear(&g);
 	testPlaceholder(&g);
@@ -1024,8 +1016,6 @@ int main(int argc, char** argv) {
 	testRectangle(&g);
 	testBitmapCopy(&g);
 	testFixedRectangle(&g);
-	testShortWait(&g);
-	testCounterWait(&g);
 	testRandom(&g);
 	testDigits(&g);
 	testPairStream(&g);

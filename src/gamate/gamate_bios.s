@@ -309,7 +309,6 @@ wait_8_irqs:
 	bcc wait_8_irqs
 	lda #$00
 	sta WAIT_COUNTER
-	sec
 	rts
 
 wait_24_irqs:
@@ -318,7 +317,6 @@ wait_24_irqs:
 	bcc wait_24_irqs
 	lda #$00
 	sta WAIT_COUNTER
-	sec
 	rts
 
 wait_20_irqs:
