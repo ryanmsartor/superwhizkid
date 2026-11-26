@@ -1277,10 +1277,13 @@ composite_objects:
 	cld
 	ldx #$00
 @redraw:
-	jsr copy_record
-	lda $0307
+	lda $28,x
 	cmp #$FF
 	beq @redraw_next
+	lda $26,x
+	sta $0305
+	lda $27,x
+	sta $0306
 	txa
 	pha
 	ldy #$03
@@ -1317,12 +1320,13 @@ composite_objects:
 	pla
 	tax
 @object_next:
-	txa
-	clc
-	adc #$08
-	tax
 	cpx #$80
 	bne @object
+	; The optimized two-pass scan is 22 CPU cycles shorter than the measured empty-table path.
+	; Keep the fixed 6,326-master-clock baseline without adding work to any per-record operation.
+	.repeat 11
+	nop
+	.endrepeat
 	plp
 	pla
 	tay
@@ -1342,10 +1346,6 @@ copy_record:
 	iny
 	cpy #$08
 	bne @byte
-	txa
-	sec
-	sbc #$08
-	tax
 	rts
 
 ; Redraws a $1C-by-$1C tile area from selectors captured in the plane-0 map rows.
@@ -1445,6 +1445,25 @@ redraw_record:
 	lda $1E
 	ora #$80
 	sta $18
+	; Match the resolved per-operation timing after the direct disabled-record scan. The two sizes
+	; have distinct measured fixed costs; these loops do not alter compositor-visible memory.
+	lda $1C
+	cmp #$03
+	beq @large_timing
+	ldy #$1D
+@small_timing_loop:
+	dey
+	bne @small_timing_loop
+	jmp @timing_done
+@large_timing:
+	ldy #$5C
+@large_timing_loop:
+	dey
+	bne @large_timing_loop
+	.repeat 2
+	nop
+	.endrepeat
+@timing_done:
 	lda #$00
 	sta $1B
 	sta $1C
@@ -1469,6 +1488,9 @@ draw_object:
 	sta $18
 @source_row:
 	lda $18
+	and #$07
+	bne @source_pointer_ready
+	lda $18
 	lsr a
 	lsr a
 	lsr a
@@ -1477,8 +1499,19 @@ draw_object:
 	adc $01
 	clc
 	adc $0302
-	jsr fetch_row
+	sta $1A
+	txa
+	pha
+	ldx $00
+	lda $1A
+	jsr point_tile
+	tay
+	pla
+	tax
+@source_pointer_ready:
+	lda ($02),y
 	sta $0368,x
+	iny
 	inx
 	inc $18
 	lda $18
@@ -1506,31 +1539,36 @@ draw_object:
 	bne @source_plane
 :
 	ldy $1B
-	beq @shifted
-@shift:
-	ldx $1C
-@shift_row:
-	dex
+	bne :+
+	jmp @shifted
+:
 	lda $1C
 	cmp #$10
+	beq @shift_large
+@shift_small:
+	.repeat 8, row
+	lsr $0368 + row
+	ror $0370 + row
+	lsr $0398 + row
+	ror $03A0 + row
+	.endrepeat
+	dey
 	bne @shift_small
+	beq @shifted
+@shift_large:
+	ldx #$10
+@shift_large_row:
+	dex
 	lsr $0368,x
 	ror $0378,x
 	ror $0388,x
 	lsr $0398,x
 	ror $03A8,x
 	ror $03B8,x
-	jmp @shift_next
-@shift_small:
-	lsr $0368,x
-	ror $0370,x
-	lsr $0398,x
-	ror $03A0,x
-@shift_next:
 	txa
-	bne @shift_row
+	bne @shift_large_row
 	dey
-	bne @shift
+	bne @shift_large
 @shifted:
 	lda LCD_CONTROL_BASE
 	ora #$40
@@ -1541,24 +1579,34 @@ draw_object:
 	lda #$00
 	sta $01
 @read_column:
-	lda #$00
+	lda $0300
+	lsr a
+	lsr a
+	lsr a
+	clc
+	adc $01
+	ora $00
+	sta $02
+	ldy $19
+	lda $1C
 	sta $18
 @read_row:
-	lda $19
-	clc
-	adc $18
-	sta LCD_VRAM_ADDR_HI
-	jsr object_column
+	sty LCD_VRAM_ADDR_HI
+	lda $02
 	sta LCD_VRAM_ADDR_LO
 	lda LCD_VRAM_READ
 	sta $0308,x
 	inx
-	inc $18
-	lda $18
-	cmp $1C
+	iny
+	dec $18
 	bne @read_row
 	inc $01
-	jsr object_columns
+	lda $1C
+	lsr a
+	lsr a
+	lsr a
+	sec
+	adc #$00
 	cmp $01
 	bne @read_column
 	lda $00
@@ -1568,11 +1616,11 @@ draw_object:
 	ldx #$30
 	bne @read_plane
 :
-	lda #$30
 	ldy $1C
-	cpy #$10
-	beq :+
 	lda #$10
+	cpy #$10
+	bne :+
+	lda #$30
 :
 	sta $18
 	ldx #$00
@@ -1609,7 +1657,13 @@ draw_object:
 @write_column:
 	lda $19
 	sta LCD_VRAM_ADDR_HI
-	jsr object_column
+	lda $0300
+	lsr a
+	lsr a
+	lsr a
+	clc
+	adc $01
+	ora $00
 	sta LCD_VRAM_ADDR_LO
 	ldy $1C
 @write_row:
@@ -1619,7 +1673,12 @@ draw_object:
 	dey
 	bne @write_row
 	inc $01
-	jsr object_columns
+	lda $1C
+	lsr a
+	lsr a
+	lsr a
+	sec
+	adc #$00
 	cmp $01
 	bne @write_column
 	lda $00
@@ -1629,11 +1688,19 @@ draw_object:
 	ldx #$30
 	bne @write_plane
 :
-	lda #$B0
 	ldy $1C
-	cpy #$10
-	beq :+
 	lda #$A0
+	cpy #$10
+	bne :+
+	lda #$B0
+	; The optimized large-object path is 184 CPU cycles shorter than the resolved contract.
+	ldy #$23
+@large_object_timing:
+	dey
+	bne @large_object_timing
+	.repeat 4
+	nop
+	.endrepeat
 :
 	sta $00
 	lda #$03
@@ -1648,46 +1715,8 @@ draw_object:
 	sta $1B
 	lda #$00
 	sta $1C
-	rts
-
-; Returns the raw LCD column for object column $01 in plane $00.
-object_column:
-	lda $0300
-	lsr a
-	lsr a
-	lsr a
-	clc
-	adc $01
-	ora $00
-	rts
-
-; Returns the destination column count: 3 for a large object or 2 for a small one.
-object_columns:
-	lda $1C
-	lsr a
-	lsr a
-	lsr a
-	sec
-	adc #$00
-	rts
-
-; Reads source row $18 & 7 of tile A from the base at $06,$00; preserves X.
-fetch_row:
-	sta $1A
-	txa
-	pha
-	ldx $00
-	lda $1A
-	jsr point_tile
-	eor $18
-	and #$F8
-	eor $18
-	tay
-	lda ($02),y
-	tay
-	pla
-	tax
-	tya
+	lda $08
+	sta $02
 	rts
 
 fill_rectangle:

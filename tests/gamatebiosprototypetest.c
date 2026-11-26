@@ -902,6 +902,15 @@ static uint8_t sourceRow(const struct Gamate* g, unsigned plane, uint8_t selecto
 	return g->rom[((base + 8 * selector + row) & 0xFFFF) - 0x6000];
 }
 
+static unsigned compositorTileClocks(const struct Gamate* g, uint8_t selector) {
+	unsigned clocks = 64 * (selector >> 5);
+	for (unsigned plane = 0; plane < 2; plane++) {
+		unsigned low = g->ram[6 + 2 * plane] + 8 * (selector & 31);
+		for (unsigned row = 0; row < 8; row++) clocks += low + row > 0xFF ? 2 : 0;
+	}
+	return clocks;
+}
+
 static void modelRedraw(const struct Gamate* g, uint8_t* vram, const uint8_t* record, unsigned q) {
 	uint8_t selectors[9];
 	for (unsigned c = 0; c < q; c++) {
@@ -958,7 +967,9 @@ static void testCompositor(struct Gamate* g) {
 	memset(g->ram + 0x21, 0xFF, 0x80);
 	memset(g->ram + 0x300, 0xA5, 0xC8);
 	uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
+	uint64_t clocks = g->masterClocks;
 	call(g, 0xF027, 0x8C, 0x47, 0x19, 0x64, 100000);
+	assert(g->masterClocks - clocks == 6326);
 	assert(g->diagnostics.vramWrites == writes && g->diagnostics.lcdWrites == lcd);
 	assert(g->cpu.a == 0x8C && g->cpu.x == 0x47 && g->cpu.y == 0x19 && g->cpu.p == 0xA5);
 	for (unsigned i = 0; i < 8; i++) assert(g->ram[0x300 + i] == 0xFF);
@@ -973,12 +984,32 @@ static void testCompositor(struct Gamate* g) {
 	uint8_t expected[0x4000];
 	for (size_t i = 0; i < sizeof(expected); i++) expected[i] = (uint8_t) (i * 37 + i / 5);
 	memcpy(g->vram, expected, sizeof(expected));
+	unsigned expectedClocks = 6326;
+	for (unsigned c = 0; c < 3; c++)
+		for (unsigned r = 0; r < 3; r++)
+			expectedClocks += compositorTileClocks(g,
+				vramAt(expected, (largeRedraw[5] >> 3) + c,
+					0xE6 + (largeRedraw[6] >> 3) + r));
+	expectedClocks += 9084;
 	modelRedraw(g, expected, largeRedraw, 3);
+	for (unsigned c = 0; c < 2; c++)
+		for (unsigned r = 0; r < 2; r++)
+			expectedClocks += compositorTileClocks(g,
+				vramAt(expected, (smallBoth[5] >> 3) + c,
+					0xE6 + (smallBoth[6] >> 3) + r));
+	expectedClocks += 4270;
 	modelRedraw(g, expected, smallBoth, 2);
+	for (unsigned selector = largeObject[2]; selector <= (unsigned) largeObject[2] + 3; selector++)
+		expectedClocks += compositorTileClocks(g, (uint8_t) selector);
+	expectedClocks += 23326 + 1516 * (largeObject[0] & 7);
+	expectedClocks += compositorTileClocks(g, smallBoth[2]);
+	expectedClocks += 7556 + 540 * (smallBoth[0] & 7);
 	modelObject(g, expected, largeObject, true);
 	modelObject(g, expected, smallBoth, false);
 	writes = g->diagnostics.vramWrites;
+	clocks = g->masterClocks;
 	call(g, 0xF027, 0x0C, 0x47, 0x19, 0x65, 1000000);
+	assert(g->masterClocks - clocks == expectedClocks);
 	assert(!memcmp(g->vram, expected, sizeof(expected)));
 	assert(g->diagnostics.vramWrites - writes == 144 + 64 + 96 + 32);
 	assert(g->cpu.a == 0x0C && g->cpu.x == 0x47 && g->cpu.y == 0x19 && g->cpu.p == 0x25);
@@ -987,6 +1018,46 @@ static void testCompositor(struct Gamate* g) {
 	assert(g->ram[0x18] == 0x85 && g->ram[0x19] == 0x31 && g->ram[0x1A] == 5);
 	assert(g->ram[0x1B] == 1 && g->ram[0x1C] == 0 && g->ram[0x1D] == 0);
 	assert(g->ram[0x1E] == 2 && g->ram[0x1F] == 0xE7);
+
+	static const struct {
+		const uint8_t* record;
+		unsigned index;
+		bool redraw;
+		bool large;
+	} isolated[] = {
+		{ largeRedraw, 0, true, true },
+		{ smallBoth, 8, true, false },
+		{ largeObject, 0, false, true },
+		{ smallBoth, 8, false, false },
+	};
+	for (size_t i = 0; i < sizeof(isolated) / sizeof(isolated[0]); i++) {
+		memset(g->ram + 0x21, 0xFF, 0x80);
+		memcpy(g->ram + 0x21 + 8 * isolated[i].index, isolated[i].record, 8);
+		g->ram[0x21 + 8 * isolated[i].index + (isolated[i].redraw ? 2 : 7)] = 0xFF;
+		for (size_t j = 0; j < sizeof(expected); j++) expected[j] = (uint8_t) (j * 37 + j / 5);
+		memcpy(g->vram, expected, sizeof(expected));
+		unsigned target = 6326;
+		if (isolated[i].redraw) {
+			unsigned q = isolated[i].large ? 3 : 2;
+			for (unsigned c = 0; c < q; c++)
+				for (unsigned r = 0; r < q; r++)
+					target += compositorTileClocks(g, vramAt(expected,
+						(isolated[i].record[5] >> 3) + c,
+						0xE6 + (isolated[i].record[6] >> 3) + r));
+			target += isolated[i].large ? 9084 : 4270;
+		} else if (isolated[i].large) {
+			for (unsigned selector = isolated[i].record[2];
+					selector <= (unsigned) isolated[i].record[2] + 3; selector++)
+				target += compositorTileClocks(g, (uint8_t) selector);
+			target += 23326 + 1516 * (isolated[i].record[0] & 7);
+		} else {
+			target += compositorTileClocks(g, isolated[i].record[2]);
+			target += 7556 + 540 * (isolated[i].record[0] & 7);
+		}
+		clocks = g->masterClocks;
+		call(g, 0xF027, 0, 0, 0, 0x24, 1000000);
+		assert(g->masterClocks - clocks == target);
+	}
 }
 
 int main(int argc, char** argv) {

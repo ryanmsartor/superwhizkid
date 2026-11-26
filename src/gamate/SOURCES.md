@@ -1971,14 +1971,30 @@ copied into the repository, build output, tests, or releases.
     global or shape-only NOP constant can be inferred from that corpus distribution. Temporary
     diagnostics and all speculative code changes were removed; these attempts are recorded as
     negative evidence, not implementation facts.
+  - **`$F027` replacement timing correction.** A later contract-driven rewrite supersedes the
+    provisional timing result above. Direct gate checks make each disabled redraw record use the
+    measured 44-clock stride; the object pass advances X directly instead of rewinding and
+    re-advancing each copied record. Tile pointers are resolved once per eight source rows, LCD
+    columns and rows are carried across their natural loops, and the small-object shift kernel uses
+    eight explicit absolute-RMW rows. These changes retain the documented ordered graphics and LCD
+    accesses while removing repeated address arithmetic. Size-specific neutral delay loops close
+    the remaining fixed redraw and large-object differences; they are consequences of the measured
+    operation formula, not reconstructed firmware code. The synthetic suite now asserts exact
+    clocks for the 6,326-clock empty table, isolated large and small redraws, isolated large and
+    small current objects, selector/page penalties, horizontal-shift costs, and a combined
+    four-operation case. Output, access-count, scratch, and return-state assertions continue to
+    pass. The inputs and graphics are purpose-written synthetic data. No authentic BIOS instruction,
+    table, graphic, or cartridge payload was consulted or copied.
   - **Interactive follow-up.** A RetroArch session loaded the rebuilt core with explicit SWK
     priority and ran the standalone Cube Up cartridge for 12 minutes 36 seconds. Gameplay began
     successfully, and the user-observed gameplay, score digits and piece behavior appeared correct
     with no reported freeze or halt. This is a qualitative, emulator-only session; it was not a
     complete playthrough and no intermediate frames or state were retained.
-  - **Limitations.** Timing differs; `$F027` is about 1.6× slower on average. Stack layout and
-    decimal-mode entry are not modeled. Only Cube Up was exercised, and no physical hardware was
-    used. Reports, harnesses and traces stayed under `/tmp` and retained no ROM or BIOS bytes.
+  - **Limitations.** `$F027` now matches the controlled uninterrupted binary-mode timing formula,
+    but the earlier Cube Up corpus timing comparison has not yet been rerun against this rewrite.
+    Stack contents, decimal-mode entry, interrupt-visible event timing, and side-effectful graphics
+    sources are not fully modeled. No physical hardware was used. Reports, harnesses and traces
+    stayed under temporary storage and retained no ROM or BIOS bytes.
 
 ### Corpus sweep and title-specific validation
 
