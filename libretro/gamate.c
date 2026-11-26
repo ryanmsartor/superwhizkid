@@ -16,9 +16,11 @@ static retro_input_poll_t inputPollCb;
 static retro_input_state_t inputStateCb;
 static struct Gamate gamate;
 static bool loaded;
-static uint16_t video[GAMATE_WIDTH * GAMATE_HEIGHT];
+enum { DEBUG_FRAMEBUFFER_WIDTH = 256, DEBUG_FRAMEBUFFER_HEIGHT = 256 };
+static uint16_t video[DEBUG_FRAMEBUFFER_WIDTH * DEBUG_FRAMEBUFFER_HEIGHT];
 static int16_t audio[2048 * 2];
 static bool tapLatch, skipIntro;
+static bool fullFramebuffer;
 static bool fastForwardRequested;
 static unsigned audioOutput;
 static int32_t speakerBass, speakerTreble[2];
@@ -277,6 +279,8 @@ void retro_set_environment(retro_environment_t cb) {
 		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction", "Suppresses brief light flashes caused by games clearing and redrawing objects. The selected number is the maximum transient duration suppressed; genuine lightening changes are delayed by the same number of frames.",
 			{ { "off", "Off" }, { "1", "1 Frame" }, { "2", "2 Frames" },
 				{ "3", "3 Frames" }, { NULL, NULL } }, "off" },
+		{ "superwhizkid_debug_full_framebuffer", "Debug: Display Full Framebuffer", "Displays the raw 256x256 two-plane bitmap. Red outlines mark the ordinary display region and yellow outlines mark fixed window regions. LCD ghosting and redraw filtering do not alter this debug view.",
+			{ { "off", "Off" }, { "on", "On" }, { NULL, NULL } }, "off" },
 		{ "superwhizkid_bios", "BIOS Priority", "Selects the preferred BIOS at content load. UMC and Bit fall back to each other, then SWK; SWK falls back to UMC, then Bit. SWK is currently experimental and targets standalone Cube Up. Reload content to apply a change. Reset continues using the currently loaded BIOS.",
 			{ { "umc", "UMC (gamate_bios_umc.bin)" }, { "bit", "Bit (gamate_bios_bit.bin)" },
 				{ "swk", "SWK (gamate_bios_swk.bin)" }, { NULL, NULL } }, "umc" },
@@ -291,6 +295,7 @@ void retro_set_environment(retro_environment_t cb) {
 		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
 		{ "superwhizkid_lcd_ghosting", "LCD Ghosting; off|1|2|3|4|5" },
 		{ "superwhizkid_flicker_reduction", "Redraw Flicker Reduction; off|1|2|3" },
+		{ "superwhizkid_debug_full_framebuffer", "Debug: Display Full Framebuffer; off|on" },
 		{ "superwhizkid_bios", "BIOS Priority; umc|bit|swk" },
 		{ "superwhizkid_skip_intro", "Skip BIOS intro; off|on" },
 		{ NULL, NULL }
@@ -347,6 +352,17 @@ static void buildShades(void) {
 		shades[i] = i == 3 * 256 ? activePalette[3] :
 			blend565(activePalette[i >> 8], activePalette[(i >> 8) + 1], i & 255);
 	}
+}
+
+static void setVideoGeometry(void) {
+	struct retro_game_geometry geometry = {
+		.base_width = fullFramebuffer ? DEBUG_FRAMEBUFFER_WIDTH : GAMATE_WIDTH,
+		.base_height = fullFramebuffer ? DEBUG_FRAMEBUFFER_HEIGHT : GAMATE_HEIGHT,
+		.max_width = DEBUG_FRAMEBUFFER_WIDTH,
+		.max_height = DEBUG_FRAMEBUFFER_HEIGHT,
+		.aspect_ratio = fullFramebuffer ? 1.0f : 160.0f / 150.0f
+	};
+	environCb(RETRO_ENVIRONMENT_SET_GEOMETRY, &geometry);
 }
 
 static void readOptions(void) {
@@ -407,6 +423,15 @@ static void readOptions(void) {
 		(unsigned) (flickerValue[0] - '0') : 0;
 	if (reduceFlicker != flickerReduction) flickerSnap = true;
 	flickerReduction = reduceFlicker;
+
+	var.key = "superwhizkid_debug_full_framebuffer";
+	var.value = NULL;
+	bool showFullFramebuffer = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value &&
+		!strcmp(var.value, "on");
+	if (showFullFramebuffer != fullFramebuffer) {
+		fullFramebuffer = showFullFramebuffer;
+		setVideoGeometry();
+	}
 	if (loaded && wasRawPresentation &&
 			(flickerReduction || lcdDarken != 256 || lcdFade != 256)) {
 		for (size_t i = 0; i < GAMATE_WIDTH * GAMATE_HEIGHT; i++) {
@@ -480,6 +505,63 @@ static void renderLcd(void) {
 	lcdSnap = false;
 	flickerSnap = false;
 }
+
+static void drawDebugBox(unsigned x, unsigned y, unsigned width, unsigned height,
+		unsigned verticalWrap, uint16_t color) {
+	unsigned left = (x - 1) & 0xFF;
+	unsigned right = (x + width) & 0xFF;
+	unsigned top = (y + verticalWrap - 1) % verticalWrap;
+	unsigned bottom = (y + height) % verticalWrap;
+	for (unsigned i = 0; i < width + 2; i++) {
+		unsigned px = (x + i - 1) & 0xFF;
+		video[top * DEBUG_FRAMEBUFFER_WIDTH + px] = color;
+		video[bottom * DEBUG_FRAMEBUFFER_WIDTH + px] = color;
+	}
+	for (unsigned i = 0; i < height; i++) {
+		unsigned py = (y + i) % verticalWrap;
+		video[py * DEBUG_FRAMEBUFFER_WIDTH + left] = color;
+		video[py * DEBUG_FRAMEBUFFER_WIDTH + right] = color;
+	}
+}
+
+static void renderFullFramebuffer(void) {
+	for (unsigned y = 0; y < DEBUG_FRAMEBUFFER_HEIGHT; y++) {
+		for (unsigned x = 0; x < DEBUG_FRAMEBUFFER_WIDTH; x++) {
+			unsigned offset = (y * 32 + (x >> 3)) << 1;
+			unsigned shift = 7 - (x & 7);
+			unsigned plane0 = gamate.vram[offset] >> shift & 1;
+			unsigned plane1 = gamate.vram[offset + 1] >> shift & 1;
+			unsigned shade = gamate.swapPlanes ? plane1 | plane0 << 1 : plane0 | plane1 << 1;
+			video[y * DEBUG_FRAMEBUFFER_WIDTH + x] = activePalette[shade];
+		}
+	}
+
+	const uint16_t mainOutline = 0xF800;
+	const uint16_t windowOutline = 0xFFE0;
+	unsigned firstLine = 0;
+	if (gamate.window) {
+		drawDebugBox(0, 0xD0, GAMATE_WIDTH, 0x10, 256, windowOutline);
+		firstLine = 0x10;
+	}
+	if (gamate.scrollY < 0xC8) {
+		drawDebugBox(gamate.scrollX, (gamate.scrollY + firstLine) % 0xC8,
+			GAMATE_WIDTH, GAMATE_HEIGHT - firstLine, 0xC8, mainOutline);
+	} else if (gamate.scrollY & 8) {
+		drawDebugBox(gamate.scrollX, firstLine, GAMATE_WIDTH,
+			GAMATE_HEIGHT - firstLine, 256, mainOutline);
+	} else {
+		unsigned first = gamate.scrollY & 7;
+		unsigned fixedLines = 8 - first;
+		if (!firstLine) {
+			drawDebugBox(0, 0xF8 + first, GAMATE_WIDTH, fixedLines, 256, windowOutline);
+			drawDebugBox(gamate.scrollX, 0, GAMATE_WIDTH,
+				GAMATE_HEIGHT - fixedLines, 256, mainOutline);
+		} else {
+			drawDebugBox(gamate.scrollX, firstLine - fixedLines, GAMATE_WIDTH,
+				GAMATE_HEIGHT - firstLine, 256, mainOutline);
+		}
+	}
+}
 void retro_set_video_refresh(retro_video_refresh_t cb) { videoCb = cb; }
 void retro_set_audio_sample(retro_audio_sample_t cb) { (void) cb; }
 void retro_set_audio_sample_batch(retro_audio_sample_batch_t cb) { audioCb = cb; }
@@ -542,9 +624,11 @@ void retro_get_system_info(struct retro_system_info* info) {
 
 void retro_get_system_av_info(struct retro_system_av_info* info) {
 	memset(info, 0, sizeof(*info));
-	info->geometry.base_width = info->geometry.max_width = GAMATE_WIDTH;
-	info->geometry.base_height = info->geometry.max_height = GAMATE_HEIGHT;
-	info->geometry.aspect_ratio = 160.0f / 150.0f;
+	info->geometry.base_width = fullFramebuffer ? DEBUG_FRAMEBUFFER_WIDTH : GAMATE_WIDTH;
+	info->geometry.base_height = fullFramebuffer ? DEBUG_FRAMEBUFFER_HEIGHT : GAMATE_HEIGHT;
+	info->geometry.max_width = DEBUG_FRAMEBUFFER_WIDTH;
+	info->geometry.max_height = DEBUG_FRAMEBUFFER_HEIGHT;
+	info->geometry.aspect_ratio = fullFramebuffer ? 1.0f : 160.0f / 150.0f;
 	info->timing.fps = 4433000.0 / 72900.0;
 	info->timing.sample_rate = 48000.0;
 }
@@ -645,7 +729,10 @@ void retro_run(void) {
 	linkCanSend = false;
 	if (gamate.diagnostics.controllerReads != controllerReads) pendingPresses = 0;
 	renderLcd();
-	videoCb(video, GAMATE_WIDTH, GAMATE_HEIGHT, GAMATE_WIDTH * sizeof(*video));
+	if (fullFramebuffer) renderFullFramebuffer();
+	unsigned videoWidth = fullFramebuffer ? DEBUG_FRAMEBUFFER_WIDTH : GAMATE_WIDTH;
+	unsigned videoHeight = fullFramebuffer ? DEBUG_FRAMEBUFFER_HEIGHT : GAMATE_HEIGHT;
+	videoCb(video, videoWidth, videoHeight, videoWidth * sizeof(*video));
 	size_t frames = gamate.audioCount < gamate.audioCapacity ? gamate.audioCount : gamate.audioCapacity;
 	if (audioOutput != AUDIO_STEREO) {
 		for (size_t i = 0; i < frames; i++) {

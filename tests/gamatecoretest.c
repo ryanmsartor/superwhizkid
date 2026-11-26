@@ -25,6 +25,7 @@ static const char* audioOutputOption = "stereo";
 static const char* tapLatchOption = "off";
 static const char* ghostingOption = "off";
 static const char* flickerOption = "off";
+static const char* fullFramebufferOption = "off";
 static const char* biosOption = "umc";
 static const char* skipIntroOption = "off";
 static bool optionUpdate, modernOptions, legacyOptions, supportModernOptions = true;
@@ -33,6 +34,11 @@ static bool fastForwardEnabled, supportFastForwardOverride = true;
 static unsigned fastForwardOverrideCalls;
 static struct retro_fastforwarding_override fastForwardOverride;
 static uint16_t firstVideoPixel;
+static uint16_t fullFramebufferPixel;
+static uint16_t capturedVideo[256 * 256];
+static unsigned lastVideoWidth, lastVideoHeight, geometryUpdates;
+static struct retro_game_geometry lastGeometry;
+static bool fullFramebufferOutline;
 static bool reportVideoHash;
 static uint32_t videoHash = 2166136261U;
 static unsigned messageCount;
@@ -57,7 +63,8 @@ static unsigned optionMask(const char* key) {
 		"superwhizkid_palette", "superwhizkid_contrast", "superwhizkid_audio_output",
 		"superwhizkid_tap_latch",
 		"superwhizkid_lcd_ghosting",
-		"superwhizkid_flicker_reduction", "superwhizkid_bios", "superwhizkid_skip_intro"
+		"superwhizkid_flicker_reduction", "superwhizkid_debug_full_framebuffer",
+		"superwhizkid_bios", "superwhizkid_skip_intro"
 	};
 	for (unsigned i = 0; i < sizeof(keys) / sizeof(*keys); i++) {
 		if (!strcmp(key, keys[i])) return 1u << i;
@@ -82,7 +89,7 @@ static bool environment(unsigned command, void* data) {
 		unsigned mask = 0;
 		bool defaults = true, audioValues = false, paletteLabels = false;
 		bool yellowPaletteValues = false;
-		bool contrastValues = false, flickerValues = false, biosValues = false;
+		bool contrastValues = false, flickerValues = false, debugValues = false, biosValues = false;
 		for (; options && options->key; options++) {
 			mask |= optionMask(options->key);
 			if (!strcmp(options->key, "superwhizkid_audio_output")) {
@@ -116,6 +123,11 @@ static bool environment(unsigned command, void* data) {
 				flickerValues = options->values[3].value &&
 					!strcmp(options->values[3].value, "3") && !options->values[4].value;
 			}
+			if (!strcmp(options->key, "superwhizkid_debug_full_framebuffer")) {
+				debugValues = options->values[0].value &&
+					!strcmp(options->values[0].value, "off") && options->values[1].value &&
+					!strcmp(options->values[1].value, "on") && !options->values[2].value;
+			}
 			if (!strcmp(options->key, "superwhizkid_bios")) {
 				biosValues = options->values[0].value &&
 					!strcmp(options->values[0].value, "umc") &&
@@ -129,14 +141,14 @@ static bool environment(unsigned command, void* data) {
 				!strcmp(options->key, "superwhizkid_bios") ? "umc" : "off";
 			defaults &= options->default_value && !strcmp(options->default_value, expected);
 		}
-		modernOptions = mask == 0xFF && defaults && audioValues && paletteLabels &&
-			yellowPaletteValues && contrastValues && flickerValues && biosValues;
+		modernOptions = mask == 0x1FF && defaults && audioValues && paletteLabels &&
+			yellowPaletteValues && contrastValues && flickerValues && debugValues && biosValues;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_VARIABLES: {
 		const struct retro_variable* variables = data;
 		unsigned mask = 0;
-		bool yellowPaletteValues = false, biosValues = false;
+		bool yellowPaletteValues = false, debugValues = false, biosValues = false;
 		for (; variables && variables->key; variables++) {
 			mask |= optionMask(variables->key);
 			if (!strcmp(variables->key, "superwhizkid_palette")) {
@@ -147,8 +159,12 @@ static bool environment(unsigned command, void* data) {
 				biosValues = variables->value &&
 					!strcmp(variables->value, "BIOS Priority; umc|bit|swk");
 			}
+			if (!strcmp(variables->key, "superwhizkid_debug_full_framebuffer")) {
+				debugValues = variables->value && !strcmp(variables->value,
+					"Debug: Display Full Framebuffer; off|on");
+			}
 		}
-		legacyOptions = mask == 0xFF && yellowPaletteValues && biosValues;
+		legacyOptions = mask == 0x1FF && yellowPaletteValues && debugValues && biosValues;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE:
@@ -184,6 +200,10 @@ static bool environment(unsigned command, void* data) {
 			variable->value = flickerOption;
 			return true;
 		}
+		if (!strcmp(variable->key, "superwhizkid_debug_full_framebuffer")) {
+			variable->value = fullFramebufferOption;
+			return true;
+		}
 		if (!strcmp(variable->key, "superwhizkid_bios")) {
 			variable->value = biosOption;
 			return true;
@@ -211,6 +231,10 @@ static bool environment(unsigned command, void* data) {
 		return true;
 	case RETRO_ENVIRONMENT_SET_PIXEL_FORMAT:
 		return *(const enum retro_pixel_format*) data == RETRO_PIXEL_FORMAT_RGB565;
+	case RETRO_ENVIRONMENT_SET_GEOMETRY:
+		lastGeometry = *(const struct retro_game_geometry*) data;
+		geometryUpdates++;
+		return true;
 	case RETRO_ENVIRONMENT_SET_CONTROLLER_INFO:
 	case RETRO_ENVIRONMENT_SET_INPUT_DESCRIPTORS:
 		return true;
@@ -230,9 +254,25 @@ static bool environment(unsigned command, void* data) {
 }
 
 static void video(const void* data, unsigned width, unsigned height, size_t pitch) {
-	assert(data && width == 160 && height == 150 && pitch >= width * sizeof(uint16_t));
+	assert(data && (width == 160 || width == 256) &&
+		(height == 150 || height == 256) && pitch >= width * sizeof(uint16_t));
+	assert((width == 160) == (height == 150));
+	lastVideoWidth = width;
+	lastVideoHeight = height;
 	const uint16_t* first = data;
 	firstVideoPixel = first[0];
+	if (width == 256) {
+		const uint16_t* row9 = (const uint16_t*) ((const uint8_t*) data + 9 * pitch);
+		const uint16_t* row10 = (const uint16_t*) ((const uint8_t*) data + 10 * pitch);
+		const uint16_t* row160 = (const uint16_t*) ((const uint8_t*) data + 160 * pitch);
+		fullFramebufferPixel = row10[0];
+		fullFramebufferOutline = row9[0] == 0xF800 && row10[255] == 0xF800 &&
+			row10[160] == 0xF800 && row160[0] == 0xF800;
+		for (unsigned y = 0; y < height; y++) {
+			const uint16_t* row = (const uint16_t*) ((const uint8_t*) data + y * pitch);
+			memcpy(capturedVideo + y * width, row, width * sizeof(*row));
+		}
+	}
 	frameIsGreyscale = true;
 	for (unsigned y = 0; y < height; y++) {
 		const uint16_t* row = (const uint16_t*) ((const uint8_t*) data + y * pitch);
@@ -320,6 +360,10 @@ static void writeTestFirmware(const char* name, uint8_t marker) {
 		0xA9, 0x0A, 0x8D, 0x05, 0x50, // reset row 10
 		0xAD, 0x09, 0x00,             // read controlled plane-1 byte
 		0x8D, 0x07, 0x50,             // write controlled plane-1 byte
+		0xAD, 0x0D, 0x00, 0xC9, 0x5A, 0xD0, 0x12, // optional LCD-control test block
+		0xAD, 0x0A, 0x00, 0x8D, 0x02, 0x50, // controlled horizontal scroll
+		0xAD, 0x0B, 0x00, 0x8D, 0x03, 0x50, // controlled vertical scroll
+		0xAD, 0x0C, 0x00, 0x8D, 0x01, 0x50, // controlled LCD flags/window mode
 		0xAD, 0x05, 0x00,             // check one-shot UART request
 		0xF0, 0x23,                   // skip UART block when zero
 		0xAD, 0x06, 0x00,             // transmitter data
@@ -433,6 +477,10 @@ int main(int argc, char** argv) {
 	assert(p_retro_serialize_size() == stateSizeBeforeLoad);
 	uint8_t* ram = p_retro_get_memory_data(RETRO_MEMORY_SYSTEM_RAM);
 	assert(ram);
+	ram[0x0A] = 0;
+	ram[0x0B] = 10;
+	ram[0x0C] = 0;
+	ram[0x0D] = 0x5A;
 	activeButton = RETRO_DEVICE_ID_JOYPAD_R2;
 	p_retro_run();
 	assert(fastForwardEnabled);
@@ -484,6 +532,54 @@ int main(int argc, char** argv) {
 	activeButton = ~0u;
 	p_retro_run();
 	assert(ram[3] == 0x55 && firstVideoPixel == 0x8CEB);
+	assert(lastVideoWidth == 160 && lastVideoHeight == 150 && geometryUpdates == 0);
+	fullFramebufferOption = "on";
+	optionUpdate = true;
+	p_retro_run();
+	assert(lastVideoWidth == 256 && lastVideoHeight == 256 && fullFramebufferOutline);
+	assert(firstVideoPixel == 0xCE93 && fullFramebufferPixel == 0x8CEB);
+	assert(geometryUpdates == 1 && lastGeometry.base_width == 256 &&
+		lastGeometry.base_height == 256 && lastGeometry.max_width == 256 &&
+		lastGeometry.max_height == 256 && lastGeometry.aspect_ratio == 1.0f);
+	// The ordinary viewport wraps independently across the 256-pixel X axis and 200-row
+	// scrolling region.
+	ram[0x0A] = 250;
+	ram[0x0B] = 190;
+	p_retro_run();
+	assert(capturedVideo[189 * 256 + 250] == 0xF800);
+	assert(capturedVideo[190 * 256 + 249] == 0xF800);
+	assert(capturedVideo[190 * 256 + 154] == 0xF800);
+	assert(capturedVideo[140 * 256 + 250] == 0xF800);
+	// LCD window mode replaces the first 16 lines with the fixed $D0-$DF region and leaves the
+	// remaining scrolled region boxed separately.
+	ram[0x0C] = 0x20;
+	p_retro_run();
+	assert(capturedVideo[207 * 256] == 0xFFE0);
+	assert(capturedVideo[208 * 256 + 255] == 0xFFE0);
+	assert(capturedVideo[208 * 256 + 160] == 0xFFE0);
+	assert(capturedVideo[224 * 256] == 0xFFE0);
+	assert(capturedVideo[5 * 256 + 250] == 0xF800);
+	// The high-scroll fixed-line mode exposes a wrapping strip at $F8-$FF and a separate main
+	// region beginning at row zero.
+	ram[0x0C] = 0;
+	ram[0x0B] = 0xF2;
+	p_retro_run();
+	assert(capturedVideo[249 * 256] == 0xFFE0);
+	assert(capturedVideo[250 * 256 + 255] == 0xFFE0);
+	assert(capturedVideo[250 * 256 + 160] == 0xFFE0);
+	assert(capturedVideo[0] == 0xFFE0);
+	assert(capturedVideo[255 * 256 + 250] == 0xF800);
+	assert(capturedVideo[144 * 256 + 250] == 0xF800);
+	ram[0x0A] = 0;
+	ram[0x0B] = 10;
+	ram[0x0D] = 0;
+	fullFramebufferOption = "invalid";
+	optionUpdate = true;
+	p_retro_run();
+	assert(lastVideoWidth == 160 && lastVideoHeight == 150 && geometryUpdates == 2);
+	assert(lastGeometry.base_width == 160 && lastGeometry.base_height == 150 &&
+		lastGeometry.max_width == 256 && lastGeometry.max_height == 256);
+	fullFramebufferOption = "off";
 	static const unsigned ids[8] = {
 		RETRO_DEVICE_ID_JOYPAD_UP, RETRO_DEVICE_ID_JOYPAD_DOWN,
 		RETRO_DEVICE_ID_JOYPAD_LEFT, RETRO_DEVICE_ID_JOYPAD_RIGHT,

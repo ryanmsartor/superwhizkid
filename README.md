@@ -42,6 +42,7 @@ quality of life features or change presentation.
 | Catch quick taps | **Off**, On | Holds button presses until the game next reads input. May help in games whose code reads input sparsely. |
 | LCD Ghosting | **Off**, Very light, Light, Medium, Strong, Very strong | Applies an estimated slow-panel response. |
 | Redraw Flicker Reduction | **Off**, 1 Frame, 2 Frames, 3 Frames | Reduces brief redraw flashes; may delay genuine lightening changes. |
+| Debug: Display Full Framebuffer | **Off**, On | Shows the raw 256×256 two-plane bitmap, with wrapped viewport and fixed-window outlines. |
 | BIOS Priority | **UMC**, Bit, SWK | UMC/Bit fall back to each other, then SWK; SWK falls back to UMC, then Bit. Reload content to apply. |
 | Skip BIOS intro | **Off**, On | Runs the BIOS logo sequence instantly at power-on and reset. |
 
