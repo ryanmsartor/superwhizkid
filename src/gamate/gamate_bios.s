@@ -371,7 +371,7 @@ next_random:
 @bit4:
 	lda #$80
 	sta RANDOM_FEEDBACK
-	.repeat 10
+	.repeat 9
 	nop
 	.endrepeat
 	bne @calculated
@@ -385,6 +385,7 @@ next_random:
 	rol RANDOM_STATE_LO
 	rol RANDOM_STATE_HI
 	lda RANDOM_STATE_LO
+	nop                         ; match the measured uninterrupted service duration
 	rts
 
 ; Formats six packed nibbles from A, X and Y as a length-prefixed string at $A1-$A7.

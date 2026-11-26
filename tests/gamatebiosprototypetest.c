@@ -750,20 +750,21 @@ static void testCounterWait(struct Gamate* g) {
 }
 
 static void testRandom(struct Gamate* g) {
-	static const uint16_t states[] = { 0, 1, 0x0010, 0x0400, 0x8000, 0x1234, 0xFFFF };
-	for (size_t i = 0; i < sizeof(states) / sizeof(states[0]); i++) {
+	for (uint32_t input = 0; input <= UINT16_MAX; input++) {
 		for (unsigned p = 0x24; p <= 0x6C; p += 0x48) {
-			g->ram[0x12] = (uint8_t) states[i];
-			g->ram[0x13] = (uint8_t) (states[i] >> 8);
+			g->ram[0x12] = (uint8_t) input;
+			g->ram[0x13] = (uint8_t) (input >> 8);
 			g->ram[0x14] = 0x5A;
+			uint64_t clocks = g->masterClocks;
 			call(g, 0xF030, 0x11, 0x22, 0x33, (uint8_t) p, 1000);
-			uint16_t state = states[i] ? states[i] : 0xFFFF;
+			uint16_t state = input ? (uint16_t) input : 0xFFFF;
 			uint16_t next = (uint16_t) ((state << 1) | (((state >> 4) ^ (state >> 10)) & 1));
 			assert(g->ram[0x12] == (uint8_t) next && g->ram[0x13] == next >> 8);
 			assert(g->ram[0x14] == ((state >> 3) & 0x80));
 			assert(g->cpu.a == (uint8_t) next && g->cpu.x == 0x22 && g->cpu.y == 0x33);
 			assert(g->cpu.p == (uint8_t) (0x20 | (p & 0x4C) | (state >> 15) |
 				(next & 0x80) | ((next & 0xFF) ? 0 : 2)));
+			assert(g->masterClocks - clocks == (input ? 174 : 188));
 		}
 	}
 }

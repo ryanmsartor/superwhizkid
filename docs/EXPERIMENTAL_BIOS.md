@@ -226,7 +226,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | `$F027` sprite/background compositor | Poor timing match | Cube Up corpus calls averaged about 88,900 master clocks versus 54,800 under UMC; a 33,000–68,000-clock disadvantage appeared in the corpus. Pixel and access behavior is resolved. |
 | `$F02A` plane-0 rectangle fill | Partial | Ordinary synthetic timing is `126 + 58*c + 18*c*r`, and direct 256×1/1×256 checks measure 19,582/4,792 clocks. The 1×1 authentic residual remains 202 versus 200 in the replacement, and broad IRQ combinations remain open. |
 | `$F02D` plane-1 rectangle fill | Partial | Ordinary synthetic timing is `120 + 58*c + 18*c*r`, and direct 256×1/1×256 checks measure 19,574/4,784 clocks. The 1×1 authentic residual remains 196 versus 194 in the replacement, and broad IRQ combinations remain open. |
-| `$F030` pseudorandom step | Unknown exact timing | The timing-removed checker matched 138,688 calls. Exact implementation timing and interrupt-interleaving remain unvalidated. |
+| `$F030` pseudorandom step | Exact uninterrupted timing | The state transition and register/status contract match the exhaustive checker; SWK now takes 174 master clocks for every tested nonzero input and 188 for zero, matching both authentic revisions. Interrupt interleaving, reentrancy, and callback-alias timing remain open. |
 | `$F033` digit formatter | Exact for the documented formula | The full 526,848-call matrix matched the authentic formula. Y=`$FF` adds 2 NOP (8 master clocks); ordinary Y adds 3 NOP (12 master clocks). Stack-slot and interrupt-spanning timing remain outside the ordinary matrix. |
 
 The prototype has intentionally not padded most services except `$F00F`'s controlled ready path.

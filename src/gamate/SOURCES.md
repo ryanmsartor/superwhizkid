@@ -871,7 +871,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Result: for `s = input ? input : $FFFF`, `next = ((s << 1) | (bit(s,4) XOR bit(s,10))) & $FFFF`,
   `$014 = bit(s,10) << 7`, A receives the low byte, and carry receives bit 15 of `s`. X/Y/S and
   I/D/V are preserved; N/Z describe A. The zero-input path costs 188 master clocks, other inputs
-  174. Input `$8000` produces zero, correcting the earlier nonzero-output assertion. Enumerating
+  174. The SWK implementation is regression-tested against both timing branches as well as the
+  transition and returned state. Input `$8000` produces zero, correcting the earlier nonzero-output
+  assertion. Enumerating
   the derived transition yields cycles of lengths 7, 85, 85, 85, 595, 595, and 595, with maximum
   transient 10; the observed entry seed lies on a 595-state cycle.
 - Interrupt method and result: address watches on seven synthetic inputs under both BIOSes
