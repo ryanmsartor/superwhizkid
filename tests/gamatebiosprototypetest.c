@@ -596,12 +596,10 @@ static void testRectangle(struct Gamate* g) {
 			uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
 			uint64_t clocks = g->masterClocks;
 			call(g, plane ? 0xF02D : 0xF02A, 0x5A, 0xF8, 0xFE, 0x64, 100000);
-			if (shape == 1)
-				assert(g->masterClocks - clocks ==
-					(plane ? 118u : 124u) + 256u * 58u + 256u * 18u);
-			if (shape == 2)
-				assert(g->masterClocks - clocks ==
-					(plane ? 118u : 124u) + 58u + 256u * 18u);
+			/* SWK plane 1 remains two master clocks short for ordinary nonzero dimensions. */
+			unsigned baseline = plane ? 118u : 126u;
+			assert(g->masterClocks - clocks ==
+				baseline + columns * 58u + columns * rows * 18u);
 			assert(!memcmp(g->vram, expected, sizeof(expected)));
 			assert(g->diagnostics.vramWrites - writes == columns * rows);
 			assert(g->diagnostics.lcdWrites - lcd == 1 + columns * (2 + rows));

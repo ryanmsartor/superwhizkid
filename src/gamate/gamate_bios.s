@@ -1702,7 +1702,9 @@ fetch_row:
 	rts
 
 fill_rectangle:
-	sta $1A
+	; The authentic plane-0 entry is one CPU cycle longer than the plane-1 entry. Force absolute
+	; addressing for this otherwise-zero-page scratch write to preserve that measured difference.
+	sta a:$001A
 	lda #$00
 	beq fill_rectangle_common
 fill_rectangle_plane1:

@@ -149,7 +149,7 @@ is "Open", "In progress", "Partially complete", or "Cleared".
 | 4 | Decimal-mode and aliased-source edges | Open | D-set behavior and mutable I/O/scratch/stack aliases are outside most validated ordinary contracts. |
 | 5 | Save/reset/NMI and in-flight UART lifecycle | Cleared | Exact-size save/load and failed-load immutability are tested; reset clears transmit/receive UART state and pending NMI. SWK synthetic coverage saves and restores partial receive bytes and execution paused inside a direct `$6023` callback, then completes the callback without replay or lost receive state. Live Netpacket queue/timing, arbitrary nested callback delivery, and physical UART edge timing remain outside this emulator-level boundary. |
 | 6 | Authentic startup presentation and boot phase | Open | Reset performs protection, identity and checksum checks and enters `$6020`, but does not reproduce the authentic startup graphics or hardware/audio/frame phase. |
-| 7 | Broad cartridge and interactive hardware validation | Open | Cube Up is strongly exercised, while broad 4-in-1, network-link, save-state and complete-playthrough coverage remains incomplete. |
+| 7 | Broad cartridge and interactive hardware validation | In progress | A 62-cartridge SWK sweep now reaches and runs every title for 100 post-entry frames without an unsupported-service trap. Fifty-nine produce nonblank output. Famous 7, One Million Whys, and QuizFighter execute normally but retain SWK's blank startup VRAM; their authentic runs retain a shared nonblank BIOS presentation. Longer input-driven runs, 4-in-1 selection, network link, save-state campaigns, and complete playthroughs remain incomplete. |
 
 The chosen low-RAM initialization is a compatibility policy, not measured physical power-on state.
 The common entry contract and its uncertainty are described in
@@ -186,6 +186,17 @@ three input-driven runs, the frame-1,000 video and final VRAM hashes matched bot
 the unattended title-screen hashes differed. Hash equality at one endpoint does not imply matching
 intermediate frames, audio, timing, complete game state, or successful interactive play. None of
 these campaigns started a game, so they exercised only the title and setup flow.
+
+A separate 100-post-entry-frame SWK sweep covered all 62 catalogued cartridges. Every case reached
+`$6020`, ran without an unsupported-service trap, and retained balanced BIOS calls. Fifty-nine cases
+produced nonblank output. Famous 7, One Million Whys, and QuizFighter remained blank while continuing
+to execute cartridge code, periodic callbacks, `$F024`, and `$F003`. Equivalent UMC BIOS runs were
+nonblank from the first post-entry frame and converged on the same video and VRAM hashes across all
+three titles. Their observed cartridge paths did not call a BIOS drawing service during the window;
+they retain the BIOS startup presentation instead. SWK therefore needs independently authored
+startup artwork for visual compatibility with this software family. This result does not authorize
+copying authentic startup pixels and does not establish behavior beyond the 100-frame no-input
+window.
 
 For the first observed `$F01E`, `$F012`, and `$F02A` calls, controlled IRQ-masked probes used
 the same VRAM fill and compared output registers/status, final VRAM hash and address, and LCD/VRAM
@@ -224,7 +235,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | `$F021` row-literal stream | Partial | Port, register, status, RAM and peripheral behavior match the independent model. Initial implementation timing differs, and exact formula/page-cross behavior has not yet been fitted. |
 | `$F024` record initialization | Exact for the controlled contract | Synthetic D-clear record initialization matches 824 master clocks, 32 `$FF` writes, register/status and no peripheral effects. D-set, later callback and interrupt-spanning contexts remain open. |
 | `$F027` sprite/background compositor | Poor timing match | Cube Up corpus calls averaged about 88,900 master clocks versus 54,800 under UMC; a 33,000–68,000-clock disadvantage appeared in the corpus. Pixel and access behavior is resolved. |
-| `$F02A` plane-0 rectangle fill | Partial | Ordinary synthetic timing is `126 + 58*c + 18*c*r`, and direct 256×1/1×256 checks measure 19,582/4,792 clocks. The 1×1 authentic residual remains 202 versus 200 in the replacement, and broad IRQ combinations remain open. |
+| `$F02A` plane-0 rectangle fill | Exact uninterrupted timing | Ordinary and zero-derived synthetic shapes now follow `126 + 58*c + 18*c*r`; tested 1×1, 2×3, 256×1, and 1×256 cases take 202, 350, 19,582, and 4,792 master clocks. Interrupt-spanning timing remains open. |
 | `$F02D` plane-1 rectangle fill | Partial | Ordinary synthetic timing is `120 + 58*c + 18*c*r`, and direct 256×1/1×256 checks measure 19,574/4,784 clocks. The 1×1 authentic residual remains 196 versus 194 in the replacement, and broad IRQ combinations remain open. |
 | `$F030` pseudorandom step | Exact uninterrupted timing | The state transition and register/status contract match the exhaustive checker; SWK now takes 174 master clocks for every tested nonzero input and 188 for zero, matching both authentic revisions. Interrupt interleaving, reentrancy, and callback-alias timing remain open. |
 | `$F033` digit formatter | Exact for the documented formula | The full 526,848-call matrix matched the authentic formula. Y=`$FF` adds 2 NOP (8 master clocks); ordinary Y adds 3 NOP (12 master clocks). Stack-slot and interrupt-spanning timing remain outside the ordinary matrix. |

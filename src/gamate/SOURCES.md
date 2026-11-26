@@ -793,6 +793,17 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   arbitrary inputs or compatibility with other cartridges. See
   [`EXPERIMENTAL_BIOS.md`](../../docs/EXPERIMENTAL_BIOS.md) for build instructions and scope.
 
+- Broad SWK startup-retention sweep: all 62 catalogued local cartridges were run read-only for 100
+  post-entry frames under the independently authored firmware. All reached `$6020` and ran without
+  an unsupported-service trap; 59 produced nonblank output. Famous 7, One Million Whys, and
+  QuizFighter continued through periodic callbacks and calls to `$F024` and `$F003` but retained
+  blank VRAM. Controlled UMC BIOS runs were nonblank from frame one and produced the same later video
+  and VRAM hashes across those three titles, without a post-entry BIOS drawing-service call in the
+  observed paths. This establishes a dependency on retained BIOS startup presentation, not on a
+  newly discovered callable service. Implementation impact: a broadly compatible SWK boot needs
+  independently authored nonblank startup artwork; authentic pixels must not be extracted or copied.
+  The sweep used no input and does not establish longer gameplay, link behavior, or physical timing.
+
 #### Corpus and general method
 
 - SWK startup timing: the reset routine now performs 36 repeated 24-IRQ waits plus one 20-IRQ wait
@@ -1909,16 +1920,18 @@ copied into the repository, build output, tests, or releases.
     clocks respectively. The full 526,848-call matrix then matched the documented formula for
     every input, including first-nibble branches and Y=`$FF`. Interrupt-spanning and callback
     interference remain outside the matrix.
-  - **Withdrawn timing experiments.** `$F02A/$F02D` were probed with a removed final
+  - **Rectangle-fill timing correction.** `$F02A/$F02D` were probed with a removed final
     `LDA $1A`; clean 2×3, 256×1, 1×256 and 1×1 shapes were four master clocks high in both
     routines. Removing the load moved 1×1 from 202/196 to 200/194 and the shortest neutral 6502
     instruction could not supply the required two-master-clock correction in isolation, so the
     removal was retained only after the 1×1 and 1×256 real-call probe. A direct synthetic rerun
-    then resolved the 256-wrap values: `$F02A` measured 19,582 for 256×1 and 4,792 for 1×256;
+    then resolved the 256-wrap values. The plane-0 entry now forces absolute addressing for its
+    initial `$01A` scratch write, adding the single CPU cycle required without changing observable
+    state. `$F02A` measures 202 for 1×1, 350 for 2×3, 19,582 for 256×1, and 4,792 for 1×256;
     `$F02D` measured 19,574 and 4,784. Plane 0 follows `126 + 58*c + 18*c*r`; plane 1 follows
     the same expanded form with an additive 118 in 256-wrap shapes. These are retained as exact
-    SWK synthetic shape assertions. Ordinary plane-1 timing uses base 120. 1×1 authentic residuals and broad interrupt
-    timing remain open. `$F030` branch NOP padding raised
+    SWK synthetic shape assertions. Ordinary plane-1 timing uses base 120 in the authentic contract
+    but remains two master clocks short in SWK; broad interrupt timing remains open. `$F030` branch NOP padding raised
     a zero-state synthetic mismatch to 220 clocks, so it was reverted. Later NOP/branch attempts
     measured 190 and 238 for the zero state while the documented target remained 188, so they were
     also reverted. `$F033` ordinary/Y=`$FF`
