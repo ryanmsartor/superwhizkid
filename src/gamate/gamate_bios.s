@@ -521,7 +521,7 @@ copy_plane:
 	iny
 	dex
 	bne @row
-	lda $01D
+	tya
 	bne @advance
 	inc $1F
 	jmp @next_column
@@ -571,11 +571,9 @@ copy_bitmap:
 	sta $01C
 	lda $002
 	sta $000
-	lda $003
-	sta $001
-	lda $002
 	sta $1E
 	lda $003
+	sta $001
 	sta $1F
 	lda $018
 	sec
@@ -587,17 +585,11 @@ copy_bitmap:
 	jsr copy_plane
 	pla
 	sta $01C
-	lda $002
-	sta $000
-	lda $003
-	sta $001
-	lda #$00
-	ldy $01C
-@multiply:
-	clc
-	adc $01D
-	dey
-	bne @multiply
+	; The copy loop advances the second-plane source by columns*rows. Its low-byte delta is the
+	; documented modulo-256 Y result, including a 256-row count.
+	lda $1E
+	sec
+	sbc $002
 	tay
 	pla
 	tax

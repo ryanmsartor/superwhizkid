@@ -1926,9 +1926,14 @@ copied into the repository, build output, tests, or releases.
     carry, SWK follows `390 + columns * (248 + 76 * rows)` master clocks, compared with the
     authentic `234 + columns * (132 + 76 * rows)`. Replacing the destination's load/add/store with
     the equivalent eight-bit `INC`, and reusing the completed row index for source-pointer addition,
-    reduces 24 master clocks per column. The resulting SWK formula is
-    `390 + columns * (224 + 76 * rows)`. The identical 76-clock byte-row coefficient now isolates
-    the remaining mismatch to 156 clocks of fixed setup and 92 clocks per column. In the `$60FE`
+    reduces 24 master clocks per column. Testing the completed row index directly for the 256-row
+    case removes four more per column without changing that wrap path. Combining the second-plane
+    pointer stores and removing a redundant post-copy rewrite of `$000-$001` removes another 36
+    fixed clocks while leaving the documented final pointers unchanged. Finally, deriving returned
+    Y from the final second-plane source-low delta replaces a repeated-add multiplication and saves
+    `20 * columns - 8` clocks. The resulting SWK formula is
+    `362 + columns * (200 + 76 * rows)`. The identical 76-clock byte-row coefficient now isolates
+    the remaining mismatch to 128 clocks of fixed setup and 68 clocks per column. In the `$60FE`
     case, the authentic indexed-read crossings account for 12 clocks while SWK adds another eight
     when its explicit source-pointer update carries. Implementation impact: retain the row-copy
     loop, but replace the stack/setup and per-column pointer/address bookkeeping; do not compensate

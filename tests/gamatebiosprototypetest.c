@@ -660,7 +660,7 @@ static void testBitmapCopy(struct Gamate* g) {
 		uint64_t lcd = g->diagnostics.lcdWrites;
 		uint64_t clocks = g->masterClocks;
 		call(g, 0xF015, 0xA5, 0x13, 0xF8, 0x64, 100000);
-		assert(g->masterClocks - clocks == 390u + columns * (224u + 76u * rows) +
+		assert(g->masterClocks - clocks == 362u + columns * (200u + 76u * rows) +
 			2u * crossingReads + 8u * pointerCarries);
 		assert(!memcmp(g->vram, expected, sizeof(g->vram)));
 		assert(g->diagnostics.vramWrites - writes == 2 * columns * rows);
