@@ -831,6 +831,29 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   caller-specific or timing details remain open. No external emulator implementation was consulted
   or copied.
 
+#### Runtime-ABI documentation decisions
+
+- The runtime API document is the canonical implementation contract. It leads with callback rules,
+  service inputs and outputs, formulas, side effects, and interruption behavior. This source record
+  owns corpus counts, experiment provenance, confidence limits, and the rationale for interpreting
+  an observation as a contract.
+- Service names are deliberately effect-based. Labels such as “rectangle fill,” “row-run stream,”
+  and “strided RAM initializer” describe controlled inputs and outputs; they are not recovered
+  authentic symbols. Broader labels were withdrawn when later perturbations established a narrower
+  operation, and unresolved services retain qualified names.
+- The 1,000-post-entry-frame default was selected because the earlier 300-frame window missed
+  `$F030` and `$F033`. It is a coverage policy, not an ABI timing requirement.
+- Uninterrupted timing formulas exclude IRQ/NMI work because authentic services generally leave
+  interrupts enabled. Aggregate calls that span callbacks can include cartridge RAM, VRAM, and
+  peripheral effects; those effects are not attributed to the service without controlled replay.
+- Exact event offsets are emulator instruction-boundary observations unless a section explicitly
+  identifies physical measurement. They are useful for interference models but are not claims about
+  physical bus-cycle edges.
+- The two authentic revisions have the same observed public slot surface and controlled contracts,
+  despite internal relocation and a 58-master-clock boot-entry phase difference. The replacement
+  specification therefore describes their shared cartridge-facing ABI and documents a difference
+  only where a probe observes one.
+
 #### `$F030` pseudorandom transition and interrupts
 
 - Source and method: local user-supplied BIOS revisions and cartridges read in place; the existing

@@ -51,30 +51,12 @@ game's real entry point.
 
 ### Low-RAM entry contract
 
-Controlled perturbation and access tracing reduce the required low-RAM state to named behavior:
-
-```text
-RAM[$004] := accepted cartridge-protection reply
-RAM[$005 through $009] := $FF reset-fill sentinels
-RAM[$00A] := $FF runtime sentinel
-RAM[$00C] := callbacks enabled
-RAM[$00E through $011] := 32-bit periodic-IRQ counter phase
-RAM[$012 through $013] := nonzero BIOS pseudorandom/LFSR state
-```
-
-The authentic entry values reflect the authentic boot path, but a clean-room implementation can
-derive the protection result and IRQ phase, deliberately initialize the sentinels, and choose a
-documented nonzero LFSR seed. `$014` is temporary LFSR feedback, overwritten by service `$F030`, and
-does not need to be inherited at cartridge entry.
-
-Constructing only these fields after clearing `$000-$01F` matched authentic-entry behavior in all
-116 tested BIOS/cartridge combinations, both unattended and with broad automated input for 1,000
-frames. The equivalence test used the observed authentic counter and LFSR phases so that phase alone
-could not obscure the result. Follow-up variation showed that other phases still boot, but they are
-observable: the counter's carry branches alter IRQ-handler timing, Kill Shot reads its high byte on
-an input-driven path, and several titles consume the LFSR state. Authentic-compatible replacement
-startup should therefore reproduce `$00000394` and `$358A` as named state rather than opaque RAM
-residue.
+Boot establishes a small cartridge-visible low-RAM ABI rather than an opaque RAM image. The
+canonical byte-by-byte entry policy, authentic values, perturbation results, and cartridge consumers
+are specified in [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md). Replacement-firmware
+startup requirements are summarized in
+[`BIOS_REPLACEMENT_ANALYSIS.md`](BIOS_REPLACEMENT_ANALYSIS.md). This boot document intentionally
+does not duplicate those tables.
 
 ## Cartridge-protection exchange
 
@@ -172,59 +154,20 @@ on_link_receive_nmi:
 
 The cartridge callback returns to the BIOS wrapper as a subroutine; the wrapper performs the final
 interrupt return. Commercial cartridges may make `$6023` an immediate no-op return when they do not
-use link reception. The wrappers do not always restore every interrupted register when a callback
-changes it. The previous assertion that they restore the entire context was incorrect; the
-controlled register results and their limits are in
-[`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md).
+use link reception. The canonical callback enable rule, register effects, and service interactions
+are specified in [`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md). This section records
+only the boot document's high-level control flow.
 
-### Periodic IRQ counter
+### Boot-time runtime-ABI initialization
 
-The timing counter updated by both periodic IRQ wrappers is the 32-bit value at `$000E-$0011`, stored
-most-significant byte first. Each IRQ increments `$0011` and propagates carry through `$0010`,
-`$000F`, and `$000E`. Both BIOS revisions expose `$00000394` at cartridge entry in the controlled
-sweep, reflecting the IRQs elapsed during boot. Their handler addresses differ, but their counter
-behavior matches.
+| State | Successful-boot action |
+| --- | --- |
+| Callback enable, RAM `$00C` | Set to `$01` immediately before cartridge entry. Zero disables callbacks; any nonzero value enables them. |
+| Periodic counter, RAM `$00E-$011` | Maintained as a big-endian 32-bit IRQ counter and exposed at the boot-derived entry phase. |
 
-Fourteen tested cartridges directly access `$0011` within 1,000 unattended frames, including games
-that poll it repeatedly. Input-driven tracing additionally finds Kill Shot polling `$0010`. It is
-therefore cartridge-visible ABI state. See
-[`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md) for the access table and perturbation
-results. The exact entry phase is an observed authentic-boot contract; replacement firmware may
-derive a compatible counter from its own elapsed IRQs rather than reproduce opaque boot work.
-
-### Cartridge control of the callback flag
-
-The wrapper condition is the BIOS-owned RAM byte at `$000C`:
-
-```text
-cartridge_callbacks_are_enabled := RAM[$000C] != 0
-```
-
-Both BIOS revisions clear `$000C` near reset and set it to `$01` near the end of successful startup,
-three executed instructions before reaching `$6020` in the controlled boot trace. Cartridge software
-can access the same physical RAM cell, including through RAM mirrors.
-
-A 1,000-frame, no-input execution scan of all 58 locally available cartridges found six titles that
-actually accessed `$000C` from cartridge code. Each result was repeated with both BIOS revisions:
-
-| Cartridge | Executing locations | Observed behavior |
-| --- | --- | --- |
-| Bao Qing Tian | `$6335`, `$6345` | A RAM-clearing loop overwrites the flag with zero; startup explicitly restores `$01` |
-| Basketball | `$63D1`, `$63E1`; bank 9 `$A00B`, `$A0CE` | Startup clears/restores `$01`; later code changes `$01` to `$00`, then `$00` to `$07` |
-| Dinosaur Park | `$68C4`, `$68D4` | A RAM-clearing loop overwrites the flag with zero; startup explicitly restores `$01` |
-| Riddle of the Ancient Tomb | `$6377`, `$6387` | A RAM-clearing loop overwrites the flag with zero; startup explicitly restores `$01` |
-| Robin Hood | `$68A5`, `$68AC`, `$68BB` | Startup reads and saves the prior flag, clears the RAM range, then restores the flag |
-| The Golden Pyramid | `$64A8`, `$64B8` | A RAM-clearing loop overwrites the flag with zero; startup explicitly restores `$01` |
-
-These accesses show that `$000C` is not merely a private BIOS implementation detail. Multiple
-software families preserve or restore it while clearing shared RAM, and Basketball deliberately
-uses zero and a nonzero value later. The evidence supports a boolean ABI interpretation—zero blocks
-callbacks and any nonzero value permits them—but does not establish whether Basketball's `$07` has
-additional game-specific meaning.
-
-The other 52 titles made no cartridge-side access during the observed window. That is not proof they
-never access the flag: unattended title screens, unvisited gameplay paths, and the 1,000-frame limit
-leave later or input-dependent code untested.
+The per-title access evidence and phase sensitivity are maintained in
+[`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md) and the source record in
+[`../src/gamate/SOURCES.md`](../src/gamate/SOURCES.md), rather than repeated here.
 
 | Vector | UMC/NCR wrapper | Bit Corporation wrapper |
 | --- | --- | --- |

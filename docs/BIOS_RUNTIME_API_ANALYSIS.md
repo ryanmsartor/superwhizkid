@@ -1,10 +1,98 @@
-# BIOS runtime API analysis
+# Gamate BIOS runtime API analysis and specification
 
-Commercial Gamate software continues to execute authentic BIOS code after cartridge entry. This
-document records execution-boundary evidence for that runtime dependency and defines the remaining
-work needed to specify an independently authored replacement ABI.
+This document is the implementation-facing specification for the resident BIOS interface used after
+cartridge entry at `$6020`. It defines callable service slots, interrupt callbacks, inputs, outputs,
+side effects, timing formulas, and known interference behavior. Unless a section says otherwise,
+contracts describe both recognized authentic BIOS revisions and use master clocks, where one CPU
+cycle is two master clocks.
 
-## Execution-aware tracer
+## BIOS documentation map
+
+| Document | Canonical scope |
+| --- | --- |
+| This document | Post-`$6020` interrupt ABI and callable service contracts. |
+| [`BIOS_BOOT_BEHAVIOR.md`](BIOS_BOOT_BEHAVIOR.md) | Reset, cartridge validation, failure paths, and transfer to `$6020`. |
+| [`BIOS_DIFFERENCE_ANALYSIS.md`](BIOS_DIFFERENCE_ANALYSIS.md) | Structural and behavioral differences between the authentic revisions. |
+| [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md) | Low-RAM entry fields, derivation, perturbations, and cartridge consumers. |
+| [`BIOS_REPLACEMENT_ANALYSIS.md`](BIOS_REPLACEMENT_ANALYSIS.md) | Complete `$6020` machine boundary and replacement/skip policy. |
+| [`EXPERIMENTAL_BIOS.md`](EXPERIMENTAL_BIOS.md) | SWK prototype scope, build/use instructions, and current deficiencies. |
+| [`../src/gamate/SOURCES.md`](../src/gamate/SOURCES.md) | Provenance, corpus coverage, validation history, uncertainty, and decision rationale. |
+
+## Contract conventions
+
+| Term | Meaning |
+| --- | --- |
+| Entry | CPU state immediately before the first instruction at the service slot executes. |
+| Return | State after the service's `RTS` has returned to cartridge code. |
+| Uninterrupted | No IRQ or NMI handler ran between service entry and return. |
+| Preserved | Equal at entry and return; it does not imply the value was untouched internally. |
+| Master clocks | The emulator's 4.433 MHz master-clock domain; divide by two for CPU cycles. |
+| RAM address | Physical low-RAM offset. `$000-$3FF` mirrors through `$0000-$1FFF`. |
+| VRAM address | The LCD controller's 13-bit byte address, with plane stated separately. |
+| Zero loop count | Unless stated otherwise, an 8-bit decrement loop interprets zero as 256 iterations. |
+| Status | Only listed flags are specified. Stored bit 5 remains set; the stored B bit is not a physical CPU signal. |
+
+Timing formulas exclude interrupt-handler time. Time-dependent LCD, audio, IRQ, and UART state
+continues to advance during every call even when a table says the service has no direct peripheral
+effect. The authentic services do not generally mask interrupts; callers and replacement firmware
+must therefore assume that shared registers, RAM, and hardware state can change at instruction
+boundaries unless a detailed section proves a narrower rule.
+
+## Cartridge-facing interrupt ABI
+
+| Event | BIOS work before callback | Enable condition | Cartridge callback | Final return |
+| --- | --- | --- | --- | --- |
+| Periodic IRQ | Increment big-endian counter `$00E-$011`; update the wait counter used by `$F003/$F006/$F009`. | RAM `$00C != 0` | `JSR $6026` | BIOS wrapper executes `RTI`. |
+| Link-byte NMI | Read the completed UART byte into RAM `$00A`. | RAM `$00C != 0` | `JSR $6023` | BIOS wrapper executes `RTI`. |
+
+Callback register behavior is observable ABI, not full context preservation:
+
+| Path | A after callback | X after callback | Y after callback | P / PC / S |
+| --- | --- | --- | --- | --- |
+| IRQ callback enabled | Interrupted A restored | Callback X retained | Interrupted Y restored | Interrupted values restored in controlled probes. |
+| NMI callback enabled | Interrupted A restored | Callback X retained | Callback Y retained | Interrupted values restored in controlled probes. |
+| Callback disabled | Interrupted A restored | Interrupted X restored | Interrupted Y restored | Interrupted values restored in controlled probes. |
+
+These rows cover normally returning callbacks. They do not specify callbacks that alter stacked
+state, nest interrupts, or fail to return. `$00C` is boolean: zero suppresses dispatch and any
+nonzero value enables it.
+
+## Service table quick reference
+
+Every observed direct entry is one of these 18 three-byte slots. “Detailed contract” links to the
+authoritative behavior, formulas, edge cases, and interruption notes in this document.
+
+| Slot | Operation | Primary inputs | Primary outputs | Uninterrupted timing |
+| --- | --- | --- | --- | --- |
+| [`$F000`](#fixed-bitmap-writer-f000) | Fixed 64-byte bitmap writer | RAM `$015` LCD control | A/X/Y=`$38/$40/$20`; 64 VRAM writes | 3,278 clocks |
+| [`$F003`](#irq-gated-counter-wait-f003) | Wait until `$00B >= 8` | RAM `$00B` | A=`$00`; `$00B=0` | 42-clock ready path; otherwise `8-n` IRQs |
+| [`$F006`](#irq-gated-counter-wait-f006) | Wait until `$00B >= 5` | RAM `$00B` | A=`$00`; `$00B=0` | 42-clock ready path; otherwise `5-n` IRQs |
+| [`$F009`](#irq-gated-counter-wait-f009) | Wait until `$00B >= 24` | RAM `$00B` | A=`$00`; `$00B=0` | 42-clock ready path; otherwise `24-n` IRQs |
+| [`$F00C`](#two-plane-vram-zero-writer-and-lcd-control-service-f00c) | Clear both VRAM planes | RAM `$015` LCD control | A=`$40 | $015`; X=`$00`; Y=`$C8` | 247,326 clocks |
+| [`$F00F`](#fixed-plane-0-rectangle-clear-f00f) | Clear fixed 31×25-byte plane-0 rectangle | RAM `$015` | A/X/Y=`$00`; 775 VRAM writes | 15,930 clocks |
+| [`$F012`](#fixed-height-tile-run-contract-f012) | Draw an eight-row glyph run | X/Y, descriptor pointer `$000-$001`, `$015` | VRAM glyph run; see contract | Per-selector formula below |
+| [`$F015`](#two-plane-bitmap-copy-contract-f015) | Copy a rectangle into both planes | X/Y, pointers `$000-$003`, `$015`, `$01C-$01D` | Two VRAM rectangles | `234 + columns*(132 + 76*rows) + page penalties` |
+| [`$F018`](#command-stream-tile-row-blitter-f018) | Draw a two-plane row/run command stream | Stream pointer `$000-$001`; plane bases `$006-$009` | Variable VRAM output | Stream-dependent formula below |
+| [`$F01B`](#plane-0-row-run-stream-service-f01b) | Draw plane-0 row/run stream | Stream pointer `$000-$001`; `$015` | Plane-0 VRAM output | `15362 + 140*rows + 134*pairs + 18*(bytes-pairs) + penalties` |
+| [`$F01E`](#caller-supplied-two-plane-graphics-service-f01e) | Draw two-plane tile-literal stream | Stream pointer `$000-$001`; plane bases `$006-$009`; `$015` | Two-plane VRAM output | `144 + 260*rows + 392*selectors + data/penalty terms` |
+| [`$F021`](#plane-0-row-literal-stream-service-f021) | Draw plane-0 literal-row stream | Stream pointer `$000-$001`; `$015` | Plane-0 VRAM output | `15362 + 140*rows + 66*bytes + penalties` |
+| [`$F024`](#strided-ram-initializer-f024) | Initialize two fields in 16 records | D must be clear | 32 RAM bytes become `$FF`; A/Y=`$80`, X=`$00` | 824 clocks |
+| [`$F027`](#sprite-and-background-compositor-f027) | Redraw backgrounds and composite objects | Records `$021-$0A0`, graphics bases `$006-$009`, `$015` | VRAM plus scratch buffers | `6,326 + operation costs` |
+| [`$F02A`](#plane-0-rectangle-fill-f02a) | Fill plane-0 rectangle | A/X/Y, `$01C-$01D` | Rectangle filled with A | `126 + 58*columns + 18*columns*rows` |
+| [`$F02D`](#plane-1-rectangle-fill-f02d) | Fill plane-1 rectangle | A/X/Y, `$015`, `$01C-$01D` | Rectangle filled with A | `120 + 58*columns + 18*columns*rows` |
+| [`$F030`](#pseudorandom-state-transition-f030) | Advance 16-bit pseudorandom state | RAM `$012-$013` | A and `$012-$013` become next state; `$014` scratch | 174 clocks; 188 for zero input |
+| [`$F033`](#packed-digit-formatter-f033) | Format six packed nibbles | A/X/Y | `$0A1-$0A7`; A=`$06`, Y=first digit | `222 + 44*first`, with special cases below |
+
+The labels describe measured effects rather than original firmware names. A replacement should
+implement the linked contract, not infer behavior from the short label alone.
+
+## Supporting evidence and validation
+
+This section summarizes how the contract was derived. It is non-normative; implementers can skip to
+[Detailed service contracts](#detailed-service-contracts). Detailed provenance and the reasons for
+the selected coverage policies are maintained in [`../src/gamate/SOURCES.md`](../src/gamate/SOURCES.md).
+
+### Execution-aware tracer
 
 `gamatebioscalls` runs an authentic BIOS and cartridge to `$6020`, then records control-flow
 transitions across the cartridge/BIOS boundary. Unlike a raw byte scan, it observes executed
@@ -28,7 +116,7 @@ local collection. Its default observation window is 1,000 post-entry frames. Opt
 can be supplied through `GAMATEBIOSCALLS_PRESS` using the same `frame:mask:duration` form as the boot
 diagnostic.
 
-## Complete unattended baseline
+### Call-surface baseline
 
 The baseline now covers all 62 catalogued cartridges under both BIOS revisions for 1,000 post-entry
 frames. The final four titles were added as an eight-case extension to the established matrix:
@@ -51,7 +139,7 @@ The identical call surface demonstrates a stable BIOS ABI. The two firmware revi
 or relocate helpers differently behind the table, but commercial cartridges use the same public
 entry slots and produce the same observed call schedule.
 
-## Observed service-slot use
+### Observed slot use
 
 Counts below are for one BIOS revision; the other revision produced an identical table. “Titles” is
 the number of distinct cartridges reaching the slot, and “calls” is the aggregate over the 1,000
@@ -92,7 +180,7 @@ The table alone does not establish semantics for the other slots. Names such as 
 formatting, or input must not be assigned until register, RAM, and hardware effects are measured
 independently.
 
-## Replacement-firmware implications
+### Replacement-firmware implications
 
 The minimum viable replacement BIOS is substantially larger than reset, protection, and interrupt
 dispatch. Every observed cartridge depends on the `$F000-$F033` table, and most use multiple slots.
@@ -109,7 +197,7 @@ A BIOS-free implementation must therefore provide:
 The corpus-wide use of the table favors a small resident clean-room firmware over setting PC directly
 to `$6020`. A direct jump without the table would fail immediately in all 62 titles observed here.
 
-## Interrupt callback register effects
+### Interrupt callback validation
 
 The earlier claim in the boot analysis that both BIOS wrappers restore the entire interrupted CPU
 context was incorrect. A purpose-written callback replaced A, X, and Y at a synthetic cartridge
@@ -123,12 +211,13 @@ cartridge copy, and NMI was injected directly rather than delivered by UART. Cal
 the interrupted stack, generate nested interrupts, or depend on other machine state are not covered
 by this result.
 
-## Next analysis stages
+## Detailed service contracts
 
-The tracer establishes the service surface. Work should proceed in the following order so that each
-stage produces evidence needed by the next rather than merely accumulating longer traces.
+The following sections define the current executable contracts. The two method summaries explain
+how calls were paired and classified; each service section then owns its exact formulas, edge cases,
+and unresolved behavior.
 
-### Stage 1: pair calls with returns
+### Call/return pairing method
 
 Pair each direct cartridge-to-service-table entry with its matching BIOS-to-cartridge return while
 allowing IRQ/NMI callbacks to cross the boundary in between. For every completed call, retain only
@@ -176,7 +265,7 @@ include callback memory or peripheral effects in its summary. The interrupt coun
 separable during clustering. `tools/gamate-bios-call-summary.py` reproduces the per-slot aggregate
 table from a local completed-call report.
 
-### Stage 2: cluster signatures
+### Signature-clustering method
 
 Group completed calls by service slot, input/output register tuple, memory-change shape, hardware
 effects, and timing range. Begin with `$F02D`, `$F015`, and `$F012`, which together dominate the
@@ -189,7 +278,7 @@ distinguished from one whose writes merely occur while the prior configuration r
 Selected-slot summaries also report register preservation, status-bit behavior, timing grouped by
 input A, and the most frequent hardware-state transitions.
 
-### Pseudorandom service: `$F030`
+### Pseudorandom state transition: `$F030`
 
 For an uninterrupted call, interpret RAM `$012` as the low byte and `$013` as the high byte of
 an unsigned 16-bit state. Let `s` be that input, except replace zero with `$FFFF` before applying
@@ -317,7 +406,7 @@ synthetic states, every outer instruction boundary, entry P=`$20`, IRQ and NMI, 
 contexts, and both BIOSes, all 27,108 cases matched A, X, Y, S, P, and `$012-$014`. This covers
 one level of service reentry, not arbitrary asynchronous interrupt nesting.
 
-### Second resolved contract: `$F000`
+### Fixed bitmap writer: `$F000`
 
 `gamatebiosprobe` boots an authentic BIOS and cartridge to the normal `$6020` entry boundary, changes
 only explicitly named entry-state fields, and invokes one public service slot with a synthetic
@@ -486,7 +575,7 @@ Y-derived characters with the callback's Y digits, whereas an IRQ restored the o
 All 384 tests across both callback-Y values, three boundaries, both interrupt types, and all 32
 contexts matched. These are selected timing examples, not an exhaustive model of register clobber.
 
-### Fourth resolved contract: `$F024`
+### Strided RAM initializer: `$F024`
 
 `$F024` is a fixed strided-RAM initializer when entered under the commercial calling convention with
 decimal mode clear. It operates on two interleaved 16-byte address sequences:
@@ -509,7 +598,7 @@ yet established, so the narrower name **strided RAM initializer** is retained. S
 loop arithmetic and result; no observed commercial call enters that mode, and D-set behavior is not
 part of the replacement contract.
 
-### Fifth resolved contract: `$F00F`
+### Fixed plane-0 rectangle clear: `$F00F`
 
 `$F00F` is a fixed plane-0 VRAM rectangle clear. Logical plane/address coverage from the controlled
 probe establishes 25 rows of 31 consecutive bytes:
@@ -537,7 +626,7 @@ Both BIOS revisions produced identical register, RAM, VRAM, timing, and hardware
 rectangle's later software purpose is not yet established, so the contract names the measured VRAM
 operation without labeling it as a screen, font, sprite, or workspace clear.
 
-### Caller-context investigation: `$F018`
+### Command-stream tile-row blitter: `$F018`
 
 Directly invoking `$F018` from cartridge-entry state does not supply the RAM parameter block it
 expects. `gamatebiosprobe` therefore supports `occurrence=N`: it runs the cartridge to the Nth
@@ -1464,7 +1553,7 @@ copy shape, baseline timing, bounded page-cross penalties, registers, status, st
 unrelated hardware effects. It reports zero mismatches across all 38,790 available non-interrupted
 calls.
 
-### Rectangle-fill contract: `$F02A`
+### Plane-0 rectangle fill: `$F02A`
 
 A controlled Baseball call identifies `$F02A` as a column-major rectangle fill with a caller
 supplied byte, normally in plane 0. RAM `$01C` supplies the horizontal pixel extent and RAM `$01D`
@@ -2160,7 +2249,7 @@ subsequent row-select writes; the service does not restore the modified value af
   the per-row scratch dependency under both BIOSes. These are emulator observations, not physical
   measurements; arbitrary interfering handlers and exact physical bus-cycle timing remain untested.
 
-### Rectangle-fill contract: `$F02D`
+### Plane-1 rectangle fill: `$F02D`
 
 The combined 1,000-frame completed-call corpus contains 209,088 balanced `$F02D` calls split evenly
 between BIOS revisions. Of those, 207,504 do not span an IRQ or NMI. Every non-interrupted call fits
@@ -2215,7 +2304,9 @@ reports. It derives dimensions independently from LCD/VRAM write counts, checks 
 register/status behavior, and unrelated hardware effects, and emits no memory or firmware contents.
 It reports zero mismatches across all 207,504 currently available non-interrupted calls.
 
-### Stage 3: extend reachable paths
+## Remaining analysis
+
+### Extend reachable paths
 
 Apply repeatable Start, A, B, and directional schedules, including Tornado's known long Start press,
 and compare coverage with the unattended baseline. Retain a targeted trace only when it reaches a new
@@ -2253,7 +2344,7 @@ gameplay. The run had no pairing error; it produced 1,070 distinct boundary rows
 returns reached many new cartridge locations. The diagnostic capacity is now 16,384 entries, and the
 affected case and complete controller-cycle matrix pass without overflow.
 
-### Stage 4: probe narrow hypotheses
+### Probe narrow hypotheses
 
 Use purpose-written cartridges and controlled entry-state perturbations only after call clusters
 suggest a narrow contract. Vary one register or state field at a time and test named outcomes rather
