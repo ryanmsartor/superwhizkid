@@ -1969,13 +1969,25 @@ copied into the repository, build output, tests, or releases.
     behavior, scratch state, ordered reads and output while saving four master clocks per plane and
     column. The entry status now remains on the stack during both passes, allowing `$01A` to serve
     as the destructive column counter while `$01C` remains intact. This removes both width
-    push/restore round trips; the saved status is written back to `$01A` before return, preserving
-    its documented result and stack balance. The six-shape synthetic matrix now asserts
-    `338 + columns * (188 + 76 * rows) + 2 * crossing_reads + 8 * pointer_carries`, reducing the
-    no-carry mismatch to 104 fixed clocks plus 56 per column. The exact 76-clock byte-row term and
-    zero-derived loop behavior are retained. The explicit pointer-carry surcharge remains
+    push/restore round trips. Reordering the saved status and X entries lets the return restore X
+    before normalizing status, eliminating the temporary `$01A` status write and reload. Deriving
+    the destination column while the entry X value is still in A also removes a later `TXA`. The
+    seven-shape synthetic matrix now asserts
+    `322 + columns * (184 + 76 * rows) + 2 * crossing_reads + 8 * pointer_carries` for the tested
+    nonzero heights, reducing the no-carry mismatch to 88 fixed clocks plus 52 per column. The
+    ordinary pointer branch was inverted and its 256-row case moved out of line, saving four master
+    clocks per two-plane column without changing the carry surcharge. The exact 76-clock byte-row
+    term is retained. A new zero-height case verifies the derived 256-row behavior and its
+    `322 + columns * (176 + 76 * 256)` timing term. The explicit pointer-carry surcharge remains
     unresolved. These are independently authored dataflow optimizations based on the existing
     behavioral model; no authentic implementation code was consulted.
+  - **Remaining-service timing ranking.** A local replacement-firmware run measured the existing
+    purpose-written `$F018` mixed stream at 3,848 master clocks against 4,172 from the independently
+    derived authentic timing formula, and its transparent-only stream at 958 against 876. These
+    roughly 8-9% residuals are smaller than `$F015`'s tested 1x1 residual, so `$F015` remains the
+    least accurate measured service after the preceding change. This ranking uses synthetic
+    emulator observations, not physical timing, and does not claim that the two `$F018` shapes bound
+    every stream. No authentic implementation code or payload bytes were consulted or retained.
   - **Replacement wait-service consolidation.** The independently authored `$F003`, `$F006`, and
     `$F009` loops were checked through one synthetic matrix covering all 256 entry values, multiple
     preserved-status combinations, and thresholds 8, 5, and 24. Removing redundant `SEC`

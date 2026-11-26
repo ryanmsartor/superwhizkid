@@ -522,10 +522,7 @@ copy_plane:
 	dex
 	bne @row
 	tya
-	bne @advance
-	inc $1F
-	jmp @next_column
-@advance:
+	beq @full_page
 	clc
 	adc $1E
 	sta $1E
@@ -538,11 +535,19 @@ copy_plane:
 	dec $01A
 	bne @column
 	rts
+@full_page:
+	inc $1F
+	jmp @next_column
 
 copy_bitmap:
+	php
 	txa
 	pha
-	php
+	lsr a
+	lsr a
+	lsr a
+	sta $018
+	sty $019
 	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
@@ -551,12 +556,6 @@ copy_bitmap:
 	lsr a
 	lsr a
 	sta $01C
-	sty $019
-	txa
-	lsr a
-	lsr a
-	lsr a
-	sta $018
 	lda $000
 	sta $1E
 	lda $001
@@ -581,10 +580,8 @@ copy_bitmap:
 	sbc $002
 	tay
 	pla
-	sta $01A
-	pla
 	tax
-	lda $01A
+	pla
 	and #$4C
 	ora #$02
 	pha
