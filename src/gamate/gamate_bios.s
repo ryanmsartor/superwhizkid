@@ -21,17 +21,29 @@ CART_CHECKSUM_LO     = $6000 ; cartridge header, ROM offset 0
 CART_CHECKSUM_HI     = $6001
 CART_IDENTITY        = $6005 ; "COPYRIGHT BIT CORPORATION" string
 CART_ENTRY           = $6020 ; cartridge start vector
-CART_NMI_CALLBACK    = $6023 ; called from the NMI wrapper while $0C is nonzero
-CART_IRQ_CALLBACK    = $6026 ; called from the IRQ wrapper while $0C is nonzero
+CART_NMI_CALLBACK    = $6023 ; called from the NMI wrapper while CALLBACK_ENABLE is nonzero
+CART_IRQ_CALLBACK    = $6026 ; called from the IRQ wrapper while CALLBACK_ENABLE is nonzero
 
-; Known RAM entries and usage
-UART_RX_BYTE         = $00A ; completed UART byte read by NMI wrapper
-WAIT_COUNTER         = $00B ; wait counter for IRQ-gated services
-CALLBACK_ENABLE_FLAG = $00C ; callback enable flag (nonzero enables NMI/IRQ callbacks)
-PSEUDO_RANDOM_STATE  = $012 ; 16-bit pseudorandom state
-LCD_CONTROL_MEMORY   = $015 ; LCD control and other display-related state
-PSEUDO_RANDOM_SCRATCH  = $014 ; scratch for pseudorandom generator
-CARTRIDGE_CHECKSUM   = $0E0 ; $0E0-$0E6 - stored cartridge checksum for later verification
+; Cartridge-visible low RAM and persistent BIOS state (see docs/MEMORY_MAP.md).
+PROTECTION_REPLY     = $004 ; accepted serial protection reply ($47)
+UART_RX_BYTE         = $00A ; completed UART byte copied by the NMI wrapper
+WAIT_COUNTER         = $00B ; incremented by IRQ; consumed by the wait services
+CALLBACK_ENABLE      = $00C ; zero suppresses cartridge NMI/IRQ callbacks
+IRQ_COUNTER_31_24    = $00E ; big-endian 32-bit periodic-IRQ counter
+IRQ_COUNTER_23_16    = $00F
+IRQ_COUNTER_15_8     = $010
+IRQ_COUNTER_7_0      = $011
+
+RANDOM_STATE_LO      = $012 ; little-endian 16-bit pseudorandom state
+RANDOM_STATE_HI      = $013
+RANDOM_FEEDBACK      = $014 ; temporary feedback bit in bit 7
+
+LCD_CONTROL_BASE     = $015 ; caller-owned base value used by BIOS drawing services
+
+CHECKSUM_WORK_LO     = $0E0 ; cartridge checksum retained from successful validation
+CHECKSUM_WORK_HI     = $0E1
+CHECKSUM_COPY_LO     = $0E5
+CHECKSUM_COPY_HI     = $0E6
 
 .segment "TABLE"
 	jmp draw_placeholder        ; $F000
@@ -162,15 +174,15 @@ reset:
 	jmp bad_checksum
 :
 	lda CART_CHECKSUM_LO
-	sta $E0
-	sta $E5
+	sta CHECKSUM_WORK_LO
+	sta CHECKSUM_COPY_LO
 	lda CART_CHECKSUM_HI
-	sta $E1
-	sta $E6
+	sta CHECKSUM_WORK_HI
+	sta CHECKSUM_COPY_HI
 
 	lda #$00
-	sta $0C
-	sta $0B
+	sta CALLBACK_ENABLE
+	sta WAIT_COUNTER
 	ldx #$0F
 @clear_ay:
 	sta AY_REGISTERS,x
@@ -180,7 +192,7 @@ reset:
 	jsr animate_logo
 
 	lda #$00
-	sta $0B
+	sta WAIT_COUNTER
 	jsr wait_24_irqs
 
 	lda #$00
@@ -201,7 +213,7 @@ reset:
 	lda #$00
 	sta LCD_SCROLL_X
 	lda #$47
-	sta $04
+	sta PROTECTION_REPLY
 	lda #$FF
 	ldx #$05
 @initialize_sentinels:
@@ -210,13 +222,13 @@ reset:
 	cpx #$0B
 	bne @initialize_sentinels
 	lda #$03
-	sta $10
+	sta IRQ_COUNTER_15_8
 	lda #$94
-	sta $11
+	sta IRQ_COUNTER_7_0
 	lda #$8A
-	sta $12
+	sta RANDOM_STATE_LO
 	lda #$35
-	sta $13
+	sta RANDOM_STATE_HI
 	lda #$5F
 	sta LCD_SCROLL_Y
 	lda #$40
@@ -226,7 +238,7 @@ reset:
 	lda #$C6
 	sta LCD_VRAM_ADDR_HI
 	lda #$01
-	sta $0C
+	sta CALLBACK_ENABLE
 	ldx #$28
 	ldy #$FF
 	lda #$FF
@@ -262,16 +274,16 @@ irq:
 	pha
 	tya
 	pha
-	inc $0B
-	inc $11
+	inc WAIT_COUNTER
+	inc IRQ_COUNTER_7_0
 	bne @callback
-	inc $10
+	inc IRQ_COUNTER_15_8
 	bne @callback
-	inc $0F
+	inc IRQ_COUNTER_23_16
 	bne @callback
-	inc $0E
+	inc IRQ_COUNTER_31_24
 @callback:
-	lda $0C
+	lda CALLBACK_ENABLE
 	beq :+
 	jsr CART_IRQ_CALLBACK
 :
@@ -283,8 +295,8 @@ irq:
 nmi:
 	pha
 	lda UART_RX_DATA
-	sta $0A
-	lda $0C
+	sta UART_RX_BYTE
+	lda CALLBACK_ENABLE
 	beq :+
 	jsr CART_NMI_CALLBACK
 :
@@ -292,55 +304,55 @@ nmi:
 	rti
 
 wait_8_irqs:
-	lda $0B
+	lda WAIT_COUNTER
 	cmp #$08
 	bcc wait_8_irqs
 	lda #$00
-	sta $0B
+	sta WAIT_COUNTER
 	sec
 	rts
 
 wait_24_irqs:
-	lda $0B
+	lda WAIT_COUNTER
 	cmp #$18
 	bcc wait_24_irqs
 	lda #$00
-	sta $0B
+	sta WAIT_COUNTER
 	sec
 	rts
 
 wait_20_irqs:
-	lda $0B
+	lda WAIT_COUNTER
 	cmp #$14
 	bcc wait_20_irqs
 	lda #$00
-	sta $0B
+	sta WAIT_COUNTER
 	sec
 	rts
 
 wait_counter:
-	lda $0B
+	lda WAIT_COUNTER
 	cmp #$05
 	bcc wait_counter
 	lda #$00
-	sta $0B
+	sta WAIT_COUNTER
 	rts
 
-; Advances the 16-bit state at $12-$13: feedback is bit 4 XOR bit 10, and zero restarts at $FFFF.
+; Advances RANDOM_STATE_HI:RANDOM_STATE_LO; zero is repaired to $FFFF before the transition.
 next_random:
-	lda $12
-	ora $13
+	lda RANDOM_STATE_LO
+	ora RANDOM_STATE_HI
 	bne @nonzero
 	lda #$FF
-	sta $12
-	sta $13
+	sta RANDOM_STATE_LO
+	sta RANDOM_STATE_HI
 	lda #$00
-	sta $14
-	lda $13
+	sta RANDOM_FEEDBACK
+	lda RANDOM_STATE_HI
 	and #$04
 	beq @zero_finish
 	lda #$80
-	sta $14
+	sta RANDOM_FEEDBACK
 @zero_finish:
 	.repeat 10
 	nop
@@ -348,8 +360,8 @@ next_random:
 	bne @calculated
 @nonzero:
 	lda #$00
-	sta $14
-	lda $13
+	sta RANDOM_FEEDBACK
+	lda RANDOM_STATE_HI
 	and #$04
 	bne @bit4
 	.repeat 12
@@ -358,21 +370,21 @@ next_random:
 	beq @calculated
 @bit4:
 	lda #$80
-	sta $14
+	sta RANDOM_FEEDBACK
 	.repeat 10
 	nop
 	.endrepeat
 	bne @calculated
 @calculated:
-	lda $12
+	lda RANDOM_STATE_LO
 	asl a
 	asl a
 	asl a
-	eor $14
+	eor RANDOM_FEEDBACK
 	asl a
-	rol $12
-	rol $13
-	lda $12
+	rol RANDOM_STATE_LO
+	rol RANDOM_STATE_HI
+	lda RANDOM_STATE_LO
 	rts
 
 ; Formats six packed nibbles from A, X and Y as a length-prefixed string at $A1-$A7.
@@ -462,7 +474,7 @@ initialize_records:
 	rts
 
 clear_display:
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$80
 	sta LCD_CONTROL
 	lda #$00
@@ -471,7 +483,7 @@ clear_display:
 	lda #$80
 	sta $1E
 	jsr clear_display_plane
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 	sec
@@ -536,7 +548,7 @@ copy_bitmap:
 	php
 	pla
 	sta $01A
-	lda $015
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 	lda $01C
@@ -600,7 +612,7 @@ copy_bitmap:
 	rts
 
 clear_fixed_rectangle:
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	and #$BF
 	sta LCD_CONTROL
 	lda #$00
@@ -629,7 +641,7 @@ clear_fixed_rectangle:
 	iny
 	cpy #$FF
 	bne @row
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 	lda #$1E
@@ -647,7 +659,7 @@ clear_fixed_rectangle:
 	rts
 
 draw_placeholder:
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 	ldx #$00
@@ -698,7 +710,7 @@ draw_glyph_run:
 	pha
 	iny
 @tile:
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 	lda $1A
@@ -830,7 +842,7 @@ draw_glyph_run:
 	rts
 
 draw_tile_stream:
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 	lda $01
@@ -957,7 +969,7 @@ tile_stream_pass:
 
 ; Two-pass row stream of (tile, count) pairs; tile zero advances the column by count.
 draw_pair_stream:
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 	lda $01
@@ -1094,7 +1106,7 @@ pair_stream_pass:
 
 ; Clears plane-0 rows $E6-$FE, then decodes (value, count) runs on rows relative to $E6.
 draw_row_runs:
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	sta LCD_CONTROL
 	ldy #$E6
 @clear_row:
@@ -1155,7 +1167,7 @@ draw_row_runs:
 ; Clears plane-0 rows $E6-$FE, then writes literal stream bytes on absolute row offsets.
 draw_row_literals:
 	php
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	sta LCD_CONTROL
 	clv
 	ldy #$E6
@@ -1350,7 +1362,7 @@ copy_record:
 
 ; Redraws a $1C-by-$1C tile area from selectors captured in the plane-0 map rows.
 redraw_record:
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 	lda $0305
@@ -1532,7 +1544,7 @@ draw_object:
 	dey
 	bne @shift
 @shifted:
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 	ldx #$00
@@ -1591,13 +1603,13 @@ draw_object:
 	inx
 	cpx $18
 	bne @composite
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 	lda $1C
 	cmp #$10
 	bne :+
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 :
@@ -1706,7 +1718,7 @@ fill_rectangle_common:
 	ora $A8
 	sta $18
 	sty $19
-	lda LCD_CONTROL_MEMORY
+	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
 	lda $1C
