@@ -1595,6 +1595,24 @@ The validated completed-call report contains 7,026 `$F027` calls, evenly split b
 Of those, 2,366 do not span an IRQ or NMI. Early controlled calls exposed caller-dependent effects;
 the later isolated-record model below resolves their shared graphics structure.
 
+#### Four structural families, not four fixed cases
+
+The executable contract has four genuine operation families. Records 0-7 select the large geometry
+and records 8-15 select the small geometry; each record independently gates a background redraw and
+a current-object draw. This produces large redraw, small redraw, large object, and small object as
+distinct paths with different geometry, access counts, stack depth, fixed cost, and—for objects—
+horizontal-shift slope. These families are properties of the observed authentic ABI, not divisions
+chosen for the replacement implementation.
+
+Each family is nevertheless a parameterized timing spectrum rather than one scalar test case.
+Redraw cost depends on every captured map selector and its source-page crossings. Object cost depends
+on `X & 7`, its selector or selectors, both graphics-source pointer alignments, and indexed-read page
+crossings. A call may combine any subset of the 16 redraw gates and 16 object gates. The authentic
+target is therefore the 6,326-clock common scan plus the sum of every enabled, parameterized
+operation—not one of four whole-call durations. Replacement validation must cover all record classes,
+all eight object shifts, and representative selector/page-crossing classes before a family can be
+called timing-equivalent.
+
 The controlled comparison covers first authentic occurrences in four titles and both BIOS revisions:
 Baseball, Fortune 'n Luck, Nightmare of Santa Claus, and Time Warrior. The first three each perform
 32 VRAM writes and 106 LCD writes, but take 14,202, 14,026, and 16,490 clocks respectively. Time

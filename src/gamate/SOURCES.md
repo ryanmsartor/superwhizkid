@@ -827,6 +827,29 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   that SWK writes each register exactly once and reaches the all-zero entry state, so the policy does
   not depend on the emulator's normal reset initialization.
 
+- Current SWK `$F027` gameplay replay: the established Cube Up input schedule (Start at frame 90,
+  then four A pulses) produced 141 `$F027` calls under both SWK and UMC. The diagnostic replay masks
+  IRQs for each captured entry and compares SWK with the independently derived authentic contract.
+  All SWK calls matched pixels, VRAM reads/writes, ordered LCD activity, cartridge reads, returned
+  registers/status, and unrelated peripheral state. The 139 common four-small-redraw/four-small-
+  object calls were 3,936 master clocks above the contract; one three-large-object call was 3,424
+  above; one eight-small-object call was 894 below. Final modeled scratch values matched, while the
+  stack write footprint did not. These current residuals supersede the earlier 33,000–68,000-clock
+  gameplay gap after intervening compositor optimizations. Their opposing signs show that a global
+  padding correction is unsafe; shift- and shape-specific execution needs further work. Inputs were
+  read-only and no BIOS, cartridge, RAM, VRAM, or graphics bytes were retained. This is emulator
+  replay evidence, not physical timing.
+
+- SWK `$F027` isolated shift matrix: the synthetic prototype test now checks both object-size arms
+  at every horizontal shift 0-7 against the authentic timing formulas while retaining the established
+  output and state checks. Large-object residuals are `-394,-318,-254,-190,-126,-62,+2,+66`
+  master clocks; small-object residuals are `+428,+296,+152,+8,-136,-280,-424,-568`. The large and
+  small redraw samples remain exact. This confirms that the four authentic operation families are
+  parameterized spectra and that the formerly sampled shifts 6 and 3 happened to be the near-zero
+  points. Implementation impact: correct the fixed and shift-dependent work within each object arm;
+  do not add a global compositor delay. The matrix uses only purpose-written cartridge data and is
+  an emulator timing result, not physical measurement.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

@@ -1064,33 +1064,46 @@ static void testCompositor(struct Gamate* g) {
 		{ smallBoth, 8, false, false },
 	};
 	for (size_t i = 0; i < sizeof(isolated) / sizeof(isolated[0]); i++) {
-		memset(g->ram + 0x21, 0xFF, 0x80);
-		memcpy(g->ram + 0x21 + 8 * isolated[i].index, isolated[i].record, 8);
-		g->ram[0x21 + 8 * isolated[i].index + (isolated[i].redraw ? 2 : 7)] = 0xFF;
-		for (size_t j = 0; j < sizeof(expected); j++) expected[j] = (uint8_t) (j * 37 + j / 5);
-		memcpy(g->vram, expected, sizeof(expected));
-		unsigned target = 6326;
-		if (isolated[i].redraw) {
-			unsigned q = isolated[i].large ? 3 : 2;
-			for (unsigned c = 0; c < q; c++)
-				for (unsigned r = 0; r < q; r++)
-					target += compositorTileClocks(g, vramAt(expected,
-						(isolated[i].record[5] >> 3) + c,
-						0xE6 + (isolated[i].record[6] >> 3) + r));
-			target += isolated[i].large ? 9084 : 4270;
-		} else if (isolated[i].large) {
-			for (unsigned selector = isolated[i].record[2];
-					selector <= (unsigned) isolated[i].record[2] + 3; selector++)
-				target += compositorTileClocks(g, (uint8_t) selector);
-			target += 23326 + 1516 * (isolated[i].record[0] & 7);
-		} else {
-			target += compositorTileClocks(g, isolated[i].record[2]);
-			target += 7556 + 540 * (isolated[i].record[0] & 7);
+		unsigned shiftCases = isolated[i].redraw ? 1 : 8;
+		for (unsigned shift = 0; shift < shiftCases; shift++) {
+			uint8_t record[8];
+			memcpy(record, isolated[i].record, sizeof(record));
+			if (!isolated[i].redraw) record[0] = (uint8_t) ((record[0] & 0xF8) | shift);
+			memset(g->ram + 0x21, 0xFF, 0x80);
+			memcpy(g->ram + 0x21 + 8 * isolated[i].index, record, sizeof(record));
+			g->ram[0x21 + 8 * isolated[i].index + (isolated[i].redraw ? 2 : 7)] = 0xFF;
+			for (size_t j = 0; j < sizeof(expected); j++)
+				expected[j] = (uint8_t) (j * 37 + j / 5);
+			memcpy(g->vram, expected, sizeof(expected));
+			unsigned target = 6326;
+			if (isolated[i].redraw) {
+				unsigned q = isolated[i].large ? 3 : 2;
+				for (unsigned c = 0; c < q; c++)
+					for (unsigned r = 0; r < q; r++)
+						target += compositorTileClocks(g, vramAt(expected,
+							(record[5] >> 3) + c, 0xE6 + (record[6] >> 3) + r));
+				target += isolated[i].large ? 9084 : 4270;
+			} else if (isolated[i].large) {
+				for (unsigned selector = record[2]; selector <= (unsigned) record[2] + 3;
+						selector++)
+					target += compositorTileClocks(g, (uint8_t) selector);
+				target += 23326 + 1516 * shift;
+			} else {
+				target += compositorTileClocks(g, record[2]);
+				target += 7556 + 540 * shift;
+			}
+			clocks = g->masterClocks;
+			call(g, 0xF027, 0, 0, 0, 0x24, 1000000);
+			static const int largeResiduals[8] = { -394, -318, -254, -190, -126, -62, 2, 66 };
+			static const int smallResiduals[8] = { 428, 296, 152, 8, -136, -280, -424, -568 };
+			int residual = isolated[i].redraw ? 0 :
+				isolated[i].large ? largeResiduals[shift] : smallResiduals[shift];
+			if ((int64_t) (g->masterClocks - clocks) != (int64_t) target + residual)
+				fprintf(stderr, "F027 isolated=%zu shift=%u clocks=%llu target=%u residual=%lld\n",
+					i, shift, (unsigned long long) (g->masterClocks - clocks), target,
+					(long long) (g->masterClocks - clocks) - target);
+			assert((int64_t) (g->masterClocks - clocks) == (int64_t) target + residual);
 		}
-		clocks = g->masterClocks;
-		call(g, 0xF027, 0, 0, 0, 0x24, 1000000);
-		static const int residuals[] = { 0, 0, 2, 8 };
-		assert(g->masterClocks - clocks == target + residuals[i]);
 	}
 }
 

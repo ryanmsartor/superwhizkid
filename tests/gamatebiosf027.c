@@ -970,11 +970,14 @@ static int replay(struct Gamate* g, const struct Gamate* entry, bool biosSources
 	struct ZeroPageScratch zeroPage;
 	initZeroPageScratch(&zeroPage, g);
 	unsigned reads = 0, writes = 0, clocks = 6326, stackWrites = 9;
+	unsigned largeRedraws = 0, smallRedraws = 0, largeObjects = 0, smallObjects = 0;
 	unsigned bases[2] = { g->ram[6] | (unsigned) g->ram[7] << 8,
 		g->ram[8] | (unsigned) g->ram[9] << 8 };
 	for (unsigned record = 0; record < 16; record++) {
 		unsigned address = 0x21 + 8 * record;
 		if (g->ram[address + 7] != 0xFF) {
+			if (record < 8) largeRedraws++;
+			else smallRedraws++;
 			if (stackWrites < 11) stackWrites = 11;
 			unsigned count = record < 8 ? 9 : 4;
 			unsigned selector = finalBackgroundSelector(expected, record,
@@ -993,6 +996,8 @@ static int replay(struct Gamate* g, const struct Gamate* entry, bool biosSources
 	for (unsigned record = 0; record < 16; record++) {
 		unsigned address = 0x21 + 8 * record;
 		if (g->ram[address + 2] != 0xFF) {
+			if (record < 8) largeObjects++;
+			else smallObjects++;
 			unsigned depth = record < 8 ? 13 : 18;
 			if (stackWrites < depth) stackWrites = depth;
 			unsigned side = record < 8 ? 16 : 8;
@@ -1069,19 +1074,22 @@ static int replay(struct Gamate* g, const struct Gamate* entry, bool biosSources
 	uint8_t expectedP = (uint8_t) ((p & 0x18) | 0x25 | (a & 0x80) | (a == 0 ? 2 : 0));
 	bool registers = g->cpu.a == a && g->cpu.x == x && g->cpu.y == y && g->cpu.p == expectedP;
 	bool timing = g->masterClocks - start == clocks;
-	bool ram = stackWritesMatch(g, s, stackWrites) &&
-		!memcmp(g->ram + 0x300, entry->ram + 0x99, 8) &&
-		zeroPageScratchMatches(&zeroPage, g, true);
+	bool stackMatches = stackWritesMatch(g, s, stackWrites);
+	bool recordMatches = !memcmp(g->ram + 0x300, entry->ram + 0x99, 8);
+	bool zeroPageMatches = zeroPageScratchMatches(&zeroPage, g, true);
+	bool scratchMatches = true, unrelatedMatches = true;
+	bool ram = stackMatches && recordMatches && zeroPageMatches;
 	for (unsigned i = 0; i < sizeof(scratch); i++) {
 		unsigned address = 0x308 + i;
 		bool written = (g->diagnostics.ramWritten[address >> 3] & (1u << (address & 7))) != 0;
-		if (g->ram[address] != scratch[i] || written != (scratchValid[i] != 0)) ram = false;
+		if (g->ram[address] != scratch[i] || written != (scratchValid[i] != 0))
+			ram = scratchMatches = false;
 	}
 	for (unsigned i = 0; i < sizeof(g->ram); i++) {
 		bool scratch = i <= 3 || (i >= 0x18 && i <= 0x1F) ||
 			(i >= 0x100 && i < 0x200) || (i >= 0x300 && i <= 0x3C7);
 		if (!scratch && ((g->diagnostics.ramWritten[i >> 3] & (1u << (i & 7))) ||
-				g->ram[i] != entry->ram[i])) ram = false;
+				g->ram[i] != entry->ram[i])) ram = unrelatedMatches = false;
 	}
 	bool peripherals = g->scrollX == entry->scrollX && g->scrollY == entry->scrollY &&
 		g->bank == entry->bank && g->firstBank == entry->firstBank &&
@@ -1102,6 +1110,11 @@ static int replay(struct Gamate* g, const struct Gamate* entry, bool biosSources
 			(unsigned long long) g->diagnostics.vramTrackedWrites, writes, g->cpu.p, expectedP,
 			(long long) (g->masterClocks - start) - clocks,
 			events.observed, events.count, events.mismatches, rom.observed, rom.count, rom.mismatches);
+		if (getenv("GAMATEBIOSF027_VERBOSE"))
+			fprintf(stderr, "shape redraw=%u/%u object=%u/%u ram stack=%u record=%u "
+				"zero-page=%u scratch=%u unrelated=%u\n",
+				largeRedraws, smallRedraws, largeObjects, smallObjects,
+				stackMatches, recordMatches, zeroPageMatches, scratchMatches, unrelatedMatches);
 		return 1;
 	}
 	return 0;
