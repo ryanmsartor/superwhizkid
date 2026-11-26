@@ -977,8 +977,8 @@ static void testDebugAccess(void) {
 	assert(gamateSaveState(&g, stateBefore, stateSize));
 	struct GamateDiagnostics diagnosticsBefore = g.diagnostics;
 	uint8_t openBusBefore = g.openBus;
-	for (size_t i = 0; i < addressCount; i++) {
-		(void) gamatePeek(&g, addresses[i]);
+	for (uint32_t address = 0; address <= UINT16_MAX; address++) {
+		(void) gamatePeek(&g, (uint16_t) address);
 	}
 	assert(gamateSaveState(&g, stateAfter, stateSize));
 	assert(memcmp(stateBefore, stateAfter, stateSize) == 0);
@@ -1011,6 +1011,12 @@ static void testDebugAccess(void) {
 	assert(g.bios[0x123] == 0x99 && gamateRead(&g, 0xE123) == 0x99);
 	assert(gamatePoke(&g, 0x8000, 0xAB));
 	assert(g.rom[0x2000] == 0xAB && gamateRead(&g, 0x8000) == 0xAB);
+	uint8_t* state = malloc(stateSize);
+	assert(state && gamateSaveState(&g, state, stateSize));
+	assert(gamatePoke(&g, 0xF123, 0x55) && gamatePoke(&g, 0x8000, 0x66));
+	assert(gamateLoadState(&g, state, stateSize));
+	assert(g.bios[0x123] == 0x55 && g.rom[0x2000] == 0x66);
+	free(state);
 
 	bool displayBlankBefore = g.displayBlank;
 	uint8_t ayRegisterBefore = g.ayRegisters[0];

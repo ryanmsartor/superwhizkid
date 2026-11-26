@@ -138,7 +138,8 @@ void gamateWrite(struct Gamate* gamate, uint16_t address, uint8_t value);
 uint8_t gamatePeek(const struct Gamate* gamate, uint16_t address);
 // Writes the storage behind an address: RAM, cartridge ROM ($6000-$DFFF), or BIOS ($E000-$FFFF).
 // Hardware registers are not writable here. Returns false for addresses with no such storage.
-// Save states do not capture ROM or BIOS bytes, so these edits are lost on a state load.
+// Save states do not capture ROM or BIOS bytes, so these edits persist across state loads and are
+// discarded only when content is reloaded or the bytes are edited again.
 bool gamatePoke(struct Gamate* gamate, uint16_t address, uint8_t value);
 // Physical cartridge ROM offset that a read of address maps to under the current bank, or SIZE_MAX
 // outside the cartridge window ($6000-$DFFF).

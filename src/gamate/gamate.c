@@ -306,6 +306,25 @@ static uint8_t protectionRead(struct Gamate* g) {
 	return bit;
 }
 
+static uint8_t readValue(const struct Gamate* g, uint16_t address) {
+	if (address < 0x2000) return g->ram[address & 0x3FF];
+	if (address >= 0x6000) {
+		if (address >= 0xE000) return g->bios[address & 0x0FFF];
+		if (g->protectionPassed && g->rom) return g->rom[romOffset(g, address)];
+		// The next protection read returns this bit; observing it must not advance the stream.
+		return g->protectionReply ? ((g->protectionByte >> (7 - g->protectionPosition)) & 1) << 1 : 0;
+	}
+	if ((address & 0xFC00) == 0x4000) return address >> 8;
+	if ((address & 0xFC00) == 0x4400) return g->buttons;
+	if ((address & 0xFC00) == 0x4800) return g->uartRx;
+	if ((address & 0xFC00) == 0x4C00) return address >> 8;
+	if ((address & 0xFC00) == 0x5000 && (address & 7) == 6) {
+		return g->vram[(g->vramAddress << 1) | g->vramPlane];
+	}
+	if ((address & 0xFF00) == 0x5A00) return (address >> 8) | 3;
+	return address >= 0x5400 && address < 0x5800 ? 0xFF : address >> 8;
+}
+
 static void uartClock(struct Gamate* g) {
 	g->diagnostics.uartClocks++;
 	if (g->linkBitCallback) g->linkBitCallback(g->linkBitContext, g->uartTxLine);
@@ -333,8 +352,8 @@ void gamateUartReceiveBit(struct Gamate* g, bool bit) {
 uint8_t gamateRead(struct Gamate* g, uint16_t address) {
 	uint8_t value;
 	if (address < 0x2000) {
-		uint16_t offset = address & 0x3FF;
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
+		uint16_t offset = address & 0x3FF;
 		markRamRead(g, offset);
 		if (g->diagnostics.ramWatchEnabled && offset == g->diagnostics.ramWatchAddress) {
 			uint8_t value = g->ram[offset];
@@ -342,57 +361,52 @@ uint8_t gamateRead(struct Gamate* g, uint16_t address) {
 				g, false, offset, value, value);
 		}
 #endif
-		value = g->ram[offset];
+		value = readValue(g, address);
 		goto done;
 	}
 	if (address >= 0x6000) {
-		if (address >= 0xE000) {
-			value = g->bios[address & 0x0FFF];
-		} else if (g->protectionPassed && g->rom) {
-			size_t offset = romOffset(g, address);
+		if (address < 0xE000 && g->protectionPassed && g->rom) {
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
+			size_t offset = romOffset(g, address);
 			markRomRead(g, address, offset);
 #endif
-			value = g->rom[offset];
-		} else {
+			value = readValue(g, address);
+		} else if (address < 0xE000) {
 			value = protectionRead(g) << 1;
+		} else {
+			value = readValue(g, address);
 		}
 		goto done;
 	}
 	if ((address & 0xFC00) == 0x4000) {
-		// The PSG is write-only. Undriven reads expose the high address byte.
-		value = address >> 8;
+		value = readValue(g, address);
 		goto done;
 	}
 	if ((address & 0xFC00) == 0x4400) {
 		g->diagnostics.controllerReads++;
-		value = g->buttons;
+		value = readValue(g, address);
 		g->diagnostics.pressedControllerReads += value != 0xFF;
 		goto done;
 	}
 	if ((address & 0xFC00) == 0x4800) {
-		value = g->uartRx; // remains zero until a link peer is connected
+		value = readValue(g, address);
 		goto done;
 	}
 	if ((address & 0xFC00) == 0x4C00) {
 		uartClock(g);
-		value = address >> 8; // clock register does not drive read data
+		value = readValue(g, address);
 		goto done;
 	}
 	if ((address & 0xFC00) == 0x5000 && (address & 7) == 6) {
-		uint16_t offset = (g->vramAddress << 1) | g->vramPlane;
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
+		uint16_t offset = (g->vramAddress << 1) | g->vramPlane;
 		markVramRead(g, offset, false);
 #endif
-		value = g->vram[offset];
+		value = readValue(g, address);
 		incrementVram(g);
 		goto done;
 	}
-	if ((address & 0xFF00) == 0x5A00) {
-		value = (address >> 8) | 3;
-		goto done;
-	}
-	value = address >= 0x5400 && address < 0x5800 ? 0xFF : address >> 8;
+	value = readValue(g, address);
 done:
 	g->openBus = value;
 	return value;
@@ -508,22 +522,7 @@ void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
 }
 
 uint8_t gamatePeek(const struct Gamate* g, uint16_t address) {
-	if (address < 0x2000) return g->ram[address & 0x3FF];
-	if (address >= 0x6000) {
-		if (address >= 0xE000) return g->bios[address & 0x0FFF];
-		if (g->protectionPassed && g->rom) return g->rom[romOffset(g, address)];
-		// The next protection read returns this bit; peeking must not advance the stream.
-		return g->protectionReply ? ((g->protectionByte >> (7 - g->protectionPosition)) & 1) << 1 : 0;
-	}
-	if ((address & 0xFC00) == 0x4000) return address >> 8;
-	if ((address & 0xFC00) == 0x4400) return g->buttons;
-	if ((address & 0xFC00) == 0x4800) return g->uartRx;
-	if ((address & 0xFC00) == 0x4C00) return address >> 8;
-	if ((address & 0xFC00) == 0x5000 && (address & 7) == 6) {
-		return g->vram[(g->vramAddress << 1) | g->vramPlane];
-	}
-	if ((address & 0xFF00) == 0x5A00) return (address >> 8) | 3;
-	return address >= 0x5400 && address < 0x5800 ? 0xFF : address >> 8;
+	return readValue(g, address);
 }
 
 bool gamatePoke(struct Gamate* g, uint16_t address, uint8_t value) {
