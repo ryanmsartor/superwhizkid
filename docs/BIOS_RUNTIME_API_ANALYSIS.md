@@ -68,7 +68,7 @@ authoritative behavior, formulas, edge cases, and interruption notes in this doc
 | [`$F003`](#irq-gated-counter-wait-f003) | Wait until `$00B >= 8` | RAM `$00B` | A=`$00`; `$00B=0` | 42-clock ready path; otherwise `8-n` IRQs |
 | [`$F006`](#irq-gated-counter-wait-f006) | Wait until `$00B >= 5` | RAM `$00B` | A=`$00`; `$00B=0` | 42-clock ready path; otherwise `5-n` IRQs |
 | [`$F009`](#irq-gated-counter-wait-f009) | Wait until `$00B >= 24` | RAM `$00B` | A=`$00`; `$00B=0` | 42-clock ready path; otherwise `24-n` IRQs |
-| [`$F00C`](#two-plane-vram-zero-writer-and-lcd-control-service-f00c) | Clear both VRAM planes | RAM `$015` LCD control | A=`$40 | $015`; X=`$00`; Y=`$C8` | 247,326 clocks |
+| [`$F00C`](#two-plane-vram-zero-writer-and-lcd-control-service-f00c) | Clear both VRAM planes | RAM `$015` LCD control | A=`$40 \| $015`; X=`$00`; Y=`$C8` | 247,326 clocks |
 | [`$F00F`](#fixed-plane-0-rectangle-clear-f00f) | Clear fixed 31×25-byte plane-0 rectangle | RAM `$015` | A/X/Y=`$00`; 775 VRAM writes | 15,930 clocks |
 | [`$F012`](#fixed-height-tile-run-contract-f012) | Draw an eight-row glyph run | X/Y, descriptor pointer `$000-$001`, `$015` | VRAM glyph run; see contract | Per-selector formula below |
 | [`$F015`](#two-plane-bitmap-copy-contract-f015) | Copy a rectangle into both planes | X/Y, pointers `$000-$003`, `$015`, `$01C-$01D` | Two VRAM rectangles | `234 + columns*(132 + 76*rows) + page penalties` |

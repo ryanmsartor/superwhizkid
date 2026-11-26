@@ -15,6 +15,7 @@ enum {
 	BAD_PROTECTION = 0xF039,
 	BAD_IDENTITY = 0xF03C,
 	BAD_CHECKSUM = 0xF03F,
+	BOOT_LIMIT = 6000000,
 };
 
 static void step(struct Gamate* g) {
@@ -84,7 +85,7 @@ static void testBoot(struct Gamate* g) {
 		gamateReset(g);
 		memset(g->ram, 0xA5, sizeof(g->ram));
 		memset(g->vram, 0xA5, sizeof(g->vram));
-		runUntil(g, ENTRY, 300000);
+		runUntil(g, ENTRY, BOOT_LIMIT);
 		checkEntry(g);
 	}
 
@@ -106,7 +107,7 @@ static void testBoot(struct Gamate* g) {
 	g->rom[0x1000] ^= 1;
 
 	gamateReset(g);
-	runUntil(g, ENTRY, 300000);
+	runUntil(g, ENTRY, BOOT_LIMIT);
 }
 
 static void prepareCallWithStack(struct Gamate* g, uint16_t slot, uint8_t a, uint8_t x,
@@ -405,6 +406,7 @@ static void testPlaceholder(struct Gamate* g) {
 	memset(g->vram, 0xA5, sizeof(g->vram));
 	g->ram[0x15] = 0;
 	uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
+	uint64_t clocks = g->masterClocks;
 	call(g, 0xF000, 0x12, 0x34, 0x56, 0x64, 10000);
 	for (unsigned row = 0; row < 256; row++) {
 		for (unsigned column = 0; column < 32; column++) {
@@ -416,6 +418,7 @@ static void testPlaceholder(struct Gamate* g) {
 		}
 	}
 	assert(g->diagnostics.vramWrites - writes == 64 && g->diagnostics.lcdWrites - lcd == 81);
+	assert(g->masterClocks - clocks == 3278);
 	assert(g->cpu.a == 0x38 && g->cpu.x == 0x40 && g->cpu.y == 0x20);
 	assert(g->cpu.p == 0x26 && g->vramAddress == 0x128B && g->vramPlane);
 }

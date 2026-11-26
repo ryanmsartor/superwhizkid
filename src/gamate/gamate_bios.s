@@ -24,6 +24,15 @@ CART_ENTRY           = $6020 ; cartridge start vector
 CART_NMI_CALLBACK    = $6023 ; called from the NMI wrapper while $0C is nonzero
 CART_IRQ_CALLBACK    = $6026 ; called from the IRQ wrapper while $0C is nonzero
 
+; Known RAM entries and usage
+UART_RX_BYTE         = $00A ; completed UART byte read by NMI wrapper
+WAIT_COUNTER         = $00B ; wait counter for IRQ-gated services
+CALLBACK_ENABLE_FLAG = $00C ; callback enable flag (nonzero enables NMI/IRQ callbacks)
+PSEUDO_RANDOM_STATE  = $012 ; 16-bit pseudorandom state
+LCD_CONTROL_MEMORY   = $015 ; LCD control and other display-related state
+PSEUDO_RANDOM_SCRATCH  = $014 ; scratch for pseudorandom generator
+CARTRIDGE_CHECKSUM   = $0E0 ; $0E0-$0E6 - stored cartridge checksum for later verification
+
 .segment "TABLE"
 	jmp draw_placeholder        ; $F000
 	jmp wait_8_irqs             ; $F003
@@ -453,7 +462,7 @@ initialize_records:
 	rts
 
 clear_display:
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$80
 	sta LCD_CONTROL
 	lda #$00
@@ -462,7 +471,7 @@ clear_display:
 	lda #$80
 	sta $1E
 	jsr clear_display_plane
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$40
 	sta LCD_CONTROL
 	sec
@@ -591,7 +600,7 @@ copy_bitmap:
 	rts
 
 clear_fixed_rectangle:
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	and #$BF
 	sta LCD_CONTROL
 	lda #$00
@@ -620,7 +629,7 @@ clear_fixed_rectangle:
 	iny
 	cpy #$FF
 	bne @row
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$40
 	sta LCD_CONTROL
 	lda #$1E
@@ -638,7 +647,7 @@ clear_fixed_rectangle:
 	rts
 
 draw_placeholder:
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$40
 	sta LCD_CONTROL
 	ldx #$00
@@ -653,15 +662,22 @@ draw_placeholder:
 	sta LCD_VRAM_ADDR_LO
 	lda #$8C
 	sta LCD_VRAM_ADDR_HI
-	lda #$00
 	ldy #$08
 @row:
+	lda #$00
 	sta LCD_VRAM_WRITE
 	dey
 	bne @row
 	inx
 	cpx #$08
 	bne @column
+	; Match the measured 3,278-master-clock uninterrupted service duration. The independently
+	; authored blank bytes above deliberately replace the unknown authentic bitmap payload.
+	ldy #$85
+@timing:
+	dey
+	bne @timing
+	nop
 	lda #$38
 	ldx #$40
 	ldy #$20
@@ -682,7 +698,7 @@ draw_glyph_run:
 	pha
 	iny
 @tile:
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$40
 	sta LCD_CONTROL
 	lda $1A
@@ -814,7 +830,7 @@ draw_glyph_run:
 	rts
 
 draw_tile_stream:
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$40
 	sta LCD_CONTROL
 	lda $01
@@ -941,7 +957,7 @@ tile_stream_pass:
 
 ; Two-pass row stream of (tile, count) pairs; tile zero advances the column by count.
 draw_pair_stream:
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$40
 	sta LCD_CONTROL
 	lda $01
@@ -1078,7 +1094,7 @@ pair_stream_pass:
 
 ; Clears plane-0 rows $E6-$FE, then decodes (value, count) runs on rows relative to $E6.
 draw_row_runs:
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	sta LCD_CONTROL
 	ldy #$E6
 @clear_row:
@@ -1139,7 +1155,7 @@ draw_row_runs:
 ; Clears plane-0 rows $E6-$FE, then writes literal stream bytes on absolute row offsets.
 draw_row_literals:
 	php
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	sta LCD_CONTROL
 	clv
 	ldy #$E6
@@ -1334,7 +1350,7 @@ copy_record:
 
 ; Redraws a $1C-by-$1C tile area from selectors captured in the plane-0 map rows.
 redraw_record:
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$40
 	sta LCD_CONTROL
 	lda $0305
@@ -1516,7 +1532,7 @@ draw_object:
 	dey
 	bne @shift
 @shifted:
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$40
 	sta LCD_CONTROL
 	ldx #$00
@@ -1575,13 +1591,13 @@ draw_object:
 	inx
 	cpx $18
 	bne @composite
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$40
 	sta LCD_CONTROL
 	lda $1C
 	cmp #$10
 	bne :+
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$40
 	sta LCD_CONTROL
 :
@@ -1690,7 +1706,7 @@ fill_rectangle_common:
 	ora $A8
 	sta $18
 	sty $19
-	lda $15
+	lda LCD_CONTROL_MEMORY
 	ora #$40
 	sta LCD_CONTROL
 	lda $1C

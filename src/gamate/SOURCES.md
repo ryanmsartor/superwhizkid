@@ -748,9 +748,11 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Fixed-bitmap geometry: an address-only LCD-port probe of Cube Up's first `$F000` call under each
   revision observed the same four columns at row `$8C` in each plane, with eight data writes per
   column. Only control/address writes and data-write counts were reported, not bitmap bytes.
-  The experimental firmware uses that layout with a purpose-written blank placeholder; its pixels
-  do not reproduce the authentic BIOS asset. The observation is emulator-based and does not
-  establish the bitmap's meaning or physical display appearance.
+  Both revisions completed the uninterrupted service in 3,278 master clocks. The experimental
+  firmware uses that layout with a purpose-written blank placeholder and matches the measured total
+  duration; its pixels do not reproduce the authentic BIOS asset, and its intermediate event timing
+  remains unclaimed. The observation is emulator-based and does not establish the bitmap's meaning
+  or physical display appearance.
 - Rectangle boundary correction: an independently controlled `$F02A` call with a zero-derived
   256-column count, one row, X=`$F8` and Y=`$FE` was run under both BIOSes. Address-only VRAM
   coverage showed all 32 columns of that row in each plane, rather than plane 0 alone. The
