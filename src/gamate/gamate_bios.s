@@ -505,6 +505,8 @@ clear_display_plane:
 	rts
 
 copy_plane:
+	lda $01C
+	sta $01A
 @column:
 	lda $018
 	sta LCD_VRAM_ADDR_LO
@@ -524,7 +526,6 @@ copy_plane:
 	inc $1F
 	jmp @next_column
 @advance:
-	tya
 	clc
 	adc $1E
 	sta $1E
@@ -534,7 +535,7 @@ copy_plane:
 	; The destination column is an eight-bit counter; INC preserves its wrap behavior while
 	; avoiding redundant accumulator setup on every column of both planes.
 	inc $018
-	dec $01C
+	dec $01A
 	bne @column
 	rts
 
@@ -542,8 +543,6 @@ copy_bitmap:
 	txa
 	pha
 	php
-	pla
-	sta $01A
 	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
@@ -562,11 +561,7 @@ copy_bitmap:
 	sta $1E
 	lda $001
 	sta $1F
-	lda $01C
-	pha
 	jsr copy_plane
-	pla
-	sta $01C
 	lda $002
 	sta $000
 	sta $1E
@@ -578,17 +573,15 @@ copy_bitmap:
 	sbc $01C
 	ora #$80
 	sta $018
-	lda $01C
-	pha
 	jsr copy_plane
-	pla
-	sta $01C
 	; The copy loop advances the second-plane source by columns*rows. Its low-byte delta is the
 	; documented modulo-256 Y result, including a 256-row count.
 	lda $1E
 	sec
 	sbc $002
 	tay
+	pla
+	sta $01A
 	pla
 	tax
 	lda $01A

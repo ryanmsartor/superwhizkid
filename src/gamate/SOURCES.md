@@ -1963,6 +1963,19 @@ copied into the repository, build output, tests, or releases.
     loop, but replace the stack/setup and per-column pointer/address bookkeeping; do not compensate
     with global padding. These are emulator observations using synthetic data, not physical timing.
     No BIOS or cartridge instructions or payload bytes were retained or copied.
+  - **`$F015` pointer-update follow-up.** On every ordinary nonzero-height column, Y already holds
+    the row count when it is tested against zero and remains in A across the taken branch. Removing
+    the immediately repeated `TYA` preserves the 256-row path, source-pointer arithmetic, carry
+    behavior, scratch state, ordered reads and output while saving four master clocks per plane and
+    column. The entry status now remains on the stack during both passes, allowing `$01A` to serve
+    as the destructive column counter while `$01C` remains intact. This removes both width
+    push/restore round trips; the saved status is written back to `$01A` before return, preserving
+    its documented result and stack balance. The six-shape synthetic matrix now asserts
+    `338 + columns * (188 + 76 * rows) + 2 * crossing_reads + 8 * pointer_carries`, reducing the
+    no-carry mismatch to 104 fixed clocks plus 56 per column. The exact 76-clock byte-row term and
+    zero-derived loop behavior are retained. The explicit pointer-carry surcharge remains
+    unresolved. These are independently authored dataflow optimizations based on the existing
+    behavioral model; no authentic implementation code was consulted.
   - **Replacement wait-service consolidation.** The independently authored `$F003`, `$F006`, and
     `$F009` loops were checked through one synthetic matrix covering all 256 entry values, multiple
     preserved-status combinations, and thresholds 8, 5, and 24. Removing redundant `SEC`
