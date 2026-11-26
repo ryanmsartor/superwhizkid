@@ -36,7 +36,7 @@ quality of life features or change presentation.
 
 | Option | Values (default in **bold**) | Description |
 |---|---|---|
-| Palette | **Original**, Gamate LCD, Greyscale, RGB | Gamate LCD is an interpretation of the physical panel; the other palettes are just for fun. |
+| Palette | **Original**, Gamate LCD, Greyscale, RGB, Custom | Gamate LCD is an interpretation of the physical panel. Custom reveals RGB565 controls for all four shades and maximum-contrast ink. |
 | Contrast | 1–16 (**8**) | Adjusts ink contrast. L3/R3 also change it during play. |
 | Audio Output | **Stereo**, Mono, Built-in Speaker | Selects stereo, mono, or an estimated built-in-speaker sound. |
 | Catch quick taps | **Off**, On | Holds button presses until the game next reads input. May help in games whose code reads input sparsely. |

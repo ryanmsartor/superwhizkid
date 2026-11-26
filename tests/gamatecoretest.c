@@ -20,6 +20,10 @@ static bool sawAccurateBackground;
 static int16_t lastAudio[2048 * 2];
 static size_t lastAudioFrames;
 static const char* paletteOption = "original";
+static const char* customColorOptions[5][3] = {
+	{ "31", "63", "31" }, { "21", "42", "21" }, { "10", "21", "10" },
+	{ "0", "0", "0" }, { "0", "0", "0" }
+};
 static const char* contrastOption = "8";
 static const char* audioOutputOption = "stereo";
 static const char* tapLatchOption = "off";
@@ -29,6 +33,9 @@ static const char* fullFramebufferOption = "off";
 static const char* biosOption = "umc";
 static const char* skipIntroOption = "off";
 static bool optionUpdate, modernOptions, legacyOptions, supportModernOptions = true;
+static unsigned coreOptionsVersion = 2;
+static struct retro_core_options_update_display_callback optionsDisplayCallback;
+static unsigned customOptionsShown, customOptionsHidden;
 static bool sawPaletteLight, frameIsGreyscale;
 static bool fastForwardEnabled, supportFastForwardOverride = true;
 static unsigned fastForwardOverrideCalls;
@@ -72,6 +79,23 @@ static unsigned optionMask(const char* key) {
 	return 0;
 }
 
+static bool customColorIndex(const char* key, unsigned* color, unsigned* channel) {
+	static const char* suffixes[] = { "red", "green", "blue" };
+	static const char* names[] = { "shade0", "shade1", "shade2", "shade3", "ink" };
+	for (unsigned c = 0; c < 5; c++) {
+		for (unsigned k = 0; k < 3; k++) {
+			char expected[64];
+			snprintf(expected, sizeof(expected), "superwhizkid_custom_%s_%s", names[c], suffixes[k]);
+			if (!strcmp(key, expected)) {
+				*color = c;
+				*channel = k;
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 static unsigned colorDistance(uint16_t a, uint16_t b) {
 	int ar = a >> 11, ag = a >> 5 & 63, ab = a & 31;
 	int br = b >> 11, bg = b >> 5 & 63, bb = b & 31;
@@ -82,15 +106,60 @@ static bool environment(unsigned command, void* data) {
 	switch (command) {
 	case RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION:
 		if (!supportModernOptions) return false;
-		*(unsigned*) data = 1;
+		*(unsigned*) data = coreOptionsVersion;
 		return true;
+	case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2: {
+		const struct retro_core_options_v2* set = data;
+		bool category = set && set->categories && set->categories[0].key &&
+			!strcmp(set->categories[0].key, "custom_palette") &&
+			set->categories[0].desc && !strcmp(set->categories[0].desc, "Custom Palette");
+		unsigned baseMask = 0, customCount = 0;
+		bool defaults = true, paletteCustom = false, channelRanges = true;
+		for (const struct retro_core_option_v2_definition* option = set ? set->definitions : NULL;
+				option && option->key; option++) {
+			unsigned color, channel;
+			if (customColorIndex(option->key, &color, &channel)) {
+				customCount++;
+				unsigned limit = channel == 1 ? 64 : 32;
+				for (unsigned i = 0; i < limit; i++) {
+					char expected[3];
+					snprintf(expected, sizeof(expected), "%u", i);
+					channelRanges &= option->values[i].value &&
+						!strcmp(option->values[i].value, expected);
+				}
+				channelRanges &= !option->values[limit].value && option->category_key &&
+					!strcmp(option->category_key, "custom_palette") && option->default_value &&
+					!strcmp(option->default_value, customColorOptions[color][channel]);
+				continue;
+			}
+			baseMask |= optionMask(option->key);
+			if (!strcmp(option->key, "superwhizkid_palette"))
+				paletteCustom = option->values[4].value &&
+					!strcmp(option->values[4].value, "custom");
+			const char* expected = !strcmp(option->key, "superwhizkid_palette") ? "original" :
+				!strcmp(option->key, "superwhizkid_contrast") ? "8" :
+				!strcmp(option->key, "superwhizkid_audio_output") ? "stereo" :
+				!strcmp(option->key, "superwhizkid_bios") ? "umc" : "off";
+			defaults &= option->default_value && !strcmp(option->default_value, expected);
+		}
+		modernOptions = category && baseMask == 0x1FF && customCount == 15 && defaults &&
+			paletteCustom && channelRanges;
+		return true;
+	}
 	case RETRO_ENVIRONMENT_SET_CORE_OPTIONS: {
 		const struct retro_core_option_definition* options = data;
-		unsigned mask = 0;
+		unsigned mask = 0, customCount = 0;
 		bool defaults = true, audioValues = false, paletteLabels = false;
 		bool yellowPaletteValues = false;
 		bool contrastValues = false, flickerValues = false, debugValues = false, biosValues = false;
 		for (; options && options->key; options++) {
+			unsigned color, channel;
+			if (customColorIndex(options->key, &color, &channel)) {
+				customCount++;
+				defaults &= options->default_value &&
+					!strcmp(options->default_value, customColorOptions[color][channel]);
+				continue;
+			}
 			mask |= optionMask(options->key);
 			if (!strcmp(options->key, "superwhizkid_audio_output")) {
 				audioValues = options->values[0].value &&
@@ -105,8 +174,8 @@ static bool environment(unsigned command, void* data) {
 				yellowPaletteValues = options->values[3].value &&
 					!strcmp(options->values[3].value, "yellow_rgb") &&
 					options->values[3].label &&
-					!strcmp(options->values[3].label, "RGB") &&
-					!options->values[4].value;
+					!strcmp(options->values[3].label, "RGB") && options->values[4].value &&
+					!strcmp(options->values[4].value, "custom") && !options->values[5].value;
 			}
 			if (!strcmp(options->key, "superwhizkid_contrast")) {
 				contrastValues = true;
@@ -141,15 +210,20 @@ static bool environment(unsigned command, void* data) {
 				!strcmp(options->key, "superwhizkid_bios") ? "umc" : "off";
 			defaults &= options->default_value && !strcmp(options->default_value, expected);
 		}
-		modernOptions = mask == 0x1FF && defaults && audioValues && paletteLabels &&
+		modernOptions = mask == 0x1FF && customCount == 15 && defaults && audioValues && paletteLabels &&
 			yellowPaletteValues && contrastValues && flickerValues && debugValues && biosValues;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_VARIABLES: {
 		const struct retro_variable* variables = data;
-		unsigned mask = 0;
+		unsigned mask = 0, customCount = 0;
 		bool yellowPaletteValues = false, debugValues = false, biosValues = false;
 		for (; variables && variables->key; variables++) {
+			unsigned color, channel;
+			if (customColorIndex(variables->key, &color, &channel)) {
+				customCount++;
+				continue;
+			}
 			mask |= optionMask(variables->key);
 			if (!strcmp(variables->key, "superwhizkid_palette")) {
 				yellowPaletteValues = variables->value &&
@@ -164,7 +238,8 @@ static bool environment(unsigned command, void* data) {
 					"Debug: Display Full Framebuffer; off|on");
 			}
 		}
-		legacyOptions = mask == 0x1FF && yellowPaletteValues && debugValues && biosValues;
+		legacyOptions = mask == 0x1FF && customCount == 15 && yellowPaletteValues &&
+			debugValues && biosValues;
 		return true;
 	}
 	case RETRO_ENVIRONMENT_SET_NETPACKET_INTERFACE:
@@ -174,10 +249,27 @@ static bool environment(unsigned command, void* data) {
 			netpacket.protocol_version && !strcmp(netpacket.protocol_version,
 				"superwhizkid-gamate-link-1");
 		return true;
+	case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK:
+		optionsDisplayCallback = *(const struct retro_core_options_update_display_callback*) data;
+		return true;
+	case RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY: {
+		const struct retro_core_option_display* display = data;
+		unsigned color, channel;
+		if (display && customColorIndex(display->key, &color, &channel)) {
+			if (display->visible) customOptionsShown++;
+			else customOptionsHidden++;
+		}
+		return true;
+	}
 	case RETRO_ENVIRONMENT_GET_VARIABLE: {
 		struct retro_variable* variable = data;
 		if (!strcmp(variable->key, "superwhizkid_palette")) {
 			variable->value = paletteOption;
+			return true;
+		}
+		unsigned color, channel;
+		if (customColorIndex(variable->key, &color, &channel)) {
+			variable->value = customColorOptions[color][channel];
 			return true;
 		}
 		if (!strcmp(variable->key, "superwhizkid_contrast")) {
@@ -456,10 +548,15 @@ int main(int argc, char** argv) {
 
 	p_retro_set_environment(environment);
 	assert(modernOptions);
+	coreOptionsVersion = 1;
+	modernOptions = false;
+	p_retro_set_environment(environment);
+	assert(modernOptions);
 	supportModernOptions = false;
 	p_retro_set_environment(environment);
 	assert(legacyOptions);
 	supportModernOptions = true;
+	coreOptionsVersion = 2;
 	p_retro_set_environment(environment);
 	p_retro_set_video_refresh(video);
 	p_retro_set_audio_sample(audioSample);
@@ -652,11 +749,36 @@ int main(int argc, char** argv) {
 	p_retro_reset();
 	p_retro_run();
 	assert(!lastAudioChannelsEqual);
+	assert(optionsDisplayCallback.callback && customOptionsHidden == 15 && customOptionsShown == 0);
+	paletteOption = "custom";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0xAD55 && customOptionsShown == 15);
+	customColorOptions[1][0] = "31";
+	customColorOptions[1][1] = "0";
+	customColorOptions[1][2] = "0";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0xF800);
+	customColorOptions[4][2] = "31";
+	contrastOption = "16";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0x001F);
+	customColorOptions[1][0] = "99";
+	contrastOption = "8";
+	optionUpdate = true;
+	p_retro_run();
+	assert(firstVideoPixel == 0xA800); // invalid red falls back to the greyscale default of 21
+	customColorOptions[1][0] = "21";
+	customColorOptions[1][1] = "42";
+	customColorOptions[1][2] = "21";
+	customColorOptions[4][2] = "0";
 	paletteOption = "accurate";
 	sawAccurateBackground = false;
 	optionUpdate = true;
 	p_retro_run();
-	assert(firstVideoPixel == 0x6348 && sawAccurateBackground);
+	assert(firstVideoPixel == 0x6348 && sawAccurateBackground && customOptionsHidden == 30);
 	paletteOption = "greyscale";
 	optionUpdate = true;
 	p_retro_run();

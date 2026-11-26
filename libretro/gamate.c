@@ -36,6 +36,8 @@ static const uint16_t gamateLcdPalette[4] = { 0x8C6A, 0x6348, 0x3208, 0x1906 };
 static const uint16_t greyscalePalette[4] = { 0xFFFF, 0xAD55, 0x52AA, 0x0000 };
 static const uint16_t yellowRgbPalette[4] = { 0xD654, 0xEBF1, 0x2B47, 0x5C19 };
 static const uint16_t maximumContrastInk[4] = { 0x0040, 0x0848, 0x0000, 0x0000 };
+static uint16_t customPalette[4] = { 0xFFFF, 0xAD55, 0x52AA, 0x0000 };
+static uint16_t customMaximumContrastInk;
 static unsigned selectedPaletteIndex;
 static uint16_t shades[3 * 256 + 1];
 static uint16_t lcdLevel[GAMATE_WIDTH * GAMATE_HEIGHT];
@@ -58,6 +60,23 @@ static bool linkClockSynchronized;
 
 enum { INTRO_SKIP_CLOCK_LIMIT = 4433000 * 12, LINK_PACKET_HEADER = 13 };
 enum { AUDIO_STEREO, AUDIO_MONO, AUDIO_SPEAKER };
+
+static const char* customColorKeys[5][3] = {
+	{ "superwhizkid_custom_shade0_red", "superwhizkid_custom_shade0_green",
+		"superwhizkid_custom_shade0_blue" },
+	{ "superwhizkid_custom_shade1_red", "superwhizkid_custom_shade1_green",
+		"superwhizkid_custom_shade1_blue" },
+	{ "superwhizkid_custom_shade2_red", "superwhizkid_custom_shade2_green",
+		"superwhizkid_custom_shade2_blue" },
+	{ "superwhizkid_custom_shade3_red", "superwhizkid_custom_shade3_green",
+		"superwhizkid_custom_shade3_blue" },
+	{ "superwhizkid_custom_ink_red", "superwhizkid_custom_ink_green",
+		"superwhizkid_custom_ink_blue" }
+};
+static const char* customColorNames[5] = {
+	"Shade 0 (Background)", "Shade 1", "Shade 2", "Shade 3", "Maximum Contrast Ink"
+};
+static bool customOptionsVisibilityKnown, customOptionsVisible;
 
 static void setFastForwardOverride(bool enabled) {
 	if (fastForwardRequested == enabled) return;
@@ -248,6 +267,26 @@ static void message(const char* text) {
 	environCb(RETRO_ENVIRONMENT_SET_MESSAGE, &msg);
 }
 
+static bool updateCustomPaletteVisibility(void) {
+	struct retro_variable palette = { "superwhizkid_palette", NULL };
+	bool visible = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &palette) && palette.value &&
+		!strcmp(palette.value, "custom");
+	bool changed = !customOptionsVisibilityKnown || visible != customOptionsVisible;
+	if (changed) {
+		for (unsigned color = 0; color < 5; color++) {
+			for (unsigned channel = 0; channel < 3; channel++) {
+				struct retro_core_option_display display = {
+					.key = customColorKeys[color][channel], .visible = visible
+				};
+				environCb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_DISPLAY, &display);
+			}
+		}
+	}
+	customOptionsVisibilityKnown = true;
+	customOptionsVisible = visible;
+	return changed;
+}
+
 void retro_set_environment(retro_environment_t cb) {
 	environCb = cb;
 	static const struct retro_core_option_definition options[] = {
@@ -259,6 +298,7 @@ void retro_set_environment(retro_environment_t cb) {
 				{ "accurate", "Gamate LCD" },
 				{ "greyscale", "Greyscale" },
 				{ "yellow_rgb", "RGB" },
+				{ "custom", "Custom" },
 				{ NULL, NULL }
 			},
 			"original"
@@ -288,8 +328,8 @@ void retro_set_environment(retro_environment_t cb) {
 			{ { "off", NULL }, { "on", NULL }, { NULL, NULL } }, "off" },
 		{ NULL, NULL, NULL, { { NULL, NULL } }, NULL }
 	};
-	static const struct retro_variable variables[] = {
-		{ "superwhizkid_palette", "Palette; original|accurate|greyscale|yellow_rgb" },
+	static const struct retro_variable baseVariables[] = {
+		{ "superwhizkid_palette", "Palette; original|accurate|greyscale|yellow_rgb|custom" },
 		{ "superwhizkid_contrast", "Contrast; 8|1|2|3|4|5|6|7|9|10|11|12|13|14|15|16" },
 		{ "superwhizkid_audio_output", "Audio Output; stereo|mono|speaker" },
 		{ "superwhizkid_tap_latch", "Catch quick taps; off|on" },
@@ -300,12 +340,83 @@ void retro_set_environment(retro_environment_t cb) {
 		{ "superwhizkid_skip_intro", "Skip BIOS intro; off|on" },
 		{ NULL, NULL }
 	};
-	unsigned version = 0;
-	if (environCb(RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION, &version) && version >= 1) {
-		environCb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS, (void*) options);
-	} else {
-		environCb(RETRO_ENVIRONMENT_SET_VARIABLES, (void*) variables);
+	static struct retro_core_option_definition optionsV1[25];
+	static struct retro_core_option_v2_definition optionsV2[25];
+	static struct retro_variable variables[25];
+	static struct retro_core_option_v2_category categories[] = {
+		{ "custom_palette", "Custom Palette", "RGB565 channels for the four LCD shades and maximum-contrast ink." },
+		{ NULL, NULL, NULL }
+	};
+	static char numbers[64][3];
+	static char descriptions[15][64];
+	static char legacyValues[15][256];
+	static bool initialized;
+	if (!initialized) {
+		for (unsigned i = 0; i < 64; i++) snprintf(numbers[i], sizeof(numbers[i]), "%u", i);
+		unsigned baseCount = 0;
+		while (options[baseCount].key) {
+			optionsV1[baseCount] = options[baseCount];
+			optionsV2[baseCount].key = options[baseCount].key;
+			optionsV2[baseCount].desc = options[baseCount].desc;
+			optionsV2[baseCount].info = options[baseCount].info;
+			optionsV2[baseCount].default_value = options[baseCount].default_value;
+			memcpy(optionsV2[baseCount].values, options[baseCount].values,
+				sizeof(options[baseCount].values));
+			variables[baseCount] = baseVariables[baseCount];
+			baseCount++;
+		}
+		static const char* channelNames[] = { "Red", "Green", "Blue" };
+		static const unsigned defaults[5][3] = {
+			{ 31, 63, 31 }, { 21, 42, 21 }, { 10, 21, 10 }, { 0, 0, 0 }, { 0, 0, 0 }
+		};
+		for (unsigned color = 0; color < 5; color++) {
+			for (unsigned channel = 0; channel < 3; channel++) {
+				unsigned i = baseCount + color * 3 + channel;
+				unsigned limit = channel == 1 ? 64 : 32;
+				snprintf(descriptions[color * 3 + channel], sizeof(descriptions[0]), "%s %s",
+					customColorNames[color], channelNames[channel]);
+				optionsV2[i].key = customColorKeys[color][channel];
+				optionsV2[i].desc = descriptions[color * 3 + channel];
+				optionsV2[i].desc_categorized = descriptions[color * 3 + channel];
+				optionsV2[i].info = "Sets this RGB565 color channel. Changes apply immediately.";
+				optionsV2[i].category_key = "custom_palette";
+				optionsV2[i].default_value = numbers[defaults[color][channel]];
+				for (unsigned value = 0; value < limit; value++) {
+					optionsV2[i].values[value].value = numbers[value];
+				}
+				optionsV1[i].key = optionsV2[i].key;
+				optionsV1[i].desc = optionsV2[i].desc;
+				optionsV1[i].info = optionsV2[i].info;
+				optionsV1[i].default_value = optionsV2[i].default_value;
+				memcpy(optionsV1[i].values, optionsV2[i].values, sizeof(optionsV1[i].values));
+				size_t used = (size_t) snprintf(legacyValues[color * 3 + channel],
+					sizeof(legacyValues[0]), "%s; %u", descriptions[color * 3 + channel],
+					defaults[color][channel]);
+				for (unsigned value = 0; value < limit && used < sizeof(legacyValues[0]); value++) {
+					if (value == defaults[color][channel]) continue;
+					used += (size_t) snprintf(legacyValues[color * 3 + channel] + used,
+						sizeof(legacyValues[0]) - used, "|%u", value);
+				}
+				variables[i].key = customColorKeys[color][channel];
+				variables[i].value = legacyValues[color * 3 + channel];
+			}
+		}
+		initialized = true;
 	}
+	unsigned version = 0;
+	if (environCb(RETRO_ENVIRONMENT_GET_CORE_OPTIONS_VERSION, &version) && version >= 2) {
+		struct retro_core_options_v2 optionsSet = { categories, optionsV2 };
+		environCb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_V2, &optionsSet);
+	} else if (version >= 1) {
+		environCb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS, optionsV1);
+	} else {
+		environCb(RETRO_ENVIRONMENT_SET_VARIABLES, variables);
+	}
+	static const struct retro_core_options_update_display_callback displayCallback = {
+		updateCustomPaletteVisibility
+	};
+	environCb(RETRO_ENVIRONMENT_SET_CORE_OPTIONS_UPDATE_DISPLAY_CALLBACK,
+		(void*) &displayCallback);
 }
 
 static uint16_t blend565(uint16_t a, uint16_t b, unsigned t) {
@@ -335,7 +446,8 @@ static void buildContrastPalette(void) {
 	unsigned br = selectedPalette[0] >> 11;
 	unsigned bg = selectedPalette[0] >> 5 & 63;
 	unsigned bb = selectedPalette[0] & 31;
-	uint16_t endpoint = maximumContrastInk[selectedPaletteIndex];
+	uint16_t endpoint = selectedPaletteIndex == 4 ? customMaximumContrastInk :
+		maximumContrastInk[selectedPaletteIndex];
 	unsigned er = endpoint >> 11;
 	unsigned eg = endpoint >> 5 & 63;
 	unsigned eb = endpoint & 31;
@@ -345,6 +457,14 @@ static void buildContrastPalette(void) {
 		unsigned b = contrastChannel(bb, selectedPalette[i] & 31, eb, 31);
 		contrastPalette[i] = (uint16_t) (r << 11 | g << 5 | b);
 	}
+}
+
+static unsigned readCustomChannel(const char* key, unsigned maximum, unsigned fallback) {
+	struct retro_variable var = { key, NULL };
+	if (!environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) || !var.value) return fallback;
+	char* end;
+	unsigned value = (unsigned) strtoul(var.value, &end, 10);
+	return *var.value && !*end && value <= maximum ? value : fallback;
 }
 
 static void buildShades(void) {
@@ -372,10 +492,26 @@ static void readOptions(void) {
 		var.value : "original";
 	selectedPaletteIndex = !strcmp(palette, "accurate") ? 1 :
 		!strcmp(palette, "greyscale") ? 2 :
-		!strcmp(palette, "yellow_rgb") ? 3 : 0;
+		!strcmp(palette, "yellow_rgb") ? 3 :
+		!strcmp(palette, "custom") ? 4 : 0;
+	updateCustomPaletteVisibility();
+	static const unsigned defaults[5][3] = {
+		{ 31, 63, 31 }, { 21, 42, 21 }, { 10, 21, 10 }, { 0, 0, 0 }, { 0, 0, 0 }
+	};
+	if (selectedPaletteIndex == 4) {
+		for (unsigned color = 0; color < 5; color++) {
+			unsigned red = readCustomChannel(customColorKeys[color][0], 31, defaults[color][0]);
+			unsigned green = readCustomChannel(customColorKeys[color][1], 63, defaults[color][1]);
+			unsigned blue = readCustomChannel(customColorKeys[color][2], 31, defaults[color][2]);
+			uint16_t value = (uint16_t) (red << 11 | green << 5 | blue);
+			if (color < 4) customPalette[color] = value;
+			else customMaximumContrastInk = value;
+		}
+	}
 	selectedPalette = selectedPaletteIndex == 1 ? gamateLcdPalette :
 		selectedPaletteIndex == 2 ? greyscalePalette :
-		selectedPaletteIndex == 3 ? yellowRgbPalette : originalPalette;
+		selectedPaletteIndex == 3 ? yellowRgbPalette :
+		selectedPaletteIndex == 4 ? customPalette : originalPalette;
 
 	var.key = "superwhizkid_contrast";
 	var.value = NULL;
