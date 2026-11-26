@@ -85,8 +85,18 @@ static void testBoot(struct Gamate* g) {
 		gamateReset(g);
 		memset(g->ram, 0xA5, sizeof(g->ram));
 		memset(g->vram, 0xA5, sizeof(g->vram));
+		if (!run) {
+			for (unsigned i = 0; i < 16; i++) gamateWrite(g, (uint16_t) (0x4000 + i), 0xFF);
+		}
+		uint64_t ayWrites = g->diagnostics.ayWrites;
+		uint64_t ayRegisterWrites[16];
+		memcpy(ayRegisterWrites, g->diagnostics.ayRegisterWrites,
+			sizeof(ayRegisterWrites));
 		runUntil(g, ENTRY, BOOT_LIMIT);
 		checkEntry(g);
+		assert(g->diagnostics.ayWrites - ayWrites == 16);
+		for (unsigned i = 0; i < 16; i++)
+			assert(g->diagnostics.ayRegisterWrites[i] - ayRegisterWrites[i] == 1);
 	}
 
 	gamateReset(g);

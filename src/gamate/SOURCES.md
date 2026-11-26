@@ -823,7 +823,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   resolve the differing oscillator, noise, envelope, or audio-sample phase at entry. Inputs remained
   read-only, and the result retained only counters and register-state summaries, not BIOS or
   cartridge bytes. The observation is emulator-derived and does not establish physical AY reset or
-  bus behavior.
+  bus behavior. The synthetic prototype suite now dirties all AY registers before boot and verifies
+  that SWK writes each register exactly once and reaches the all-zero entry state, so the policy does
+  not depend on the emulator's normal reset initialization.
 
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add

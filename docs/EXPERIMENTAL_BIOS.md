@@ -174,6 +174,8 @@ counter carry, callback gating and register preservation, unsupported traps, IRQ
 eighteen service implementations. It exercises all 256 glyph selectors with both incoming overflow
 states, a 256-tile run, wrapped stacks and streams, both LCD-clear modes, and rectangle boundaries for both planes. The newer cases cover:
 
+- Entry from deliberately nonzero AY registers, verifying that SWK writes every AY register once
+  and reaches the documented all-zero silent state rather than relying on emulator reset contents.
 - The short wait and the five-IRQ-threshold counter wait.
 - The fixed plane-0 `$F00F` 775-byte rectangle, with exact timing and scratch/register behavior.
 - `$F015` two-plane bitmap copies in 1×8, 2×8, 3×8, 4×8 and source-page-crossing shapes.
@@ -276,8 +278,9 @@ targeted timing equations or could not be defended across the tested shape class
   at input `$0000`; the measured SWK clock was 138 and the documented emulator-model clock was 188.
   Multiple zero/bit4 branches were tested, including 10- and 11-NOP blocks combined with taken
   branches. The first attempt measured 238/190 instead of 188, and further attempts could not
-  isolate a 50/58-master-clock block without changing state or branch control. The work was
-  reverted; `$F030` remains timing-unclosed.
+  isolate a 50/58-master-clock block without changing state or branch control. That experiment was
+  reverted. A later control-flow-specific correction, described in the tracker above, matched the
+  174/188-master-clock authentic formula across the exhaustive checker and is retained.
 - **`$F033` initial separate branch padding:** an earlier ordinary/Y=`$FF` experiment used branch
   blocks that produced 428/372-clock mismatches and was reverted. A later narrower measurement
   proved that two NOP instructions (8 master clocks) are required for Y=`$FF` and three NOP
@@ -291,8 +294,9 @@ targeted timing equations or could not be defended across the tested shape class
   Temporary diagnostics were removed and no padding or functional rewrite was retained.
 
 No speculative fill, random, formatter, or compositor timing change remains in production code.
-The retained timing fixes are limited to measured contracts with synthetic assertions:
-`$F00F` and `$F024` in the current firmware.
+Retained timing corrections are limited to measured contracts with synthetic assertions; the
+current status of each service, including exact `$F030` and `$F033` matrices, is recorded in the
+tracker above.
 
 | Service | Corpus or input set | Result (non-timing properties) |
 | --- | --- | --- |
