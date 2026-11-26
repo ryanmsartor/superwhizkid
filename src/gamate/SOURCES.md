@@ -1361,6 +1361,9 @@ open questions are addressed there for the tested memory domains.
   follow from the LCD's row-increment mode applied to the unchanged BIOS port sequence.
   The contract and instruction-boundary timing are in
   [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+  The SWK implementation now uses a direct Y-register LCD row write and relies on the final row
+  comparison's carry, matching the 247,326-master-clock uninterrupted duration without padding;
+  its synthetic test locks that duration in both contiguous and row-increment control modes.
   These are emulator observations, not physical measurements or claims of exact hardware bus
   edges. Synthetic mutations changed only in-memory state, and reports retained derived counts
   and equality results rather than firmware, cartridge, graphics, or stack payload. The input

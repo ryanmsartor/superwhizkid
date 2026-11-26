@@ -385,6 +385,7 @@ static void testClear(struct Gamate* g) {
 		memset(g->vram, 0xA5, sizeof(g->vram));
 		g->ram[0x15] = (uint8_t) control;
 		uint64_t writes = g->diagnostics.vramWrites, lcd = g->diagnostics.lcdWrites;
+		uint64_t clocks = g->masterClocks;
 		call(g, 0xF00C, 0x27, 0x81, 0x76, 0x64, 200000);
 		for (unsigned row = 0; row < 256; row++) {
 			for (unsigned column = 0; column < 32; column++) {
@@ -397,6 +398,7 @@ static void testClear(struct Gamate* g) {
 		}
 		assert(g->diagnostics.vramWrites - writes == 12800);
 		assert(g->diagnostics.lcdWrites - lcd == 13602);
+		assert(g->masterClocks - clocks == 247326);
 		assert(g->cpu.a == 0x40 && g->cpu.x == 0 && g->cpu.y == 0xC8);
 		assert(g->cpu.p == 0x65 && g->ram[0x1E] == 0x80);
 	}

@@ -487,7 +487,6 @@ clear_display:
 	lda LCD_CONTROL_BASE
 	ora #$40
 	sta LCD_CONTROL
-	sec
 	rts
 
 clear_display_plane:
@@ -495,8 +494,7 @@ clear_display_plane:
 @row:
 	lda $1E
 	sta LCD_VRAM_ADDR_LO
-	tya
-	sta LCD_VRAM_ADDR_HI
+	sty LCD_VRAM_ADDR_HI
 	ldx #$20
 	lda #$00
 @column:
