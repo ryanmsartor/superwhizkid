@@ -1933,6 +1933,17 @@ copied into the repository, build output, tests, or releases.
     while large/small object paths are two/eight clocks high. These decisions use only the existing
     behavioral formulas and synthetic data; no authentic implementation code or payload was
     consulted or copied.
+  - **`$F012` selector and stack follow-up.** The selector is now transferred to X before its
+    descriptor-index push instead of being recovered through TSX and a stack-page load. After the
+    glyph copy, `$018` temporarily retains the return X value while the stack-balanced width check
+    runs; the documented final width write still replaces it before return, including low-stack
+    wrap cases. A single range tree now derives C and V instead of two overlapping comparison
+    chains, retaining entry V for selectors `$00-$20` and the three measured carry ranges. The
+    exhaustive selector/entry-V matrix continues to match output registers, flags, stack balance,
+    LCD writes and glyph bytes. Its one-tile timing residual is now 68-130 master clocks, reduced
+    from 102-188 at the start of this follow-up and 188-274 before the row-loop optimization.
+    Evidence and clean-room limits are the same synthetic behavioral comparisons documented above;
+    no firmware implementation text was consulted.
   - **`$F015` replacement timing decomposition.** Six purpose-written synthetic shapes compared
     the independently authored firmware with the resolved authentic formula: 1x8, 1x1, 2x8,
     3x8, 4x8, and a 3x8 case whose second-plane source begins at `$60FE`. With no source-pointer

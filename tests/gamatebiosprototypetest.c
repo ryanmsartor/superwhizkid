@@ -484,6 +484,7 @@ static void putExpected(uint8_t* vram, unsigned column, unsigned row, uint8_t va
 
 static void testGlyphs(struct Gamate* g) {
 	uint64_t maxTimingResidual = 0;
+	uint64_t minTimingResidual = UINT64_MAX;
 	for (unsigned i = 0; i < g->romSize; i++) g->rom[i] = (uint8_t) (i * 73 + i / 7 + 0x5D);
 	for (unsigned selector = 0; selector < 256; selector++) {
 		for (unsigned initialV = 0; initialV <= 0x40; initialV += 0x40) {
@@ -501,6 +502,7 @@ static void testGlyphs(struct Gamate* g) {
 			assert(g->masterClocks - clocks >= authentic);
 			uint64_t residual = g->masterClocks - clocks - authentic;
 			if (residual > maxTimingResidual) maxTimingResidual = residual;
+			if (residual < minTimingResidual) minTimingResidual = residual;
 			for (unsigned row = 0; row < 8; row++) {
 				unsigned address = (((0xFC + row) & 0xFF) * 32 + 31) * 2 + 1;
 				assert(g->vram[address] == g->rom[glyphAddress(selector) - 0x6000 + row]);
@@ -517,7 +519,7 @@ static void testGlyphs(struct Gamate* g) {
 			assert(g->diagnostics.lcdWrites - lcd == 11);
 		}
 	}
-	assert(maxTimingResidual == 188);
+	assert(minTimingResidual == 68 && maxTimingResidual == 130);
 
 	uint8_t expected[0x4000];
 	memset(expected, 0xA5, sizeof(expected));

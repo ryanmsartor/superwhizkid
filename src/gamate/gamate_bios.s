@@ -707,13 +707,9 @@ draw_glyph_run:
 	sta LCD_VRAM_ADDR_HI
 	lda ($00),y
 	pha
+	tax
 	tya
 	pha
-	tsx
-	inx
-	inx
-	lda $0100,x
-	tax
 	cpx #$41
 	bcs @later_group
 	lda #$21
@@ -785,28 +781,32 @@ draw_glyph_run:
 	pla
 
 	cmp #$21
-	bcc @overflow_done
+	bcc @low_selector_flags
 	cmp #$80
-	bcc @clear_overflow
+	bcc @low_clear_overflow
 	cmp #$E1
-	bcs @clear_overflow
+	bcs @high_clear_overflow
 	bit overflow_flag
-	jmp @overflow_done
-@clear_overflow:
-	clv
-@overflow_done:
-	cmp #$20
-	bcc @clear_carry
-	cmp #$2F
-	bcc @set_carry
 	cmp #$81
 	bcc @clear_carry
 	cmp #$A1
 	bcc @set_carry
 	cmp #$C1
 	bcc @clear_carry
-	cmp #$E1
+	bcs @set_carry
+@low_clear_overflow:
+	clv
+	cmp #$2F
 	bcc @set_carry
+	bcs @clear_carry
+@high_clear_overflow:
+	clv
+	clc
+	jmp @carry_done
+@low_selector_flags:
+	cmp #$20
+	bcc @clear_carry
+	bcs @set_carry
 @clear_carry:
 	clc
 	jmp @carry_done
@@ -815,24 +815,20 @@ draw_glyph_run:
 @carry_done:
 	inc $1A
 	php
-	txa
-	pha
+	stx $18
 	tsx
-	inx
 	inx
 	inx
 	tya
 	cmp $0100,x
 	beq @finished
-	pla
-	tax
 	plp
+	ldx $18
 	iny
 	jmp @tile
 @finished:
-	pla
-	tax
 	plp
+	ldx $18
 	pla
 	tay
 	sta $18
