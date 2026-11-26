@@ -755,13 +755,29 @@ draw_glyph_run:
 :
 	tya
 	pha
-	ldx #$08
-@glyph_row:
 	lda ($18),y
 	sta LCD_VRAM_WRITE
 	iny
-	dex
-	bne @glyph_row
+	lda ($18),y
+	sta LCD_VRAM_WRITE
+	iny
+	lda ($18),y
+	sta LCD_VRAM_WRITE
+	iny
+	lda ($18),y
+	sta LCD_VRAM_WRITE
+	iny
+	lda ($18),y
+	sta LCD_VRAM_WRITE
+	iny
+	lda ($18),y
+	sta LCD_VRAM_WRITE
+	iny
+	lda ($18),y
+	sta LCD_VRAM_WRITE
+	iny
+	lda ($18),y
+	sta LCD_VRAM_WRITE
 	pla
 	tax
 	pla
@@ -1239,6 +1255,8 @@ draw_row_literals:
 	plp
 	rts
 
+.segment "COMPOSITOR"
+
 ; Selects graphics tile A from the base at $06,X; returns its low index and sets $02-$03 and $1A.
 ; Uses INC rather than ADC so V, D and the stored B bit are untouched; C is changed.
 point_tile:
@@ -1450,17 +1468,20 @@ redraw_record:
 	lda $1C
 	cmp #$03
 	beq @large_timing
-	ldy #$1D
+	ldy #$1C
 @small_timing_loop:
 	dey
 	bne @small_timing_loop
+	.repeat 3
+	nop
+	.endrepeat
 	jmp @timing_done
 @large_timing:
 	ldy #$5C
 @large_timing_loop:
 	dey
 	bne @large_timing_loop
-	.repeat 2
+	.repeat 4
 	nop
 	.endrepeat
 @timing_done:
@@ -1616,11 +1637,11 @@ draw_object:
 	ldx #$30
 	bne @read_plane
 :
-	ldy $1C
-	lda #$10
-	cpy #$10
-	bne :+
 	lda #$30
+	ldy $1C
+	cpy #$10
+	beq :+
+	lda #$10
 :
 	sta $18
 	ldx #$00
@@ -1694,13 +1715,14 @@ draw_object:
 	bne :+
 	lda #$B0
 	; The optimized large-object path is 184 CPU cycles shorter than the resolved contract.
-	ldy #$23
+	ldy #$22
 @large_object_timing:
 	dey
 	bne @large_object_timing
 	.repeat 4
 	nop
 	.endrepeat
+	nop
 :
 	sta $00
 	lda #$03
@@ -1718,6 +1740,8 @@ draw_object:
 	lda $08
 	sta $02
 	rts
+
+.segment "CODE"
 
 fill_rectangle:
 	; The authentic plane-0 entry is one CPU cycle longer than the plane-1 entry. Force absolute

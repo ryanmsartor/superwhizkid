@@ -1920,6 +1920,19 @@ copied into the repository, build output, tests, or releases.
     clocks respectively. The full 526,848-call matrix then matched the documented formula for
     every input, including first-nibble branches and Y=`$FF`. Interrupt-spanning and callback
     interference remain outside the matrix.
+  - **`$F012` replacement row-loop optimization.** The resolved contract always copies exactly
+    eight glyph rows per tile. Replacing the decrement/branch row loop with eight explicit indexed
+    reads and LCD writes removes 86 master clocks per tile while retaining the existing selector,
+    flag, stack-depth, page-crossing and output behavior. The purpose-written 256-selector matrix
+    now compares every one-tile duration with the authentic formula under both tested entry-V
+    states: SWK remains 102-188 clocks high, down from a worst residual of 274. This is a bounded
+    implementation improvement, not an accuracy claim for the remaining selector-class overhead.
+    Moving the compositor into its own
+    page-aligned linker segment prevents future earlier-service size changes from silently changing
+    its branch timing; after alignment its controlled redraw paths and empty baseline remain exact,
+    while large/small object paths are two/eight clocks high. These decisions use only the existing
+    behavioral formulas and synthetic data; no authentic implementation code or payload was
+    consulted or copied.
   - **`$F015` replacement timing decomposition.** Six purpose-written synthetic shapes compared
     the independently authored firmware with the resolved authentic formula: 1x8, 1x1, 2x8,
     3x8, 4x8, and a 3x8 case whose second-plane source begins at `$60FE`. With no source-pointer
