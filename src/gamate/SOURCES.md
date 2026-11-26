@@ -813,6 +813,18 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   This is emulator-observed timing work, not a physical-hardware measurement or claim of exact
   frame-aligned BIOS timing. Logo rendering and image assets are not retained as part of this result.
 
+- SWK AY initialization policy: controlled Brick Blaster boots under each authentic BIOS revision
+  reached `$6020` with all 16 AY registers zero and no diagnostic AY-register writes during boot.
+  Existing controlled runtime-service probes also found no intrinsic AY effects when cartridge
+  interrupt callbacks were excluded; aggregate AY changes during interrupt-spanning calls may be
+  callback effects. The independent firmware retains its explicit 16-register clear to establish a
+  known silent state without relying on assumed physical or emulator power-on contents. This is a
+  defensive compatibility policy, not a reproduction of authentic firmware activity. It does not
+  resolve the differing oscillator, noise, envelope, or audio-sample phase at entry. Inputs remained
+  read-only, and the result retained only counters and register-state summaries, not BIOS or
+  cartridge bytes. The observation is emulator-derived and does not establish physical AY reset or
+  bus behavior.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

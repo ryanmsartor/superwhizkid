@@ -43,6 +43,21 @@ The table is an observed compatibility boundary, not a claim that every field mu
 value for every game. Perturbation tests are required to distinguish required inputs from harmless
 startup residue.
 
+### Audio initialization policy
+
+Controlled accepted-cartridge boots under both authentic BIOS revisions observed no writes to the
+AY register interface before `$6020`. The all-zero AY register state at entry therefore reflects the
+emulator's reset state rather than an observed authentic-firmware clearing loop. No startup sound or
+BIOS audio service has been observed. Controlled runtime-service probes preserve AY state when
+interrupts are excluded; AY changes inside longer calls can instead be produced by the cartridge's
+periodic `$6026` callback.
+
+The independent SWK firmware deliberately writes zero to all 16 AY registers during reset. This is
+a compatibility policy that establishes a known silent entry state without assuming physical AY
+power-on contents. It is not intended to reproduce authentic boot bus activity. Exact oscillator,
+noise, envelope, and output-sample phase remains a separate boot-timing concern, and differing phase
+can change diagnostic audio hashes even while the register state and cartridge sound program agree.
+
 ## Revision-dependent phase
 
 The BIOS revisions produce the same RAM, VRAM, CPU registers, hardware configuration, and cartridge

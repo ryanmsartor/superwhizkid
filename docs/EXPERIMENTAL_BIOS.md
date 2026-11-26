@@ -93,8 +93,13 @@ piece behavior appeared good.
 
 - Reset performs the documented serial protection exchange, checks the exact cartridge identity
   field and the `$7000-$7FFF` checksum, then constructs the tested RAM policy, clears VRAM,
-  initializes AY/LCD state and enters at `$6020`. The reset path includes measured timing padding;
-  it does not reproduce the authentic startup graphics or exact hardware timing.
+  establishes a known silent AY state, initializes LCD state and enters at `$6020`. Controlled
+  accepted-cartridge boots under both authentic BIOS revisions produced no AY-register writes and
+  reached entry with every AY register zero. SWK nevertheless writes zero to all 16 registers as a
+  compatibility policy rather than relying on an assumed physical or emulated power-on state. This
+  is deliberately defensive initialization, not a claim that the authentic firmware performs the
+  writes. The reset path includes measured timing padding; it does not reproduce the authentic
+  startup graphics or exact hardware, LCD, AY, or audio-sample phase.
 - The periodic IRQ handler increments the `$00B` wait counter and the big-endian `$00E-$011`
   counter, calling `$6026` when `$00C` is nonzero. Its register and callback behavior is tested
   with a synthetic cartridge; broader interrupt interference remains unverified.
@@ -132,9 +137,10 @@ piece behavior appeared good.
 - All other slots enter the explicit `$F036` unsupported trap.
   Link NMI is implemented independently below. Protection, identity,
   and checksum failures enter distinct traps at `$F039`, `$F03C`, and `$F03F`, respectively.
-  Link reception and BRK-specific behavior are not implemented. Other games are not validated.
-  Standalone Cube Up has received a successful interactive SWK run, but this is not a complete
-  playthrough or a hardware-validation result.
+  Link reception and BRK-specific behavior have initial implementations with the synthetic
+  validation boundaries recorded below. Live link traffic, nested or reentrant callbacks, and
+  physical timing remain unvalidated. Standalone Cube Up has received a successful interactive SWK
+  run, but this is not a complete playthrough or a hardware-validation result.
 
 ### Remaining implementation deficiencies
 
@@ -152,6 +158,11 @@ is "Open", "In progress", "Partially complete", or "Cleared".
 | 7 | Broad cartridge and interactive hardware validation | In progress | A 62-cartridge SWK sweep now reaches and runs every title for 100 post-entry frames without an unsupported-service trap. Fifty-nine produce nonblank output. Famous 7, One Million Whys, and QuizFighter execute normally but retain SWK's blank startup VRAM; their authentic runs retain a shared nonblank BIOS presentation. Longer input-driven runs, 4-in-1 selection, network link, save-state campaigns, and complete playthroughs remain incomplete. |
 
 The chosen low-RAM initialization is a compatibility policy, not measured physical power-on state.
+The AY clear follows the same policy: it guarantees the observed silent, all-zero cartridge-entry
+register state, but exact oscillator, noise, envelope, and audio-sample phase is intentionally part
+of the unresolved boot-phase work. No observed BIOS service generates sound; AY changes during
+interrupt-spanning service calls can come from the cartridge's `$6026` callback rather than the
+service itself.
 The common entry contract and its uncertainty are described in
 [`BIOS_REPLACEMENT_ANALYSIS.md`](BIOS_REPLACEMENT_ANALYSIS.md); service contracts and their
 limitations are in [`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md).
