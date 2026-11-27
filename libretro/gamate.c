@@ -348,11 +348,15 @@ void retro_set_environment(retro_environment_t cb) {
 		{ NULL, NULL, NULL }
 	};
 	static char numbers[64][3];
+	static char greenLabels[64][5];
 	static char descriptions[15][64];
 	static char legacyValues[15][256];
 	static bool initialized;
 	if (!initialized) {
-		for (unsigned i = 0; i < 64; i++) snprintf(numbers[i], sizeof(numbers[i]), "%u", i);
+		for (unsigned i = 0; i < 64; i++) {
+			snprintf(numbers[i], sizeof(numbers[i]), "%u", i);
+			snprintf(greenLabels[i], sizeof(greenLabels[i]), "%.1f", i * 0.5);
+		}
 		unsigned baseCount = 0;
 		while (options[baseCount].key) baseCount++;
 		for (unsigned base = 0; base < baseCount; base++) {
@@ -384,6 +388,7 @@ void retro_set_environment(retro_environment_t cb) {
 				optionsV2[i].default_value = numbers[defaults[color][channel]];
 				for (unsigned value = 0; value < limit; value++) {
 					optionsV2[i].values[value].value = numbers[value];
+					optionsV2[i].values[value].label = channel == 1 ? greenLabels[value] : NULL;
 				}
 				optionsV1[i].key = optionsV2[i].key;
 				optionsV1[i].desc = optionsV2[i].desc;
