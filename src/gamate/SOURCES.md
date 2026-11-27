@@ -895,6 +895,28 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   redraw behavior while establishing that the next timing target is redraw traversal/selector
   interaction. Inputs remained read-only and no payload bytes were retained.
 
+- SWK `$F027` small-redraw selector matrix: a purpose-written isolated redraw forces all four
+  captured 2x2 map cells to each selector `$00-$FF` in turn. Against the authentic formula, group
+  residuals are `+556,+364,+188,-4,-164,-356,-532,-724` master clocks. Their deltas are exactly four
+  copies of the previously measured selector-group deficit. The current Cube Up common shape uses
+  four such group-0 redraws, accounting exactly for its +2,224-clock residual. Implementation impact:
+  create a dedicated small-redraw traversal using the timed selector lookup, then remove its measured
+  278-CPU-cycle fixed excess; do not alter the shared lookup or large-redraw path independently.
+  Pixels are still compared for every matrix case. The test is synthetic and no commercial payload
+  or local input bytes were retained.
+
+- SWK `$F027` dedicated small-redraw implementation: records 8-15 now dispatch to an out-of-line
+  `SMALL_REDRAW` segment, keeping the established page-aligned compositor addresses stable. The path
+  captures its fixed 2x2 selectors directly in column-major order, uses the object-timed selector
+  lookup, and terminates each two-tile column from descriptor-index parity instead of a RAM counter.
+  A measured 33-CPU-cycle fixed block completes the timing balance. The 256-selector matrix is exact
+  for groups 0-3 and eight master clocks fast for groups 4-7; isolated small redraw is two clocks
+  fast in the established mixed-selector case. Most importantly, all 141 calls in the Cube Up input
+  campaign now match the authentic uninterrupted timing formula: the common four-small-redraw/four-
+  small-object shape and the three-large/eight-small object-only shapes all report zero residual.
+  Pixels, ordered accesses, registers and peripheral state also match. The replay still reports only
+  the known stack write-footprint mismatch. Inputs remained read-only and no payload was retained.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

@@ -1042,11 +1042,11 @@ static void testCompositor(struct Gamate* g) {
 	writes = g->diagnostics.vramWrites;
 	clocks = g->masterClocks;
 	call(g, 0xF027, 0x0C, 0x47, 0x19, 0x65, 1000000);
-	if (g->masterClocks - clocks != expectedClocks + 2)
+	if (g->masterClocks - clocks != expectedClocks + 14)
 		fprintf(stderr, "F027 combined clocks=%llu target=%u residual=%lld\n",
 			(unsigned long long) (g->masterClocks - clocks), expectedClocks,
 			(long long) (g->masterClocks - clocks) - expectedClocks);
-	assert(g->masterClocks - clocks == expectedClocks + 2);
+	assert(g->masterClocks - clocks == expectedClocks + 14);
 	assert(!memcmp(g->vram, expected, sizeof(expected)));
 	assert(g->diagnostics.vramWrites - writes == 144 + 64 + 96 + 32);
 	assert(g->cpu.a == 0x0C && g->cpu.x == 0x47 && g->cpu.y == 0x19 && g->cpu.p == 0x25);
@@ -1100,7 +1100,7 @@ static void testCompositor(struct Gamate* g) {
 			call(g, 0xF027, 0, 0, 0, 0x24, 1000000);
 			static const int largeResiduals[8] = { 0, 4, 4, 4, 4, 4, 4, 4 };
 			static const int smallResiduals[8] = { 0, -2, -2, -2, -2, -2, -2, -2 };
-			int residual = isolated[i].redraw ? 0 :
+			int residual = isolated[i].redraw ? (isolated[i].large ? 14 : -2) :
 				isolated[i].large ? largeResiduals[shift] : smallResiduals[shift];
 			if ((int64_t) (g->masterClocks - clocks) != (int64_t) target + residual)
 				fprintf(stderr, "F027 isolated=%zu shift=%u clocks=%llu target=%u residual=%lld\n",
@@ -1128,6 +1128,32 @@ static void testCompositor(struct Gamate* g) {
 		int residual = selectorResiduals[selector >> 5];
 		if ((int64_t) (g->masterClocks - clocks) != (int64_t) target + residual)
 			fprintf(stderr, "F027 selector=%02X clocks=%llu target=%u residual=%lld\n",
+				selector, (unsigned long long) (g->masterClocks - clocks), target,
+				(long long) (g->masterClocks - clocks) - target);
+		assert((int64_t) (g->masterClocks - clocks) == (int64_t) target + residual);
+		assert(!memcmp(g->vram, expected, sizeof(expected)));
+	}
+
+	for (unsigned selector = 0; selector < 256; selector++) {
+		uint8_t record[8];
+		memcpy(record, smallBoth, sizeof(record));
+		record[2] = 0xFF;
+		memset(g->ram + 0x21, 0xFF, 0x80);
+		memcpy(g->ram + 0x21 + 8 * 8, record, sizeof(record));
+		for (size_t j = 0; j < sizeof(expected); j++) expected[j] = (uint8_t) (j * 37 + j / 5);
+		for (unsigned column = 0; column < 2; column++)
+			for (unsigned row = 0; row < 2; row++)
+				putExpected(expected, (record[5] >> 3) + column,
+					0xE6 + (record[6] >> 3) + row, (uint8_t) selector);
+		memcpy(g->vram, expected, sizeof(expected));
+		modelRedraw(g, expected, record, 2);
+		unsigned target = 6326 + 4270 + 4 * compositorTileClocks(g, (uint8_t) selector);
+		clocks = g->masterClocks;
+		call(g, 0xF027, 0, 0, 0, 0x24, 1000000);
+		static const int redrawResiduals[8] = { 0, 0, 0, 0, -8, -8, -8, -8 };
+		int residual = redrawResiduals[selector >> 5];
+		if ((int64_t) (g->masterClocks - clocks) != (int64_t) target + residual)
+			fprintf(stderr, "F027 redraw-selector=%02X clocks=%llu target=%u residual=%lld\n",
 				selector, (unsigned long long) (g->masterClocks - clocks), target,
 				(long long) (g->masterClocks - clocks) - target);
 		assert((int64_t) (g->masterClocks - clocks) == (int64_t) target + residual);

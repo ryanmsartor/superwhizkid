@@ -1296,7 +1296,7 @@ composite_objects:
 	ldy #$02
 :
 	sty $1C
-	jsr redraw_record
+	jsr redraw_record_dispatch
 	pla
 	tax
 @redraw_next:
@@ -1476,6 +1476,132 @@ redraw_record:
 	sta $1C
 	sta $1D
 	rts
+
+.segment "SMALL_REDRAW"
+
+redraw_record_dispatch:
+	cpx #$40
+	bcs :+
+	jmp redraw_record
+:
+	jmp redraw_small_record
+
+; Fixed 2x2 redraw path for records 8-15. It preserves the generic path's column-major capture,
+; ordered LCD activity, scratch results and plane order while using the selector-timed object lookup.
+redraw_small_record:
+	lda LCD_CONTROL_BASE
+	ora #$40
+	sta LCD_CONTROL
+	lda $0305
+	lsr a
+	lsr a
+	lsr a
+	sta $1E
+	lda $0306
+	lsr a
+	lsr a
+	lsr a
+	clc
+	adc #$E6
+	sta $1F
+	lda $0306
+	and #$F8
+	sta $19
+	; Capture the fixed 2x2 selector block directly in column-major order.
+	lda $1F
+	sta LCD_VRAM_ADDR_HI
+	lda $1E
+	sta LCD_VRAM_ADDR_LO
+	lda LCD_VRAM_READ
+	sta $0308
+	lda $1F
+	clc
+	adc #$01
+	sta LCD_VRAM_ADDR_HI
+	lda $1E
+	sta LCD_VRAM_ADDR_LO
+	lda LCD_VRAM_READ
+	sta $0309
+	lda $1F
+	sta LCD_VRAM_ADDR_HI
+	lda $1E
+	clc
+	adc #$01
+	sta LCD_VRAM_ADDR_LO
+	lda LCD_VRAM_READ
+	sta $030A
+	lda $1F
+	clc
+	adc #$01
+	sta LCD_VRAM_ADDR_HI
+	lda $1E
+	clc
+	adc #$01
+	sta LCD_VRAM_ADDR_LO
+	lda LCD_VRAM_READ
+	sta $030B
+	lda #$00
+	sta $1D
+@plane:
+	ldy #$00
+	sty $18
+@column:
+	lda $1E
+	clc
+	adc $18
+	ldx $1D
+	beq :+
+	ora #$80
+:
+	sta LCD_VRAM_ADDR_LO
+	lda $19
+	sta LCD_VRAM_ADDR_HI
+@tile:
+	tya
+	pha
+	lda $0308,y
+	ldx $1D
+	jsr point_object_tile
+	tay
+	ldx #$08
+@tile_row:
+	lda ($02),y
+	sta LCD_VRAM_WRITE
+	iny
+	dex
+	bne @tile_row
+	pla
+	tay
+	iny
+	tya
+	and #$01
+	bne @tile
+	inc $18
+	lda $18
+	cmp #$02
+	bne @column
+	lda $1D
+	bne :+
+	lda #$02
+	sta $1D
+	jmp @plane
+:
+	lda $1E
+	ora #$80
+	sta $18
+	; The fixed-bound traversal is 33 CPU cycles shorter than the authentic small-redraw path.
+	ldx #$06
+@fixed_timing:
+	dex
+	bne @fixed_timing
+	nop
+	lda #$00
+	sta $1B
+	sta $1C
+	sta $1D
+	rts
+
+.segment "COMPOSITOR"
 
 ; Draws a $1C-row object whose source is shifted right by X & 7 and composited over VRAM.
 ; Pre-draw bytes go to $308 + 48*plane + $1C*column + row; composited bytes go to $368 + ...
