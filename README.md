@@ -60,7 +60,7 @@ focuses on targeted research on understanding the Gamate hardware and software.
 Current research revolves around implementing an open-source, clean room boot firmware replacement
 that is 100% compatible across the library. See the `docs/` folder for work that has been done
 so far in this area. A separately built, incomplete
-[experimental BIOS prototype](docs/EXPERIMENTAL_BIOS.md) currently targets standalone Cube Up;
+[experimental BIOS prototype](docs/bios/EXPERIMENTAL_BIOS.md) currently targets standalone Cube Up;
 it can be selected as SWK in the libretro core and is the fallback when neither authentic BIOS is available.
 
 Future lines of research and development will hopefully allow us to create tools to make homebrewing

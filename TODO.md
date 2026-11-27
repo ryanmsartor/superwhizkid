@@ -7,7 +7,7 @@
   observed `$F000-$F033` service slots, extend the deterministic input campaign with adaptive
   gameplay and controlled link/NMI paths, perturb invariant entry RAM/VRAM state, and test a
   canonical replacement timing phase. See
-  [`docs/BIOS_REPLACEMENT_ANALYSIS.md`](docs/BIOS_REPLACEMENT_ANALYSIS.md).
+  [`docs/bios/BIOS_REPLACEMENT_ANALYSIS.md`](docs/bios/BIOS_REPLACEMENT_ANALYSIS.md).
 - investigate crash (towards end of?) level 1 of bao qing tian w/ UMC bios - occurred while testing on RG Cube XX
 - Explore hard clipping instead of soft clipping for audio output
 - Explore adjustable audio distortion

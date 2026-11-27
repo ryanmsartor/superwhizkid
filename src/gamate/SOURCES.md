@@ -584,7 +584,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   retained in the repository.
 - Method: byte equality, contiguous changed ranges, page density, exact matching-block relocation,
   vector/control-flow inspection, and controlled execution of the same cartridge under both images.
-- Used for: `docs/BIOS_DIFFERENCE_ANALYSIS.md`, including the 79.05% byte identity, localization of
+- Used for: `docs/bios/BIOS_DIFFERENCE_ANALYSIS.md`, including the 79.05% byte identity, localization of
   nearly all differences to `$FC2F-$FFFF`, reset/vector comparison, relocated validation and
   interrupt routines, the BIT revision's revised failure paths, and the opaque UMC-only regions.
 - Validation: both images reach `$6020` with identical initialized RAM, VRAM, scrolling, LCD control,
@@ -593,7 +593,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 - Legal boundary: only derived addresses, sizes, hashes, behavioral descriptions, and aggregate
   statistics were committed. Raw comparison output, firmware bytes, full disassembly, embedded
   graphics, and opaque data were deliberately excluded.
-- The behavioral results were restated in `docs/BIOS_BOOT_BEHAVIOR.md` as normalized pseudocode.
+- The behavioral results were restated in `docs/bios/BIOS_BOOT_BEHAVIOR.md` as normalized pseudocode.
   The document retains externally relevant stages, conditions, state effects, entry/callback
   addresses, and known revision branches, but deliberately omits instruction order, register
   allocation, private temporary layouts, delay/drawing implementations, and reconstructable data.
@@ -627,7 +627,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   Golden Pyramid accessed the flag during the observed window. All six clear or preserve/restore it
   during cartridge startup RAM initialization. Basketball later changes `$01` to `$00`, then to
   `$07` from bank-9 code. Both BIOS revisions produced the same transition counts.
-- Used for: the callback-flag section in `docs/BIOS_BOOT_BEHAVIOR.md` and the conclusion that the
+- Used for: the callback-flag section in `docs/bios/BIOS_BOOT_BEHAVIOR.md` and the conclusion that the
   interrupt wrappers interpret zero as disabled and any nonzero value as enabled. No additional
   semantics are assigned to Basketball's `$07` without further code analysis.
 - Limitation: no access in 1,000 unattended frames does not establish non-use in later, gameplay, or
@@ -645,7 +645,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   repository.
 - Result and use: all 124 cases reached entry. Paired BIOS captures had identical RAM/VRAM hashes.
   The established entry fields and checksum relationship are described in
-  [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md) and its conclusion
+  [`../../docs/bios/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/bios/BIOS_REPLACEMENT_ANALYSIS.md) and its conclusion
   that copied state templates are not a clean-room replacement strategy.
 - Limits: this is one instruction boundary in the current emulator, not a physical bus trace.
   Invariance does not prove necessity, and the sweep does not establish post-entry service use.
@@ -666,7 +666,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   Across the five no-input patterns, nonzero patterns changed execution for
   seven titles and final video for two; every case had a different final VRAM hash under at least one
   pattern. The replacement policy is clear VRAM, not arbitrary VRAM; details and limits are in
-  [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md).
+  [`../../docs/bios/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/bios/BIOS_REPLACEMENT_ANALYSIS.md).
 - Limits and legal boundary: deterministic 1,000-frame emulator paths are not exhaustive or physical
   power-on evidence. Reports retain derived counts and hashes, not ROM, BIOS, VRAM, or framebuffer
   payloads.
@@ -701,9 +701,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   held. Every case had cartridge reads before first writes; their union covered all 1,024 physical
   bytes. BIOS reads before first post-entry writes occurred in 118 cases. Controller-input tracking
   added no addresses to either owner union. The full block, byte, phase, and access results are in
-  [`../../docs/BIOS_ENTRY_RAM_ANALYSIS.md`](../../docs/BIOS_ENTRY_RAM_ANALYSIS.md); replacement
+  [`../../docs/bios/BIOS_ENTRY_RAM_ANALYSIS.md`](../../docs/bios/BIOS_ENTRY_RAM_ANALYSIS.md); replacement
   implications are summarized in
-  [`../../docs/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/BIOS_REPLACEMENT_ANALYSIS.md).
+  [`../../docs/bios/BIOS_REPLACEMENT_ANALYSIS.md`](../../docs/bios/BIOS_REPLACEMENT_ANALYSIS.md).
   Clearing `$00CE` changed 26 cases, with final-video and final-VRAM differences in two and three
   cases; clearing `$021F` changed four cases without final-video or final-VRAM differences. Their
   pre-entry watches found no CPU access in any case: both retain the emulator's `$FF` reset fill.
@@ -770,7 +770,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   above supplied the protection identifier and serial protocol; the project-authored
   [`ROM_HEADER_ANALYSIS.md`](../../docs/ROM_HEADER_ANALYSIS.md), boot and replacement analyses
   supplied the exact header field, checksum range, entry boundary and candidate RAM policy; and
-  [`BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md) supplied the observed
+  [`BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md) supplied the observed
   service and callback effects. The new firmware was written independently from those behavioral
   requirements. Its exact short protocol/header identifiers are functional format constants, not
   firmware instructions or assets. No BIOS instruction sequence, original bitmap, commercial
@@ -791,7 +791,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   Only derived metadata and hashes were compared; local commercial inputs remained read-only.
   This does not establish physical behavior, full gameplay, link NMI, interrupt interference,
   arbitrary inputs or compatibility with other cartridges. See
-  [`EXPERIMENTAL_BIOS.md`](../../docs/EXPERIMENTAL_BIOS.md) for build instructions and scope.
+  [`EXPERIMENTAL_BIOS.md`](../../docs/bios/EXPERIMENTAL_BIOS.md) for build instructions and scope.
 
 - Broad SWK startup-retention sweep: all 62 catalogued local cartridges were run read-only for 100
   post-entry frames under the independently authored firmware. All reached `$6020` and ran without
@@ -1094,7 +1094,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   expanded observed call-site and ABI signatures without exposing a new slot; they did not exercise
   link-driven `$6023` NMI callbacks.
 - Resolved and bounded contracts are documented in
-  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md): `$F000`
+  [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md): `$F000`
   fixed bitmap writer; `$F003`, `$F006`, and `$F009` IRQ waits; `$F00C` two-plane VRAM zero-writer
   with an LCD-control input; `$F00F` plane-0 rectangle clear; `$F012` selector-driven eight-row tile
   writer; `$F015` two-plane rectangle copy; `$F018` tile-row blitter; `$F01B` plane-0 row-run
@@ -1371,7 +1371,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   - Both BIOS revisions produced identical results, including identical decimal-mode deviations.
   - The resolved contract (pointer descriptor, selector-to-glyph-address classes, identity copy,
     column-counter plane selection, width-0 behavior, flag rules, and exact clock formula) is in
-    `docs/BIOS_RUNTIME_API_ANALYSIS.md`.
+    `docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`.
 - **Corrections:** this supersedes several earlier `$F012` conclusions in this file and in the
   analysis document:
   - The mapping is an identity copy; the earlier "not a copy" conclusion was wrong.
@@ -1442,7 +1442,7 @@ open questions are addressed there for the tested memory domains.
   131,072 pairs of transparent counts across binary and decimal mode. Another 1,200 seeded,
   varied streams matched each BIOS in Tornado. The resulting stream, memory, return, status and
   timing specification is recorded in
-  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+  [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md).
 - Corrections: the broader campaigns found more callers than the earlier first-call analysis.
   Zero opaque count means 256 tiles; zero transparent count advances by zero. The LCD control
   write forces bit 6, while columns beyond 127 can change the plane-select bit.
@@ -1503,7 +1503,7 @@ open questions are addressed there for the tested memory domains.
   below resolves those questions in the tested binary-mode cases. No pixel, ROM,
   or BIOS payload was retained; no external implementation was consulted or copied. Exact results,
   call scopes, and limits are in
-  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+  [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md).
 - Record-model follow-up: the two local, legally obtained BIOS revisions were executed in this
   project's emulator after booting Time Warrior from the read-only local collection. Diagnostic
   probes initialized the 128-byte table, varied fields and backgrounds, and recorded only access
@@ -1593,7 +1593,7 @@ open questions are addressed there for the tested memory domains.
   only; no firmware instructions, commercial data or external implementation were copied into
   the project, reconstructed, retained or published. The derived contract and
   further qualifications are in
-  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+  [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md).
 - Stack-write follow-up: in the same emulator and with both local BIOS revisions, 516 synthetic
   cases per BIOS checked stack write-set coverage without recording stack contents. They varied
   operation size, record, position, selector and four entry stack pointers, including wrap. An
@@ -1637,7 +1637,7 @@ open questions are addressed there for the tested memory domains.
   differences caused by the calls. In the emulator, the previously observed bit-6 sparse writes
   follow from the LCD's row-increment mode applied to the unchanged BIOS port sequence.
   The contract and instruction-boundary timing are in
-  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+  [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md).
   The SWK implementation now uses a direct Y-register LCD row write and relies on the final row
   comparison's carry, matching the 247,326-master-clock uninterrupted duration without padding;
   its synthetic test locks that duration in both contiguous and row-increment control modes.
@@ -1663,7 +1663,7 @@ open questions are addressed there for the tested memory domains.
   mismatches. Whole-RAM hashes also matched in this matrix. The follow-up above explains the
   bit-6 stride in the emulator; physical-hardware behavior remains open. The probe retained only
   derived results, not VRAM or ROM payload. Exact scopes and limits are in
-  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+  [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md).
 
 #### `$F01B` ROM-driven graphics writer
 
@@ -1702,7 +1702,7 @@ unresolved stream format are corrected there.
   observations, not physical measurements. The matrix covers only the first authentic call per
   observed title; later invocation contexts and the physical meaning of the sparse mode remain
   open. The detailed methods, results, and limits are in
-  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+  [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md).
 - `$000-$001` follow-up: the four existing 1,000-frame campaign reports selected the first
   authentic `$F01B` call in all 22 observed titles, under both BIOS revisions. A baseline and
   separate XOR-1 perturbations to `$000` and `$001`, with I set and the campaign's frame-relative
@@ -1769,7 +1769,7 @@ unresolved stream format are corrected there.
     checker was generalized; see the `$F021` entry below.
   - Both BIOS revisions behaved identically.
   - The full contract is in
-    [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md). It covers:
+    [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md). It covers:
     - the `$000-$001` stream pointer;
     - the fixed 25-row clear;
     - the absolute-row/escape/run grammar;
@@ -1822,7 +1822,7 @@ unresolved stream format are corrected there.
   Volcano Panic, and Robin Hood localized the earlier whole-RAM differences to one or two
   pre-existing, unchanged stack bytes; no new RAM differences appeared during the calls.
   The resulting rules and limitations are recorded in
-  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+  [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md).
 
 - `$F01E` follow-up: the paired balanced-call corpus contains 216 calls across 18 titles. First-call
   probes in Famous 7, Time Warrior, Volcano Panic, and Robin Hood were compared under both BIOSes
@@ -1832,7 +1832,7 @@ unresolved stream format are corrected there.
   was streamed to per-plane hashes without retaining payload. The stream grammar, return-Y rule,
   status behavior, and BIOS-specific whole-RAM hash differences were unresolved at that stage.
   The follow-up above addresses them for the tested domains. Exact results and limits are in
-  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+  [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md).
 - `$F01E` cross-corpus source-byte matrix: the four existing 1,000-frame campaign reports supplied
   first authentic call contexts for 24 titles under both BIOS revisions. I-masked baselines and
   separate XOR-1 perturbations to `$006-$009` produced 240 probes; all returned. Each target byte
@@ -1884,7 +1884,7 @@ sparse-mode interpretations, and its unresolved format, are corrected there.
   and exact timing remain unresolved. The direct probes' access maps and reported summaries match
   across BIOSes, but their whole-RAM hashes differ for unresolved reasons. Methods, measurements,
   and limits are in
-  [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+  [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md).
 
 #### `$F021` row-literal stream executable model
 
@@ -1917,7 +1917,7 @@ sparse-mode interpretations, and its unresolved format, are corrected there.
   - Stack use: both row-stream services use at most 2 stack bytes below entry S.
   - The contract, including the literal timing term of 66 master clocks per byte and the absence of
     an `$01A` write, is in
-    [`../../docs/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/BIOS_RUNTIME_API_ANALYSIS.md).
+    [`../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`](../../docs/bios/BIOS_RUNTIME_API_ANALYSIS.md).
 - **Corrections:**
   - The earlier `$015` flag mapping and the bit-6 "sparse addressing" interpretation were probe
     artifacts. `$015` is written verbatim to LCD register 1.
@@ -2051,7 +2051,7 @@ copied into the repository, build output, tests, or releases.
   gameplay, so their equal per-slot counts covered only the title and setup flow.
 - SWK gameplay services (independently authored firmware; local emulator experiments):
   - **Implementation basis.** `$F003`, `$F018`, `$F01B`, `$F027`, `$F02D`, `$F030` and `$F033`
-    were written from the executable contracts in `docs/BIOS_RUNTIME_API_ANALYSIS.md`. Those
+    were written from the executable contracts in `docs/bios/BIOS_RUNTIME_API_ANALYSIS.md`. Those
     contracts derive from observed register, memory, VRAM and peripheral behavior. No authentic BIOS
     instruction sequence, table or graphic was read, translated or reproduced. MAME was not
     consulted for this step. `$F006`, `$F00F`, and `$F015` were added later from their independently
