@@ -148,7 +148,28 @@ or replaces that tag and uploads a combined package to a draft GitHub release.
   </tr>
 </table>
 
-Game screenshots are included solely to demonstrate emulator functionality. All game titles, characters, artwork, and other game content remain the property of their respective copyright holders. This project is not affiliated with or endorsed by those rights holders.
+---
+
+Game screenshots are included solely to demonstrate emulator functionality. All game titles, characters, artwork, and other game content remain the property of their respective copyright holders. This project is not affiliated with or endorsed by those rights holders. 
+
+---
+
+### Debug view: full 256x256 framebuffer output
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/images/debug-view/Kill%20Shot.png" width="256" height="256" alt="Kill Shot"><br>
+      <strong>Kill Shot</strong>
+    </td>
+    <td align="center">
+      <img src="docs/images/debug-view/Nightmare%20of%20Santa%20Claus.png" width="256" height="256" alt="Nightmare of Santa Claus"><br>
+      <strong>Nightmare of Santa Claus</strong>
+    </td>
+  </tr>
+</table>
+
+With `Debug: Display Full Framebuffer` enabled, the emulator outputs the complete 256x256 framebuffer, allowing for a look behind the scenes of the rendering process. The main scrollable display area shows with a red border; non-scrolling window areas show with a yellow border. Anything outside these bounds would not normally be visible on the screen.
 
 ## Provenance and license
 
