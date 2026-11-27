@@ -1037,8 +1037,12 @@ f018_pair:
 	tsx
 	lda $0102,x
 	tax
-	lda $1A
-	jsr point_tile
+	; $1A is already zero and CMP #$FF left carry clear. Skip the helper's redundant store while
+	; retaining five setup cycles, for a net one-cycle correction in each plane.
+	nop
+	bcc :+
+:
+	jsr point_tile_ready
 	pla
 	tax
 	lda $18
@@ -1048,7 +1052,7 @@ f018_pair:
 	jmp f018_pair
 f018_opaque_pointer:
 	jmp f018_opaque_setup
-	.repeat 6
+	.repeat 5
 	nop
 	.endrepeat
 f018_opaque_tile_ready:
@@ -1254,6 +1258,7 @@ draw_row_literals:
 ; Uses INC rather than ADC so V, D and the stored B bit are untouched; C is changed.
 point_tile:
 	sta $1A
+point_tile_ready:
 	lda $06,x
 	sta $02
 	lda $07,x
@@ -2146,10 +2151,14 @@ f018_point_tile:
 	asl a
 	bcc @bit5_clear
 	inc $03
-	.repeat 4
+	; X is dead after pointer selection. Classifying the saved tile gives group 7 one extra cycle
+	; while retaining the existing tail cost for groups 1, 3 and 5.
+	bcs :+
+:
+	ldx $1A
+	cpx #$E0
+	bcc @bit5_done
 	nop
-	.endrepeat
-	jmp @bit5_done
 @bit5_clear:
 @bit5_done:
 	jmp f018_opaque_tile_ready

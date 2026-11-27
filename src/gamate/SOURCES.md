@@ -1069,6 +1069,16 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   controller-cycle VRAM/video matches. That hash count is a compatibility observation, not the
   optimization target; the service-level timing residual is reduced from 78 to 26 clocks.
 
+- `$F018` transparent/group-7 follow-up: the transparent path already has tile zero in `$1A`, so it
+  skips the generic helper's redundant store while a NOP plus carry-known branch retains five setup
+  cycles. This removes one CPU cycle per plane and makes the transparent-pair term exact. In the
+  opaque helper, X is dead after pointer selection; comparing the saved tile in X gives group 7 one
+  extra cycle while preserving A and the stream index. Brick Blaster's masked/live calls become
+  150,794/152,334 clocks versus 150,724/152,264 UMC, isolating a +70-clock fixed residual. Minimal
+  groups 0-2 and 5-7 match relative to that fixed term; group 3 remains four clocks short and group
+  4 four clocks long. The repeated matrix retains 110/114 no-input VRAM/video matches and records
+  720/720 controller-cycle matches. No cartridge payload was retained.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.
