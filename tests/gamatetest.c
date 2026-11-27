@@ -941,6 +941,112 @@ static void assertPeekMatchesRead(const struct Gamate* g, uint16_t address) {
 	assert(gamatePeek(g, address) == gamateRead(&copy, address));
 }
 
+static void testDebugExecutionControl(void) {
+	struct Gamate g, stepped;
+	gamateInit(&g);
+	gamateInit(&stepped);
+	uint8_t bios[GAMATE_BIOS_SIZE] = { 0 }, rom[0x4000] = { 0 };
+	bios[0x000] = 0x20; bios[0x001] = 0x10; bios[0x002] = 0xE0; // JSR $E010
+	bios[0x003] = 0xEA; // return site
+	bios[0x010] = 0xEA;
+	bios[0x011] = 0x60; // RTS
+	bios[0x020] = 0x02; // unsupported
+	bios[0x030] = 0x00; // BRK
+	bios[0x040] = 0xEA;
+	bios[0x036] = 0xEA; // BIOS trap $F036
+	bios[0x100] = 0xEA;
+	bios[0xFFC] = 0x00; bios[0xFFD] = 0xE0;
+	bios[0xFFE] = 0x00; bios[0xFFF] = 0xE1;
+	assert(gamateLoad(&g, rom, sizeof(rom), bios, sizeof(bios)));
+	assert(gamateLoad(&stepped, rom, sizeof(rom), bios, sizeof(bios)));
+
+	// One instruction plus device clocks is the primitive behind frame and debugger execution.
+	gamateReset(&g);
+	unsigned cycles = gamateStep(&g);
+	assert(cycles == 6 && g.cpu.pc == 0xE010 &&
+		g.masterClocks == 12 && g.cpu.s == 0xFB);
+
+	gamateReset(&g);
+	assert(gamateDebugStepOver(&g) == GAMATE_DEBUG_STOP_STEP_OVER);
+	assert(g.cpu.pc == 0xE003);
+	gamateReset(&g);
+	g.cpu.pc = 0xE010;
+	g.cpu.s = 0xFB;
+	g.ram[0x1FC] = 0x02;
+	g.ram[0x1FD] = 0xE0;
+	assert(gamateDebugStepOut(&g) == GAMATE_DEBUG_STOP_STEP_OUT);
+	assert(g.cpu.pc == 0xE003);
+
+	gamateReset(&g);
+	gamateDebugSetBreakpoint(&g, 0xE003, true);
+	assert(gamateDebugRun(&g) == GAMATE_DEBUG_STOP_BREAKPOINT);
+	assert(g.cpu.pc == 0xE003);
+	assert(gamateDebugBreakpointEnabled(&g, 0xE003));
+	gamateDebugClearBreakpoint(&g, 0xE003);
+	assert(!gamateDebugBreakpointEnabled(&g, 0xE003));
+
+	gamateReset(&g);
+	g.cpu.pc = 0xE003;
+	assert(gamateDebugRunTo(&g, 0xE004) == GAMATE_DEBUG_STOP_RUN_TO);
+	assert(g.cpu.pc == 0xE004);
+
+	gamateReset(&g);
+	g.cpu.pc = 0xE020;
+	gamateDebugSetBreakOnUnsupportedOpcode(&g, true);
+	assert(gamateDebugRun(&g) == GAMATE_DEBUG_STOP_UNSUPPORTED_OPCODE);
+	assert(g.diagnostics.lastUnsupportedPc == 0xE020 &&
+		g.diagnostics.lastUnsupportedOpcode == 0x02);
+
+	gamateReset(&g);
+	g.cpu.pc = 0xE030;
+	gamateSetBreakOnBrk(&g, true);
+	assert(gamateDebugRun(&g) == GAMATE_DEBUG_STOP_BRK);
+
+	gamateReset(&g);
+	g.cpu.pc = 0xF036;
+	gamateSetBreakOnBiosTrap(&g, true);
+	assert(gamateDebugRun(&g) == GAMATE_DEBUG_STOP_BIOS_TRAP);
+	assert(g.cpu.pc == 0xF037);
+
+	gamateReset(&g);
+	g.cpu.pc = 0xE040;
+	g.cpu.p &= (uint8_t) ~0x04;
+	g.cpu.irqMask = false;
+	g.irq = true;
+	gamateSetBreakOnIrq(&g, true);
+	assert(gamateDebugRun(&g) == GAMATE_DEBUG_STOP_IRQ);
+	assert(g.diagnostics.irqsTaken == 1);
+
+	gamateReset(&g);
+	g.cpu.pc = 0xE040;
+	g.nmi = true;
+	gamateSetBreakOnNmi(&g, true);
+	assert(gamateDebugRun(&g) == GAMATE_DEBUG_STOP_NMI);
+	assert(g.diagnostics.nmisTaken == 1);
+
+	// Repeated instruction stepping produces the same machine state as gamateRunFrame.
+	gamateReset(&g);
+	gamateReset(&stepped);
+	gamateRunFrame(&g);
+	g.frameDone = false;
+	gamateReset(&stepped);
+	g.frameDone = false;
+	stepped.frameDone = false;
+	while (!stepped.frameDone) gamateStep(&stepped);
+	size_t stateSize = gamateStateSize(&g);
+	void* frameState = malloc(stateSize);
+	void* steppedState = malloc(stateSize);
+	assert(frameState && steppedState);
+	assert(gamateSaveState(&g, frameState, stateSize));
+	assert(gamateSaveState(&stepped, steppedState, stateSize));
+	assert(!memcmp(frameState, steppedState, stateSize));
+	free(frameState);
+	free(steppedState);
+
+	gamateFree(&g);
+	gamateFree(&stepped);
+}
+
 static void testDebugAccess(void) {
 	struct Gamate g;
 	gamateInit(&g);
@@ -1039,6 +1145,7 @@ static void testDebugAccess(void) {
 int main(void) {
 	testMemory();
 	testDebugAccess();
+	testDebugExecutionControl();
 	testUart();
 	testVideo();
 	testVideoWindows();

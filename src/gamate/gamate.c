@@ -7,7 +7,6 @@
 #include <string.h>
 
 // The LCD receives 72,900 clocks per frame from the 4.433 MHz master oscillator.
-enum { IRQ_PERIOD = 32768 };
 enum { STATE_MAGIC = 0x54414D47, STATE_VERSION = 4 };
 
 static uint32_t crc32(const uint8_t* data, size_t size) {
@@ -137,6 +136,10 @@ void gamateReset(struct Gamate* g) {
 	memset(g->lcdAccum, 0, sizeof(g->lcdAccum));
 	memset(g->frameBuffer, 0, sizeof(g->frameBuffer));
 	memset(&g->diagnostics, 0, sizeof(g->diagnostics));
+	g->debug.mode = GAMATE_DEBUG_MODE_NONE;
+	g->debug.runToAddress = g->debug.stepAddress = 0;
+	g->debug.stepStackPointer = 0;
+	g->debug.stopReason = GAMATE_DEBUG_STOP_NONE;
 	gamateCpuReset(g);
 }
 
@@ -685,7 +688,8 @@ void gamateRunClocks(struct Gamate* g, unsigned clocks) {
 	}
 	if (tonesQuiet && g->ay.noiseCounter + clocks < g->ayNoisePeriod &&
 			g->ay.envelopeCounter + clocks < g->ayEnvelopePeriod && sampleAfter < 4433000 &&
-			(g->irqClocks >= IRQ_PERIOD || g->irqClocks + clocks < IRQ_PERIOD) &&
+			(g->irqClocks >= GAMATE_IRQ_PERIOD ||
+				g->irqClocks + clocks < GAMATE_IRQ_PERIOD) &&
 			(g->displayStopped || g->lcdClock >= 162 || g->lcdClock + clocks < 162) &&
 			(g->frameClocks >= GAMATE_CLOCKS_PER_FRAME ||
 				g->frameClocks + clocks < GAMATE_CLOCKS_PER_FRAME)) {
@@ -706,8 +710,8 @@ void gamateRunClocks(struct Gamate* g, unsigned clocks) {
 		}
 		step = earlierEvent(step, g->ay.noiseCounter, g->ayNoisePeriod);
 		step = earlierEvent(step, g->ay.envelopeCounter, g->ayEnvelopePeriod);
-		if (g->irqClocks < IRQ_PERIOD) {
-			step = earlierEvent(step, g->irqClocks, IRQ_PERIOD);
+		if (g->irqClocks < GAMATE_IRQ_PERIOD) {
+			step = earlierEvent(step, g->irqClocks, GAMATE_IRQ_PERIOD);
 		}
 		if (!g->displayStopped && g->lcdClock < 162) {
 			step = earlierEvent(step, g->lcdClock, 162);
@@ -759,7 +763,7 @@ void gamateRunClocks(struct Gamate* g, unsigned clocks) {
 			audioSample(g);
 		}
 		g->irqClocks += step;
-		if (g->irqClocks == IRQ_PERIOD) g->irq = true;
+		if (g->irqClocks == GAMATE_IRQ_PERIOD) g->irq = true;
 		if (!g->displayStopped) {
 			g->lcdClock += step;
 			if (g->lcdClock == 162) {
@@ -783,6 +787,201 @@ void gamateRunFrame(struct Gamate* g) {
 	while (!g->frameDone) {
 		gamateRunClocks(g, gamateCpuStep(g) * 2);
 	}
+}
+
+unsigned gamateStep(struct Gamate* g) {
+	unsigned cycles = gamateCpuStep(g);
+	gamateRunClocks(g, cycles * 2);
+	return cycles;
+}
+
+void gamateDebugSetBreakpoint(struct Gamate* g, uint16_t address, bool enabled) {
+	size_t offset = (size_t) address;
+	uint8_t mask = (uint8_t) 1 << (offset & 7);
+	if (enabled) g->debug.breakpoints[offset >> 3] |= mask;
+	else g->debug.breakpoints[offset >> 3] &= (uint8_t) ~mask;
+}
+
+void gamateDebugClearBreakpoint(struct Gamate* g, uint16_t address) {
+	gamateDebugSetBreakpoint(g, address, false);
+}
+
+void gamateDebugClearBreakpoints(struct Gamate* g) {
+	memset(g->debug.breakpoints, 0, sizeof(g->debug.breakpoints));
+}
+
+bool gamateDebugBreakpointEnabled(const struct Gamate* g, uint16_t address) {
+	size_t offset = (size_t) address;
+	return g->debug.breakpoints[offset >> 3] & (uint8_t) (1 << (offset & 7));
+}
+
+void gamateDebugSetBreakOnInterrupt(struct Gamate* g, bool irq, bool nmi, bool brk) {
+	g->debug.breakOnIrq = irq;
+	g->debug.breakOnNmi = nmi;
+	g->debug.breakOnBrk = brk;
+}
+
+void gamateDebugSetBreakOnUnsupportedOpcode(struct Gamate* g, bool enabled) {
+	g->debug.breakOnUnsupportedOpcode = enabled;
+}
+
+void gamateDebugSetBreakOnBiosTrap(struct Gamate* g, bool enabled) {
+	g->debug.breakOnBiosTrap = enabled;
+}
+
+void gamateSetBreakpoint(struct Gamate* g, uint16_t address) {
+	gamateDebugSetBreakpoint(g, address, true);
+}
+
+void gamateClearBreakpoint(struct Gamate* g, uint16_t address) {
+	gamateDebugClearBreakpoint(g, address);
+}
+
+void gamateClearBreakpoints(struct Gamate* g) {
+	gamateDebugClearBreakpoints(g);
+}
+
+void gamateSetBreakOnIrq(struct Gamate* g, bool enabled) {
+	g->debug.breakOnIrq = enabled;
+}
+
+void gamateSetBreakOnNmi(struct Gamate* g, bool enabled) {
+	g->debug.breakOnNmi = enabled;
+}
+
+void gamateSetBreakOnBrk(struct Gamate* g, bool enabled) {
+	g->debug.breakOnBrk = enabled;
+}
+
+void gamateSetBreakOnUnsupported(struct Gamate* g, bool enabled) {
+	g->debug.breakOnUnsupportedOpcode = enabled;
+}
+
+void gamateSetBreakOnBiosTrap(struct Gamate* g, bool enabled) {
+	g->debug.breakOnBiosTrap = enabled;
+}
+
+void gamateSetBreakOnInterrupt(struct Gamate* g, bool irq, bool nmi, bool brk) {
+	gamateDebugSetBreakOnInterrupt(g, irq, nmi, brk);
+}
+
+static enum GamateDebugStopReason gamateDebugStop(struct Gamate* g,
+		enum GamateDebugStopReason reason) {
+	g->debug.mode = GAMATE_DEBUG_MODE_NONE;
+	g->debug.runToAddress = 0;
+	g->debug.stepAddress = 0;
+	g->debug.stepStackPointer = 0;
+	g->debug.stopReason = reason;
+	return reason;
+}
+
+static enum GamateDebugStopReason gamateDebugEvaluateStep(struct Gamate* g,
+		uint16_t startPc, uint8_t startOpcode,
+		uint64_t irqsBefore, uint64_t nmisBefore, uint64_t unsupportedBefore) {
+	if (gamateDebugBreakpointEnabled(g, g->cpu.pc)) {
+		return gamateDebugStop(g, GAMATE_DEBUG_STOP_BREAKPOINT);
+	}
+	if (g->debug.mode == GAMATE_DEBUG_MODE_RUN_TO &&
+			g->cpu.pc == g->debug.runToAddress) {
+		return gamateDebugStop(g, GAMATE_DEBUG_STOP_RUN_TO);
+	}
+	if (g->debug.mode == GAMATE_DEBUG_MODE_STEP_OVER &&
+			g->cpu.pc == g->debug.stepAddress &&
+			g->cpu.s == g->debug.stepStackPointer) {
+		return gamateDebugStop(g, GAMATE_DEBUG_STOP_STEP_OVER);
+	}
+	if (g->debug.mode == GAMATE_DEBUG_MODE_STEP_OUT &&
+			(startOpcode == 0x40 || startOpcode == 0x60) &&
+			g->cpu.s == (uint8_t) (g->debug.stepStackPointer + 2)) {
+		return gamateDebugStop(g, GAMATE_DEBUG_STOP_STEP_OUT);
+	}
+	if (g->debug.breakOnNmi && g->diagnostics.nmisTaken != nmisBefore) {
+		return gamateDebugStop(g, GAMATE_DEBUG_STOP_NMI);
+	}
+	if (g->debug.breakOnIrq && g->diagnostics.irqsTaken != irqsBefore) {
+		return gamateDebugStop(g, GAMATE_DEBUG_STOP_IRQ);
+	}
+	if (g->debug.breakOnBrk && startOpcode == 0x00) {
+		return gamateDebugStop(g, GAMATE_DEBUG_STOP_BRK);
+	}
+	if (g->debug.breakOnUnsupportedOpcode &&
+			g->diagnostics.unsupportedOpcodes != unsupportedBefore) {
+		return gamateDebugStop(g, GAMATE_DEBUG_STOP_UNSUPPORTED_OPCODE);
+	}
+	if (g->debug.breakOnBiosTrap && g->cpu.pc >= 0xF036 && g->cpu.pc <= 0xF03F) {
+		return gamateDebugStop(g, GAMATE_DEBUG_STOP_BIOS_TRAP);
+	}
+	(void) startPc;
+	return GAMATE_DEBUG_STOP_NONE;
+}
+
+enum GamateDebugStopReason gamateDebugRun(struct Gamate* g) {
+	g->debug.stopReason = GAMATE_DEBUG_STOP_NONE;
+	for (;;) {
+		if (g->cpu.stopped) {
+			return gamateDebugStop(g, GAMATE_DEBUG_STOP_NONE);
+		}
+		if (gamateDebugBreakpointEnabled(g, g->cpu.pc)) {
+			return gamateDebugStop(g, GAMATE_DEBUG_STOP_BREAKPOINT);
+		}
+		if (g->debug.mode == GAMATE_DEBUG_MODE_RUN_TO &&
+				g->cpu.pc == g->debug.runToAddress) {
+			return gamateDebugStop(g, GAMATE_DEBUG_STOP_RUN_TO);
+		}
+
+		uint16_t startPc = g->cpu.pc;
+		uint8_t startOpcode = gamatePeek(g, startPc);
+		uint64_t irqsBefore = g->diagnostics.irqsTaken;
+		uint64_t nmisBefore = g->diagnostics.nmisTaken;
+		uint64_t unsupportedBefore = g->diagnostics.unsupportedOpcodes;
+		gamateStep(g);
+		enum GamateDebugStopReason reason = gamateDebugEvaluateStep(g, startPc,
+			startOpcode, irqsBefore, nmisBefore, unsupportedBefore);
+		if (reason != GAMATE_DEBUG_STOP_NONE) return reason;
+	}
+}
+
+enum GamateDebugStopReason gamateDebugRunTo(struct Gamate* g, uint16_t address) {
+	g->debug.mode = GAMATE_DEBUG_MODE_RUN_TO;
+	g->debug.runToAddress = address;
+	g->debug.stopReason = GAMATE_DEBUG_STOP_NONE;
+	return gamateDebugRun(g);
+}
+
+enum GamateDebugStopReason gamateDebugStepOver(struct Gamate* g) {
+	uint16_t startPc = g->cpu.pc;
+	uint8_t startOpcode = gamatePeek(g, startPc);
+	if (startOpcode == 0x20) {
+		g->debug.mode = GAMATE_DEBUG_MODE_STEP_OVER;
+		g->debug.stepAddress = (uint16_t) (startPc + 3);
+		g->debug.stepStackPointer = g->cpu.s;
+		g->debug.stopReason = GAMATE_DEBUG_STOP_NONE;
+		return gamateDebugRun(g);
+	}
+
+	g->debug.mode = GAMATE_DEBUG_MODE_NONE;
+	uint64_t irqsBefore = g->diagnostics.irqsTaken;
+	uint64_t nmisBefore = g->diagnostics.nmisTaken;
+	uint64_t unsupportedBefore = g->diagnostics.unsupportedOpcodes;
+	gamateStep(g);
+	enum GamateDebugStopReason reason = gamateDebugEvaluateStep(g, startPc,
+		startOpcode, irqsBefore, nmisBefore, unsupportedBefore);
+	if (reason == GAMATE_DEBUG_STOP_NONE) {
+		return gamateDebugStop(g, GAMATE_DEBUG_STOP_STEP_OVER);
+	}
+	return reason;
+}
+
+enum GamateDebugStopReason gamateDebugStepOut(struct Gamate* g) {
+	g->debug.mode = GAMATE_DEBUG_MODE_STEP_OUT;
+	g->debug.stepAddress = 0;
+	g->debug.stepStackPointer = g->cpu.s;
+	g->debug.stopReason = GAMATE_DEBUG_STOP_NONE;
+	return gamateDebugRun(g);
+}
+
+enum GamateDebugStopReason gamateDebugGetStopReason(const struct Gamate* g) {
+	return g->debug.stopReason;
 }
 
 size_t gamateStateSize(const struct Gamate* g) {
@@ -832,6 +1031,11 @@ bool gamateLoadState(struct Gamate* g, const void* data, size_t size) {
 			state.romSize != g->romSize) {
 		return false;
 	}
+	g->debug.mode = GAMATE_DEBUG_MODE_NONE;
+	g->debug.runToAddress = 0;
+	g->debug.stepAddress = 0;
+	g->debug.stepStackPointer = 0;
+	g->debug.stopReason = GAMATE_DEBUG_STOP_NONE;
 	memcpy(g->ram, state.ram, sizeof(g->ram));
 	memcpy(g->vram, state.vram, sizeof(g->vram));
 	g->vramAddress = state.vramAddress;

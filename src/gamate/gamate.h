@@ -9,9 +9,32 @@
 #include <stdint.h>
 
 enum { GAMATE_WIDTH = 160, GAMATE_HEIGHT = 150, GAMATE_CLOCKS_PER_FRAME = 72900 };
+enum { GAMATE_IRQ_PERIOD = 32768 };
+enum { IRQ_PERIOD = GAMATE_IRQ_PERIOD };
 enum { GAMATE_BIOS_SIZE = 0x1000, GAMATE_MAX_ROM_SIZE = 0x80000 };
 
 enum GamateMapper { GAMATE_MAPPER_PLAIN, GAMATE_MAPPER_BANKED, GAMATE_MAPPER_4IN1 };
+
+enum GamateDebugStopReason {
+	GAMATE_DEBUG_STOP_NONE,
+	GAMATE_DEBUG_STOP_BREAKPOINT,
+	GAMATE_DEBUG_STOP_RUN_TO,
+	GAMATE_DEBUG_STOP_STEP_OVER,
+	GAMATE_DEBUG_STOP_STEP_OUT,
+	GAMATE_DEBUG_STOP_IRQ,
+	GAMATE_DEBUG_STOP_NMI,
+	GAMATE_DEBUG_STOP_BRK,
+	GAMATE_DEBUG_STOP_UNSUPPORTED_OPCODE,
+	GAMATE_DEBUG_STOP_BIOS_TRAP,
+	GAMATE_DEBUG_STOP_UNSUPPORTED = GAMATE_DEBUG_STOP_UNSUPPORTED_OPCODE
+};
+
+enum GamateDebugRunMode {
+	GAMATE_DEBUG_MODE_NONE,
+	GAMATE_DEBUG_MODE_RUN_TO,
+	GAMATE_DEBUG_MODE_STEP_OVER,
+	GAMATE_DEBUG_MODE_STEP_OUT
+};
 
 typedef void (*GamateLinkBitCallback)(void* context, bool bit);
 
@@ -82,6 +105,16 @@ struct GamateAy {
 	int32_t previousInput[2], highPass[2];
 };
 
+struct GamateDebug {
+	uint8_t breakpoints[0x10000 / 8];
+	enum GamateDebugRunMode mode;
+	uint16_t runToAddress, stepAddress;
+	uint8_t stepStackPointer;
+	enum GamateDebugStopReason stopReason;
+	bool breakOnIrq, breakOnNmi, breakOnBrk;
+	bool breakOnUnsupportedOpcode, breakOnBiosTrap;
+};
+
 struct Gamate {
 	struct GamateCpu cpu;
 	uint8_t ram[0x400];
@@ -121,6 +154,8 @@ struct Gamate {
 	uint16_t lcdClock, lcdRowEvent;
 	// Observational counters for bring-up tools; deliberately excluded from save states.
 	struct GamateDiagnostics diagnostics;
+	// Debugger configuration and transient run state; deliberately excluded from save states.
+	struct GamateDebug debug;
 };
 
 void gamateInit(struct Gamate* gamate);
@@ -169,6 +204,32 @@ void gamateSetLcdDiagnosticWatch(struct Gamate* gamate,
 void gamateSetAudio(struct Gamate* gamate, int16_t* output, size_t frameCapacity, unsigned sampleRate);
 void gamateCpuReset(struct Gamate* gamate);
 unsigned gamateCpuStep(struct Gamate* gamate);
+
+// Executes one instruction and advances peripheral clocks by the instruction's master-clock count.
+unsigned gamateStep(struct Gamate* gamate);
+// Runs until a configured stop condition fires.
+enum GamateDebugStopReason gamateDebugRun(struct Gamate* gamate);
+void gamateDebugSetBreakpoint(struct Gamate* gamate, uint16_t address, bool enabled);
+void gamateDebugClearBreakpoint(struct Gamate* gamate, uint16_t address);
+void gamateDebugClearBreakpoints(struct Gamate* gamate);
+bool gamateDebugBreakpointEnabled(const struct Gamate* gamate, uint16_t address);
+void gamateDebugSetBreakOnInterrupt(struct Gamate* gamate, bool irq, bool nmi, bool brk);
+void gamateDebugSetBreakOnUnsupportedOpcode(struct Gamate* gamate, bool enabled);
+void gamateDebugSetBreakOnBiosTrap(struct Gamate* gamate, bool enabled);
+enum GamateDebugStopReason gamateDebugRunTo(struct Gamate* gamate, uint16_t address);
+enum GamateDebugStopReason gamateDebugStepOver(struct Gamate* gamate);
+enum GamateDebugStopReason gamateDebugStepOut(struct Gamate* gamate);
+enum GamateDebugStopReason gamateDebugGetStopReason(const struct Gamate* gamate);
+
+void gamateSetBreakpoint(struct Gamate* gamate, uint16_t address);
+void gamateClearBreakpoint(struct Gamate* gamate, uint16_t address);
+void gamateClearBreakpoints(struct Gamate* gamate);
+void gamateSetBreakOnIrq(struct Gamate* gamate, bool enabled);
+void gamateSetBreakOnNmi(struct Gamate* gamate, bool enabled);
+void gamateSetBreakOnBrk(struct Gamate* gamate, bool enabled);
+void gamateSetBreakOnUnsupported(struct Gamate* gamate, bool enabled);
+void gamateSetBreakOnBiosTrap(struct Gamate* gamate, bool enabled);
+void gamateSetBreakOnInterrupt(struct Gamate* gamate, bool irq, bool nmi, bool brk);
 
 size_t gamateStateSize(const struct Gamate* gamate);
 bool gamateSaveState(const struct Gamate* gamate, void* data, size_t size);
