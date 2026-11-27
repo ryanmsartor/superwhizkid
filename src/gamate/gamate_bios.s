@@ -239,7 +239,7 @@ reset:
 	lda #$C6
 	sta LCD_VRAM_ADDR_HI
 	jmp finalize_boot
-	.repeat 12
+	.repeat 11
 	nop
 	.endrepeat
 
@@ -282,6 +282,8 @@ irq:
 	lda CALLBACK_ENABLE
 	beq :+
 	jsr CART_IRQ_CALLBACK
+	; Align the enabled callback return with the observed live wait-service IRQ phase.
+	nop
 :
 	pla
 	tay

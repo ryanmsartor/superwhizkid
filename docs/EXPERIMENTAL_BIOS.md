@@ -238,9 +238,18 @@ Before the `$F018` timing pass, the first Brick Blaster call took 119,224 SWK cl
 authentic. The retained emitted-column and opaque-pointer corrections raise SWK to 151,676 clocks,
 leaving a 588-clock live residual across five interrupts. The first later video mismatch moves from
 frame 113 to 116; VRAM still differs at 113 because SWK enters the call 742 clocks early from the
-remaining live `$F009` phase. `$F027` is not implicated. The next bounded targets are the remaining
-`$F018` fixed/row and zero-count cases, followed by live `$F009`/IRQ-wrapper timing. Longer play,
+then-current live `$F009` phase. `$F027` is not implicated. The next bounded targets are the remaining
+`$F018` fixed/row and zero-count cases plus broader callback/first-wait phase. Longer play,
 alternative schedules, physical hardware, and user-perceived playability remain untested here.
+
+A subsequent live `$F009` pass found that its isolated threshold/ready-path contract was already
+correct, while the enabled IRQ callback wrapper placed steady Brick Blaster waits 32-48 clocks
+short. One NOP after the `$6026` callback moves those waits to within 0-16 clocks; a second NOP
+returns them to the former phase and was rejected. The accumulated lead at the second `$F00C` entry
+falls from 448 to 160 clocks. Because `$F018` spans five IRQs, its live duration changes slightly to
+151,652 clocks and its entry lead falls from 742 to 426 clocks. Frame-level no-input boundaries and
+match counts are unchanged; controller-cycle VRAM matches improve from 480 to 482. This is an
+emulator-observed compatibility alignment, not a physical IRQ-wrapper timing measurement.
 
 ## Validation and limits
 
@@ -307,12 +316,12 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | Area | Timing status | Remaining issue |
 | --- | --- | --- |
 | Reset and `$6020` entry | Exact Brick Blaster UMC clock/IRQ phase; broader phase partial | SWK uses repeated measured waits and an explicit pending-final-IRQ release. Brick Blaster SWK and UMC enter at master clock `30,239,372`, 218 clocks after their final boot IRQ; Bit enters at `30,239,430` with the same phase. Startup presentation, AY/audio phase, physical timing, and broad cartridge-specific timing remain unresolved. |
-| Periodic IRQ wrapper and `$6026` callback | Partial | Counter carry and callback gating are synthetic-tested, and callback register effects are bounded, but arbitrary callback work, IRQ timing inside services, stack bus timing, and full frame-level phase are not established. |
+| Periodic IRQ wrapper and `$6026` callback | Partial, live phase improved | Counter carry and callback gating are synthetic-tested. One enabled-path NOP reduces steady Brick Blaster `$F009` residuals from 32-48 to 0-16 clocks and the pre-clear lead from 448 to 160 clocks. Arbitrary callback work, physical timing, nested interrupts, stack bus timing, and other live phases remain open. |
 | Link NMI and `$6023` callback | Exact synthetic timing; live timing unknown | Disabled, direct, and absolute-JMP synthetic forms measured 66, 110, and 116 master clocks respectively at instruction-granular emulator boundaries. The 64 P/256 S matrix and partial receive-state save/load pass. Live UART/Netpacket edges, callback reentrancy, nested IRQ/NMI and physical timing remain open. |
 | `$F000` fixed bitmap placeholder | Partially complete | The independently authored blank placeholder matches the measured geometry, write counts, final LCD address, return state, and 3,278-master-clock uninterrupted duration. It does not reproduce the authentic asset or claim matching intermediate event timing and interrupt interference. |
 | `$F003` eight-IRQ wait | Exact service contract | A shared 256-value matrix verifies the 42-clock ready path, `8-n` IRQ count, return state, and lack of direct LCD/VRAM effects. IRQ phase and callback elapsed time are external to the service; callback-modified X is intentionally observable. |
 | `$F006` counter wait | Exact service contract | The same matrix verifies the 42-clock ready path, `5-n` IRQ count, return state, and lack of direct LCD/VRAM effects. IRQ phase and callback elapsed time remain caller/hardware context. |
-| `$F009` long wait | Exact service contract | The shared matrix verifies the 42-clock ready path, `24-n` IRQ count, return state, and lack of direct LCD/VRAM effects. A one-IRQ callback test confirms the same callback-modified-X behavior as `$F003/$F006`. |
+| `$F009` long wait | Exact isolated contract; live phase within 0-16 clocks in Brick Blaster steady waits | The shared matrix verifies the 42-clock ready path, `24-n` IRQ count, return state, and lack of direct LCD/VRAM effects. A one-IRQ callback test confirms callback-modified X. The first nonzero-counter Brick Blaster wait remains 128 clocks short; inventing a caller-specific delay was rejected. |
 | `$F00C` two-plane clear | Exact uninterrupted timing | The ordered 12,800 VRAM writes, 13,602 LCD writes, registers, scratch, LCD state, and 247,326-master-clock duration match the controlled contract for both ordinary and row-increment control modes. Mid-call mutation, interrupt interference, and exact event timestamps remain open. |
 | `$F00F` fixed plane-0 clear | Exact for the controlled contract | Synthetic 775-byte VRAM, 829-LCD-write and 15,930-master-clock results agree; broader interrupt and side-effectful contexts are not claimed. NOP padding is an implementation convenience, not a timing substitute. |
 | `$F012` glyph run | Partial, improved | The fixed-row unroll, direct selector transfer, reduced stack bookkeeping, and combined C/V decision tree preserve the measured output, flags, and stack footprint. Across all 256 one-tile selectors and both tested entry-V states, SWK is now 68-130 clocks over the authentic selector/page formula; the original worst residual was 274. Exact class-dependent timing remains open. |

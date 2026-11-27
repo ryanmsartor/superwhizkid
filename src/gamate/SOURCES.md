@@ -979,6 +979,21 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   62-cartridge 100-frame SWK smoke sweep remains 59 normal passes plus the same three known
   blank-output titles. Reports stayed in temporary storage; BIOS and cartridge inputs were read-only.
 
+- Live `$F009`/IRQ-wrapper alignment: absolute completed-call reports compared Brick Blaster's first
+  ten waits under UMC and SWK after the boot-phase correction. The isolated `$F009` contract was
+  unchanged; its ready path remains 42 clocks and the existing 256-counter matrix still passes.
+  Before the wrapper change, steady live waits were 32-48 clocks short. A single NOP after an enabled
+  `$6026` callback reduces them to 0-16 clocks short; a two-NOP experiment returned to the earlier
+  phase and was reverted. Unreachable reset fill was shortened by one byte so `$F003` and every later
+  runtime service retain their established addresses. The first Brick Blaster wait enters with
+  `$00B=8` and remains 128 clocks short; no caller-specific delay was invented. The second `$F00C`
+  entry lead falls from 448 to 160 clocks, and the following `$F018` entry lead falls from 742 to 426.
+  The IRQ-spanning `$F018` duration changes from 151,676 to 151,652 clocks versus 152,264 authentic.
+  Both 1,000-frame matrices retain their first video/VRAM boundaries; controller-cycle VRAM matching
+  rises from 480 to 482 frames. All project tests pass, and the 62-cartridge 100-frame SWK sweep
+  remains 59 normal passes plus the same three known blank-output titles. This is local emulator
+  evidence, not physical IRQ timing; reports stayed temporary and inputs were read-only.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.
