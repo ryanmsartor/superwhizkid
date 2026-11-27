@@ -1081,6 +1081,112 @@ enum GamateDebugStopReason gamateDebugGetStopReason(const struct Gamate* g) {
 	return g->debug.stopReason;
 }
 
+void gamateSetCpuPc(struct Gamate* g, uint16_t pc) {
+	g->cpu.pc = pc;
+}
+
+void gamateSetCpuA(struct Gamate* g, uint8_t a) {
+	g->cpu.a = a;
+}
+
+void gamateSetCpuX(struct Gamate* g, uint8_t x) {
+	g->cpu.x = x;
+}
+
+void gamateSetCpuY(struct Gamate* g, uint8_t y) {
+	g->cpu.y = y;
+}
+
+void gamateSetCpuS(struct Gamate* g, uint8_t s) {
+	g->cpu.s = s;
+}
+
+void gamateSetCpuP(struct Gamate* g, uint8_t p) {
+	g->cpu.p = (uint8_t) ((p | 0x20) & ~0x10);
+	g->cpu.irqMask = (g->cpu.p & 0x04) != 0;
+}
+
+void gamateSetCpuStopped(struct Gamate* g, bool stopped) {
+	g->cpu.stopped = stopped;
+}
+
+void gamateSetCpuRegisters(struct Gamate* g, uint16_t pc,
+		uint8_t a, uint8_t x, uint8_t y, uint8_t s, uint8_t p) {
+	g->cpu.pc = pc;
+	g->cpu.a = a;
+	g->cpu.x = x;
+	g->cpu.y = y;
+	g->cpu.s = s;
+	gamateSetCpuP(g, p);
+}
+
+void gamateGetPeripheralState(const struct Gamate* g,
+		struct GamatePeripheralState* state) {
+	if (!state) return;
+	memset(state, 0, sizeof(*state));
+	state->lcd.vramAddress = g->vramAddress;
+	state->lcd.scrollX = g->scrollX;
+	state->lcd.scrollY = g->scrollY;
+	state->lcd.lcdClock = g->lcdClock;
+	state->lcd.lcdRowEvent = g->lcdRowEvent;
+	state->lcd.vramPlane = g->vramPlane;
+	state->lcd.incrementRow = g->incrementRow;
+	state->lcd.window = g->window;
+	state->lcd.swapPlanes = g->swapPlanes;
+	state->lcd.displayBlank = g->displayBlank;
+	state->lcd.displayStopped = g->displayStopped;
+	state->protection.passed = g->protectionPassed;
+	state->protection.failed = g->protectionFailed;
+	state->protection.reply = g->protectionReply;
+	state->protection.position = g->protectionPosition;
+	state->protection.byte = g->protectionByte;
+	state->protection.sequence = g->protectionSequence;
+	state->uart.tx = g->uartTx;
+	state->uart.rx = g->uartRx;
+	state->uart.txBits = g->uartTxBits;
+	state->uart.rxBits = g->uartRxBits;
+	state->uart.txLine = g->uartTxLine;
+	state->ay.address = g->ayAddress;
+	memcpy(state->ay.registers, g->ayRegisters, sizeof(state->ay.registers));
+	memcpy(state->ay.tonePeriod, g->ayTonePeriod, sizeof(state->ay.tonePeriod));
+	state->ay.noisePeriod = g->ayNoisePeriod;
+	state->ay.envelopePeriod = g->ayEnvelopePeriod;
+	state->cartridge.mapper = g->mapper;
+	state->cartridge.bank = g->bank;
+	state->cartridge.firstBank = g->firstBank;
+	state->interrupt.irq = g->irq;
+	state->interrupt.nmi = g->nmi;
+	state->interrupt.irqClocks = g->irqClocks;
+	state->clocks.masterClocks = g->masterClocks;
+	state->clocks.frameClocks = g->frameClocks;
+	state->clocks.frameDone = g->frameDone;
+}
+
+uint8_t gamateGetVramByte(const struct Gamate* g, uint16_t offset) {
+	return offset < sizeof(g->vram) ? g->vram[offset] : 0;
+}
+
+bool gamateSetVramByte(struct Gamate* g, uint16_t offset, uint8_t value) {
+	if (offset >= sizeof(g->vram)) return false;
+	g->vram[offset] = value;
+	return true;
+}
+
+bool gamateGetVramTile(const struct Gamate* g, unsigned tile,
+		unsigned plane, uint8_t pixels[64]) {
+	if (!pixels || tile >= 32 * 32 || plane > 1) return false;
+	unsigned tileX = tile & 31;
+	unsigned tileY = tile >> 5;
+	size_t rowOffset = ((size_t) tileY * 32 + tileX) * 2 + plane;
+	for (unsigned y = 0; y < 8; y++) {
+		uint8_t row = g->vram[rowOffset + (size_t) y * 64];
+		for (unsigned x = 0; x < 8; x++) {
+			pixels[y * 8 + x] = (uint8_t) ((row >> (7 - x)) & 1);
+		}
+	}
+	return true;
+}
+
 void gamateTraceEnable(struct Gamate* g, bool enabled) {
 	g->debug.traceEnabled = enabled;
 	if (enabled) gamateTraceClear(g);

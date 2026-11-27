@@ -149,6 +149,41 @@ struct GamateDebug {
 	struct GamateTraceEntry trace[GAMATE_TRACE_CAPACITY];
 };
 
+struct GamatePeripheralState {
+	struct {
+		uint16_t vramAddress;
+		uint8_t scrollX, scrollY;
+		uint16_t lcdClock, lcdRowEvent;
+		bool vramPlane, incrementRow, window, swapPlanes;
+		bool displayBlank, displayStopped;
+	} lcd;
+	struct {
+		bool passed, failed, reply;
+		uint8_t position, byte, sequence;
+	} protection;
+	struct {
+		uint8_t tx, rx, txBits, rxBits;
+		bool txLine;
+	} uart;
+	struct {
+		uint8_t address, registers[16];
+		uint32_t tonePeriod[3], noisePeriod, envelopePeriod;
+	} ay;
+	struct {
+		enum GamateMapper mapper;
+		uint8_t bank, firstBank;
+	} cartridge;
+	struct {
+		bool irq, nmi;
+		uint32_t irqClocks;
+	} interrupt;
+	struct {
+		uint64_t masterClocks;
+		uint32_t frameClocks;
+		bool frameDone;
+	} clocks;
+};
+
 struct Gamate {
 	struct GamateCpu cpu;
 	uint8_t ram[0x400];
@@ -281,6 +316,24 @@ void gamateTraceRecord(struct Gamate* gamate, const struct GamateTraceEntry* ent
 uint8_t gamateDisassemble(const struct Gamate* gamate, uint16_t address,
 	char* output, size_t outputSize,
 	GamateDisassemblyLabelCallback labelCallback, void* labelContext);
+
+// CPU register editing. P is normalized to 6502 status semantics and irqMask is kept synchronized.
+void gamateSetCpuPc(struct Gamate* gamate, uint16_t pc);
+void gamateSetCpuA(struct Gamate* gamate, uint8_t a);
+void gamateSetCpuX(struct Gamate* gamate, uint8_t x);
+void gamateSetCpuY(struct Gamate* gamate, uint8_t y);
+void gamateSetCpuS(struct Gamate* gamate, uint8_t s);
+void gamateSetCpuP(struct Gamate* gamate, uint8_t p);
+void gamateSetCpuStopped(struct Gamate* gamate, bool stopped);
+void gamateSetCpuRegisters(struct Gamate* gamate, uint16_t pc,
+	uint8_t a, uint8_t x, uint8_t y, uint8_t s, uint8_t p);
+
+void gamateGetPeripheralState(const struct Gamate* gamate,
+	struct GamatePeripheralState* state);
+uint8_t gamateGetVramByte(const struct Gamate* gamate, uint16_t offset);
+bool gamateSetVramByte(struct Gamate* gamate, uint16_t offset, uint8_t value);
+bool gamateGetVramTile(const struct Gamate* gamate, unsigned tile,
+	unsigned plane, uint8_t pixels[64]);
 
 size_t gamateStateSize(const struct Gamate* gamate);
 bool gamateSaveState(const struct Gamate* gamate, void* data, size_t size);

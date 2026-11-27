@@ -1082,6 +1082,97 @@ static void testTraceAndDisassembly(void) {
 	gamateFree(&g);
 }
 
+static void testStateViewsAndEditing(void) {
+	struct Gamate g;
+	gamateInit(&g);
+	uint8_t bios[GAMATE_BIOS_SIZE] = { 0 }, rom[0x4000] = { 0 };
+	bios[0xFFC] = 0x00;
+	bios[0xFFD] = 0xE0;
+	assert(gamateLoad(&g, rom, sizeof(rom), bios, sizeof(bios)));
+
+	gamateSetCpuRegisters(&g, 0xE123, 0x11, 0x22, 0x33, 0x44, 0x04);
+	assert(g.cpu.pc == 0xE123 && g.cpu.a == 0x11 && g.cpu.x == 0x22 &&
+		g.cpu.y == 0x33 && g.cpu.s == 0x44);
+	assert(g.cpu.p == 0x24 && g.cpu.irqMask);
+	gamateSetCpuP(&g, 0);
+	assert(g.cpu.p == 0x20 && !g.cpu.irqMask);
+	gamateSetCpuP(&g, 0xFF);
+	assert(g.cpu.p == 0xEF && g.cpu.irqMask);
+	gamateSetCpuStopped(&g, true);
+	assert(g.cpu.stopped);
+
+	g.vramAddress = 0x123;
+	g.scrollX = 0x12;
+	g.scrollY = 0x34;
+	g.vramPlane = true;
+	g.incrementRow = true;
+	g.window = true;
+	g.swapPlanes = true;
+	g.displayBlank = true;
+	g.displayStopped = true;
+	g.lcdClock = 99;
+	g.lcdRowEvent = 5;
+	g.protectionPassed = true;
+	g.protectionFailed = true;
+	g.protectionReply = true;
+	g.protectionPosition = 3;
+	g.protectionByte = 0xA5;
+	g.protectionSequence = 7;
+	g.uartTx = 0x81;
+	g.uartRx = 0x42;
+	g.uartTxBits = 3;
+	g.uartRxBits = 5;
+	g.uartTxLine = true;
+	g.ayAddress = 6;
+	g.ayRegisters[6] = 0x0F;
+	g.ayTonePeriod[0] = 1234;
+	g.ayNoisePeriod = 5678;
+	g.ayEnvelopePeriod = 9012;
+	g.mapper = GAMATE_MAPPER_BANKED;
+	g.bank = 4;
+	g.firstBank = 5;
+	g.irq = true;
+	g.nmi = true;
+	g.irqClocks = 12345;
+	g.masterClocks = 67890;
+	g.frameClocks = 54321;
+	g.frameDone = true;
+
+	struct GamatePeripheralState state;
+	gamateGetPeripheralState(&g, &state);
+	assert(state.lcd.vramAddress == 0x123 && state.lcd.scrollX == 0x12 &&
+		state.lcd.scrollY == 0x34 && state.lcd.vramPlane &&
+		state.lcd.incrementRow && state.lcd.window && state.lcd.swapPlanes &&
+		state.lcd.displayBlank && state.lcd.displayStopped &&
+		state.lcd.lcdClock == 99 && state.lcd.lcdRowEvent == 5);
+	assert(state.protection.passed && state.protection.failed &&
+		state.protection.reply && state.protection.position == 3 &&
+		state.protection.byte == 0xA5 && state.protection.sequence == 7);
+	assert(state.uart.tx == 0x81 && state.uart.rx == 0x42 &&
+		state.uart.txBits == 3 && state.uart.rxBits == 5 &&
+		state.uart.txLine);
+	assert(state.ay.address == 6 && state.ay.registers[6] == 0x0F &&
+		state.ay.tonePeriod[0] == 1234 &&
+		state.ay.noisePeriod == 5678 &&
+		state.ay.envelopePeriod == 9012);
+	assert(state.cartridge.mapper == GAMATE_MAPPER_BANKED &&
+		state.cartridge.bank == 4 && state.cartridge.firstBank == 5);
+	assert(state.interrupt.irq && state.interrupt.nmi &&
+		state.interrupt.irqClocks == 12345);
+	assert(state.clocks.masterClocks == 67890 &&
+		state.clocks.frameClocks == 54321 && state.clocks.frameDone);
+
+	gamateSetVramByte(&g, 0, 0x81);
+	assert(gamateGetVramByte(&g, 0) == 0x81);
+	assert(!gamateSetVramByte(&g, sizeof(g.vram), 0));
+	uint8_t tile[64];
+	assert(gamateGetVramTile(&g, 0, 0, tile));
+	assert(tile[0] == 1 && tile[1] == 0 && tile[7] == 1);
+	assert(!gamateGetVramTile(&g, 32 * 32, 0, tile));
+	assert(!gamateGetVramTile(&g, 0, 2, tile));
+	gamateFree(&g);
+}
+
 static void assertPeekMatchesRead(const struct Gamate* g, uint16_t address) {
 	struct Gamate copy = *g; // reads on the copy leave the machine under test untouched
 	assert(gamatePeek(g, address) == gamateRead(&copy, address));
@@ -1294,6 +1385,7 @@ int main(void) {
 	testDebugExecutionControl();
 	testWatchpoints();
 	testTraceAndDisassembly();
+	testStateViewsAndEditing();
 	testUart();
 	testVideo();
 	testVideoWindows();
