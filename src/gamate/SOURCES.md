@@ -961,6 +961,24 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   Controller-cycle matching rises from 442/443 to 445/450. The next targets are live `$F009`/IRQ
   wrapper timing and `$F018`.
 
+- `$F018` replacement timing alignment: the executable contract and purpose-written synthetic
+  streams above were used to separate fixed, row, pair, tile-group and emitted-column terms. The
+  retained independent implementation adds a tail-resident 46-CPU-cycle column delay, uses the
+  opaque contract's required X=`$FF` result to avoid unnecessary X preservation, and uses a
+  specialized pointer helper with bit-weighted high-tile delays. The in-place opaque setup was
+  relocated with unreachable fill so `$F01B` and every later runtime service retain their prior
+  addresses. No authentic instructions or payload bytes were consulted or reconstructed.
+  Minimal ordinary cases now place the emitted-column term at the authentic 330 master clocks;
+  opaque-pair and tile-group residuals are a few clocks. The first live Brick Blaster `$F018` call
+  improves from 119,224 to 151,676 clocks versus 152,264 authentic, across 2,000 VRAM writes and five
+  interrupts. Its first later video mismatch moves from frame 113 to 116. In the 1,000-frame matrix,
+  no-input video/VRAM matching becomes 114/108 frames and controller-cycle matching becomes 483/480.
+  All 1,373 boundary, 1,280 open-bus and 131,072 flag cases retain matching LCD/ROM sequences,
+  registers, RAM and peripheral behavior. Large timing residuals remain for some zero-count and
+  page-cross combinations, and fixed/row and interrupt-spanning timing are not yet exact. The
+  62-cartridge 100-frame SWK smoke sweep remains 59 normal passes plus the same three known
+  blank-output titles. Reports stayed in temporary storage; BIOS and cartridge inputs were read-only.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

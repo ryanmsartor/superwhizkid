@@ -960,11 +960,9 @@ draw_pair_stream:
 	sta LCD_CONTROL
 	lda $01
 	pha
-	lda $00
-	pha
 	lda #$00
 	jsr pair_stream_pass
-	pla
+	lda $00
 	sta $00
 	pla
 	sta $01
@@ -977,11 +975,11 @@ draw_pair_stream:
 pair_stream_pass:
 	pha
 	ldy #$00
-@row:
+f018_row:
 	lda ($00),y
 	cmp #$FE
 	bne :+
-	jmp @end
+	jmp f018_end
 :
 	sta $19
 	txa
@@ -994,7 +992,7 @@ pair_stream_pass:
 	sta $18
 	pla
 	tax
-@pair:
+f018_pair:
 	iny
 	bne :+
 	inc $01
@@ -1002,7 +1000,7 @@ pair_stream_pass:
 	lda ($00),y
 	cmp #$FF
 	bne :+
-	jmp @end_row
+	jmp f018_end_row
 :
 	sta $1A
 	iny
@@ -1011,6 +1009,8 @@ pair_stream_pass:
 :
 	lda ($00),y
 	sta $1B
+	lda $1A
+	bne f018_opaque_pointer
 	txa
 	pha
 	tsx
@@ -1020,28 +1020,22 @@ pair_stream_pass:
 	jsr point_tile
 	pla
 	tax
-	lda $1A
-	bne @opaque
 	lda $18
 	clc
 	adc $1B
 	sta $18
-	jmp @pair
-@opaque:
-	cmp #$20
-	bcc :+
-	clv
-:
-	asl a
-	asl a
-	asl a
+	jmp f018_pair
+f018_opaque_pointer:
+	jmp f018_opaque_setup
+	.repeat 6
+	nop
+	.endrepeat
+f018_opaque_tile_ready:
 	sta $1A
 	tya
 	pha
 	ldx $1B
-	lda #$00
-	sta $1B
-@repeat:
+f018_repeat:
 	lda $18
 	sta LCD_VRAM_ADDR_LO
 	lda $19
@@ -1073,20 +1067,23 @@ pair_stream_pass:
 	iny
 	lda ($02),y
 	sta LCD_VRAM_WRITE
+	; Complete the authentic 330-master-clock emitted-column term without duplicating this loop.
+	jsr f018_column_delay
 	inc $18
 	dex
-	bne @repeat
+	bne f018_repeat
+	stx $1B
 	pla
 	tay
 	ldx #$FF
-	jmp @pair
-@end_row:
+	jmp f018_pair
+f018_end_row:
 	iny
 	bne :+
 	inc $01
 :
-	jmp @row
-@end:
+	jmp f018_row
+f018_end:
 	pla
 	rts
 
@@ -2080,6 +2077,65 @@ finalize_boot:
 	cld
 	sec
 	jmp CART_ENTRY
+
+f018_column_delay:
+	; JSR + body + RTS contributes 46 CPU cycles (92 master clocks) per emitted column.
+	ldy #$06
+:
+	dey
+	bne :-
+	jmp :+
+:
+	rts
+
+f018_opaque_setup:
+	; Opaque pairs return X=$FF, so the caller's X need not take the transparent preservation path.
+	; Fall through to the specialized pointer helper to avoid a JSR/RTS pair.
+	cmp #$20
+	bcc :+
+	clv
+:
+	tsx
+	lda $0101,x
+	tax
+	lda $1A
+f018_point_tile:
+	; Equivalent pointer arithmetic for the opaque path, with the measured 32-master-clock cost per
+	; high tile-index group restored by bit-weighted delays.
+	sta $1A
+	lda $06,x
+	sta $02
+	lda $07,x
+	sta $03
+	lda $1A
+	asl a
+	bcc :+
+	inc $03
+	inc $03
+	inc $03
+	inc $03
+	.repeat 22
+	nop
+	.endrepeat
+:
+	asl a
+	bcc :+
+	inc $03
+	inc $03
+	.repeat 11
+	nop
+	.endrepeat
+:
+	asl a
+	bcc @bit5_clear
+	inc $03
+	.repeat 4
+	nop
+	.endrepeat
+	jmp @bit5_done
+@bit5_clear:
+@bit5_done:
+	jmp f018_opaque_tile_ready
 
 overflow_flag:
 	.byte $40

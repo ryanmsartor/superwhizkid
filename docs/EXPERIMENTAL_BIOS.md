@@ -234,9 +234,12 @@ reconstructed. This evidence led to the pending-IRQ release design described abo
 
 By the second `$F00C`, SWK has accumulated an additional 2,752-clock lead. The first live `$F009`
 accounts for 2,432 clocks of the baseline difference, while later waits differ by 32-50 clocks each.
-After the clear, `$F018` is the first large drawing-service difference: 119,224 SWK clocks versus
-152,264 authentic. `$F027` is not implicated in the first divergence. The next bounded targets are
-live `$F009`/IRQ-wrapper timing and `$F018`. Longer play,
+Before the `$F018` timing pass, the first Brick Blaster call took 119,224 SWK clocks versus 152,264
+authentic. The retained emitted-column and opaque-pointer corrections raise SWK to 151,676 clocks,
+leaving a 588-clock live residual across five interrupts. The first later video mismatch moves from
+frame 113 to 116; VRAM still differs at 113 because SWK enters the call 742 clocks early from the
+remaining live `$F009` phase. `$F027` is not implicated. The next bounded targets are the remaining
+`$F018` fixed/row and zero-count cases, followed by live `$F009`/IRQ-wrapper timing. Longer play,
 alternative schedules, physical hardware, and user-perceived playability remain untested here.
 
 ## Validation and limits
@@ -314,7 +317,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | `$F00F` fixed plane-0 clear | Exact for the controlled contract | Synthetic 775-byte VRAM, 829-LCD-write and 15,930-master-clock results agree; broader interrupt and side-effectful contexts are not claimed. NOP padding is an implementation convenience, not a timing substitute. |
 | `$F012` glyph run | Partial, improved | The fixed-row unroll, direct selector transfer, reduced stack bookkeeping, and combined C/V decision tree preserve the measured output, flags, and stack footprint. Across all 256 one-tile selectors and both tested entry-V states, SWK is now 68-130 clocks over the authentic selector/page formula; the original worst residual was 274. Exact class-dependent timing remains open. |
 | `$F015` two-plane bitmap copy | Partial, improved | Geometry, LCD writes and tail-JMP behavior are implemented. Keeping status on the stack lets `$01A` count columns while preserving `$01C`, eliminating both width stack round trips. Reordering the saved status/X values avoids a temporary status copy, and the entry X value is consumed directly when deriving the destination column. An out-of-line 256-row pointer path removes the ordinary per-column taken branch. Tested nonzero-height shapes now take `322 + c*(184 + 76*r)` versus the authentic `234 + c*(132 + 76*r)`; zero height uses `r=256` and a 176-clock column term. The per-byte cost is exact; the ordinary remaining difference is 88 fixed clocks plus 52 per column. A source-pointer carry still adds eight clocks beyond the authentic indexed-read page penalty. |
-| `$F018` pair stream | Partial | Corpus and synthetic non-timing properties match. Direct replacement measurements were 3,848 versus 4,172 authentic-model clocks for a mixed three-pair stream and 958 versus 876 for a transparent-only stream. Exact replacement timing across the broader caller matrix remains open. |
+| `$F018` pair stream | Partial, substantially improved | The emitted-column term now matches 330 master clocks, opaque-pair setup is within a few clocks in minimal cases, and tile-group timing is within 0-12 clocks there. Brick Blaster's first live call improves from 119,224 to 151,676 clocks versus 152,264 authentic. All 133,725 synthetic boundary/open-bus/flag cases retain matching non-timing behavior. Fixed/row residuals, zero opaque counts, page-cross combinations, and interrupt-spanning exactness remain open. |
 | `$F01B` row-run stream | Partial | Synthetic ordinary and escape/wrap cases matched UMC timing. Later callbacks, RAM aliases, decimal mode and interrupt-handler work are not fully timing-equivalent. |
 | `$F01E` tile-literal stream | Partial | A sampled context was 314,334 prototype clocks versus 324,556 authentic clocks; exact timing and broad stream variation remain open. |
 | `$F021` row-literal stream | Exact for the executable contract | All 406 authentic corpus calls and 450 synthetic cases matched the independent model, including exact uninterrupted timing and handler-time-only additions in 280 interrupt-spanning replays. Mutable aliases, nonterminating streams and handlers that alter service inputs remain outside the contract. |
