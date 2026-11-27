@@ -354,16 +354,17 @@ void retro_set_environment(retro_environment_t cb) {
 	if (!initialized) {
 		for (unsigned i = 0; i < 64; i++) snprintf(numbers[i], sizeof(numbers[i]), "%u", i);
 		unsigned baseCount = 0;
-		while (options[baseCount].key) {
-			optionsV1[baseCount] = options[baseCount];
-			optionsV2[baseCount].key = options[baseCount].key;
-			optionsV2[baseCount].desc = options[baseCount].desc;
-			optionsV2[baseCount].info = options[baseCount].info;
-			optionsV2[baseCount].default_value = options[baseCount].default_value;
-			memcpy(optionsV2[baseCount].values, options[baseCount].values,
-				sizeof(options[baseCount].values));
-			variables[baseCount] = baseVariables[baseCount];
-			baseCount++;
+		while (options[baseCount].key) baseCount++;
+		for (unsigned base = 0; base < baseCount; base++) {
+			unsigned i = base == 0 ? 0 : base + 15;
+			optionsV1[i] = options[base];
+			optionsV2[i].key = options[base].key;
+			optionsV2[i].desc = options[base].desc;
+			optionsV2[i].info = options[base].info;
+			optionsV2[i].default_value = options[base].default_value;
+			memcpy(optionsV2[i].values, options[base].values,
+				sizeof(options[base].values));
+			variables[i] = baseVariables[base];
 		}
 		static const char* channelNames[] = { "Red", "Green", "Blue" };
 		static const unsigned defaults[5][3] = {
@@ -371,7 +372,7 @@ void retro_set_environment(retro_environment_t cb) {
 		};
 		for (unsigned color = 0; color < 5; color++) {
 			for (unsigned channel = 0; channel < 3; channel++) {
-				unsigned i = baseCount + color * 3 + channel;
+				unsigned i = 1 + color * 3 + channel;
 				unsigned limit = channel == 1 ? 64 : 32;
 				snprintf(descriptions[color * 3 + channel], sizeof(descriptions[0]), "%s %s",
 					customColorNames[color], channelNames[channel]);
@@ -752,7 +753,7 @@ unsigned retro_api_version(void) { return RETRO_API_VERSION; }
 void retro_get_system_info(struct retro_system_info* info) {
 	memset(info, 0, sizeof(*info));
 	info->library_name = "superwhizkid";
-	info->library_version = "0.5.0";
+	info->library_version = "0.5.1";
 	info->valid_extensions = "bin|gam";
 	info->need_fullpath = false;
 	info->block_extract = false;
