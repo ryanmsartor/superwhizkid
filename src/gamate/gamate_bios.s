@@ -979,15 +979,17 @@ draw_pair_stream:
 	cmp #$FE
 	rts
 
+f018_end:
+	pla
+	rts
+
 pair_stream_pass:
 	pha
 	ldy #$00
 f018_row:
 	lda ($00),y
 	cmp #$FE
-	bne :+
-	jmp f018_end
-:
+	beq f018_end
 	sta $19
 	txa
 	pha
@@ -995,6 +997,7 @@ f018_row:
 	lda $0102,x
 	; The authentic row term is seven CPU cycles across the two plane passes.
 	bne :+
+	nop
 	nop
 :
 	beq :+
@@ -1010,9 +1013,16 @@ f018_pair:
 :
 	lda ($00),y
 	cmp #$FF
+	bne @pair_body
+	iny
 	bne :+
-	jmp f018_end_row
+	inc $01
 :
+	; CMP #$FF leaves carry set; retain the authentic row term after inlining this handler.
+	bcs :+
+:
+	jmp f018_row
+@pair_body:
 	sta $1A
 	iny
 	bne :+
@@ -1088,15 +1098,8 @@ f018_repeat:
 	tay
 	ldx #$FF
 	jmp f018_pair
-f018_end_row:
-	iny
-	bne :+
-	inc $01
-:
-	jmp f018_row
-f018_end:
-	pla
-	rts
+	; Preserve the placement of following services after moving the two-byte epilogue above.
+	nop
 
 ; Clears plane-0 rows $E6-$FE, then decodes (value, count) runs on rows relative to $E6.
 draw_row_runs:

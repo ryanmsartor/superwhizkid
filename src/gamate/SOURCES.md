@@ -1046,6 +1046,29 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   controller-cycle VRAM/video matches. Audio samples, AY/audio phase, and master-clock equality
   remain excluded from that frame-hash comparison.
 
+- `$F018` fixed-cost/layout follow-up: an internal two-pass tail transition reduced Brick Blaster's
+  residual from 78 to 64 clocks, but expanded the terminator dispatch and moved later BIOS code; it
+  was rejected rather than risk an adjacent service regression. A retained alternative inlines the
+  `$FF` row-delimiter handler and uses carry known set by `CMP #$FF` for a three-cycle row delay.
+  This keeps the 260-master-clock row term and the calibrated column loop while reducing code size.
+  Minimal opaque groups 0-6 now have zero pair/group residual, group 7 is four clocks short, and
+  transparent pairs remain four clocks long. Brick Blaster stays 78 clocks long: 21 transparent
+  pairs contribute +84, 32 group-7 pairs contribute -128, and the long path retains a +44 internal
+  page-layout term in addition to the +78 fixed term. The unchanged title residual is therefore not
+  evidence of no improvement to the general timing formula.
+
+- `$F018` direct-terminator follow-up: relocating the two-byte pass epilogue beside the pass entry
+  replaces the branch-over/absolute-jump terminator path with a direct conditional branch. One
+  additional first-plane NOP restores the exact row term after the resulting one-byte hot-loop
+  shift, while unreachable fill keeps following service placement fixed. Minimal cases now measure
+  a +70-clock fixed term, exact opaque-pair timing for groups 0-6, +4 clocks per transparent pair,
+  and -4 clocks for group 7. Brick Blaster's derived shape therefore predicts and measures +26:
+  `70 + 4*21 - 4*32`. Its masked call is 150,750 versus 150,724 UMC and its five-IRQ live call is
+  152,290 versus 152,264. Output, registers, RAM, port sequence, IRQ count, and entry phase match.
+  The repeated 1,000-frame matrix retains 110/114 no-input VRAM/video matches and records 720/719
+  controller-cycle VRAM/video matches. That hash count is a compatibility observation, not the
+  optimization target; the service-level timing residual is reduced from 78 to 26 clocks.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.
