@@ -79,6 +79,27 @@ Both modes retain the ROM and BIOS inputs read-only. No commercial payload, BIOS
 are copied into the repository or included in the report. Replay and snapshot files are diagnostic
 artifacts under the local temporary session only.
 
+For unattended frame-by-frame comparison, `gamatebioscompare` runs UMC, Bit, and SWK together and
+reports transitions in video/VRAM equality plus summary counts for RAM, CPU, hardware registers, and
+activity. It excludes audio samples, AY oscillator/envelope phase, sample phase, and absolute master
+clock from equality. The built-in `controller_cycle` is the standard schedule used by the BIOS-call
+campaign tool.
+
+```sh
+build/gamatebioscompare path/to/cartridge.bin \
+  path/to/gamate_bios_umc.bin path/to/gamate_bios_bit.bin \
+  build/gamate_bios_swk.bin no_input 1000
+
+build/gamatebioscompare path/to/cartridge.bin \
+  path/to/gamate_bios_umc.bin path/to/gamate_bios_bit.bin \
+  build/gamate_bios_swk.bin controller_cycle 1000
+```
+
+Hashes are derived diagnostics, not retained content. Strict RAM/CPU equality is intentionally
+reported but is not by itself a compatibility verdict: independently authored firmware uses
+different resident code and scratch, and even the authentic revisions can occupy different
+instruction boundaries while presenting the same settled frame.
+
 The frontend displays an experimental-BIOS notice when SWK is loaded, including through fallback.
 It does not detect the prototype's unsupported-service traps, which can leave the game halted.
 This integration enables testing; it is not a compatibility claim.
@@ -166,6 +187,32 @@ service itself.
 The common entry contract and its uncertainty are described in
 [`BIOS_REPLACEMENT_ANALYSIS.md`](BIOS_REPLACEMENT_ANALYSIS.md); service contracts and their
 limitations are in [`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md).
+
+### Brick Blaster three-BIOS frame matrix
+
+A 1,000-post-entry-frame matrix compared standalone Brick Blaster under UMC, Bit, and SWK with no
+input and with the standard controller-cycle schedule. Audio samples and audio/AY phase were
+excluded. All six runs completed without a trap.
+
+SWK differs at frame 1 because its blank startup presentation does not retain the authentic image.
+Video reconverges at frame 2 and VRAM at frame 5. The first later video deviation is a one-frame
+boundary at frame 109: SWK has blanked the display while entering its `$F00C` clear, and the authentic
+revisions reach the corresponding blank frame at 110. SWK VRAM first diverges again at frame 111;
+the first continuing no-input video divergence begins at frame 113. This ordering is consistent with
+different boot/service phase moving progressive clear work across frame boundaries, not with an
+incorrect `$F00C` data contract.
+
+In the no-input run, video matched either authentic BIOS on 110/1,000 frames and VRAM on 106/1,000;
+after frame 113 neither reconverged within the window. With controller-cycle input, video matched on
+442 frames and VRAM on 443. That campaign reconverged at frame 401 after the Select pulse and then
+showed later short match/diverge intervals around input and progressive-update boundaries; its final
+frame still differed. UMC and Bit also occasionally differ on individual progressive boundaries,
+so a transient hash mismatch is not automatically a functional failure.
+
+This result makes the next bounded investigation the pre-frame-109 call/IRQ/LCD schedule and the
+10,970-master-clock Brick Blaster entry offset between SWK and UMC. `$F027` is not implicated in the
+first divergence. Longer play, alternative schedules, physical hardware, and user-perceived
+playability remain untested by this matrix.
 
 ## Validation and limits
 

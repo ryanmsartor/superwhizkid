@@ -917,6 +917,20 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   Pixels, ordered accesses, registers and peripheral state also match. The replay still reports only
   the known stack write-footprint mismatch. Inputs remained read-only and no payload was retained.
 
+- Brick Blaster three-BIOS per-frame matrix: the project-authored `gamatebioscompare` diagnostic ran
+  the local standalone cartridge for 1,000 post-entry frames under both authentic BIOS revisions and
+  SWK, with no input and the standard controller-cycle schedule. It compared derived framebuffer,
+  VRAM and RAM hashes, CPU/register state, hardware registers, and cumulative activity while
+  explicitly excluding audio samples, AY oscillator/envelope phase, sample phase, and absolute
+  master clock. All inputs remained read-only and no payload, pixels, RAM, or VRAM were retained.
+  SWK's known blank-startup difference appears at frame 1; video matches at frame 2 and VRAM at frame
+  5. The first later video boundary is frame 109 versus authentic frame 110 during `$F00C`; VRAM
+  diverges at 111 and continuing no-input video divergence begins at 113. No-input SWK matches an
+  authentic video/VRAM hash on 110/106 frames; controller-cycle matches on 442/443 and reconverges at
+  frame 401 before later transient differences. This is emulator evidence, not physical validation.
+  Implementation impact: investigate entry phase and the pre-frame-109 service/IRQ/LCD schedule;
+  do not attribute the first divergence to `$F027` or audio phase.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.
