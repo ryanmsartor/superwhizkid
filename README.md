@@ -89,6 +89,67 @@ libretro cores and the independent experimental `gamate_bios_swk.bin`. Supply a 
 invoking it; after both core builds, BIOS validation, and architecture/ABI checks pass, it creates
 or replaces that tag and uploads a combined package to a draft GitHub release.
 
+## Screenshots of the emulator in action
+
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/images/Baseball.png" width="160" alt="Baseball"><br>
+      <strong>Baseball</strong>
+    </td>
+    <td align="center">
+      <img src="docs/images/Basketball.png" width="160" alt="Basketball"><br>
+      <strong>Basketball</strong>
+    </td>
+    <td align="center">
+      <img src="docs/images/Bomb%20Blaster.png" width="160" alt="Bomb Blaster"><br>
+      <strong>Bomb Blaster</strong>
+    </td>
+    <td align="center">
+      <img src="docs/images/Box%20Forum.png" width="160" alt="Box Forum"><br>
+      <strong>Box Forum</strong>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="docs/images/Brick%20Blaster.png" width="160" alt="Brick Blaster"><br>
+      <strong>Brick Blaster</strong>
+    </td>
+    <td align="center">
+      <img src="docs/images/Cube%20Up.png" width="160" alt="Cube Up"><br>
+      <strong>Cube Up</strong>
+    </td>
+    <td align="center">
+      <img src="docs/images/Dino%20Ball.png" width="160" alt="Dino Ball"><br>
+      <strong>Dino Ball</strong>
+    </td>
+    <td align="center">
+      <img src="docs/images/GP%20Race.png" width="160" alt="GP Race"><br>
+      <strong>GP Race</strong>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="docs/images/Jewelriss.png" width="160" alt="Jewelriss"><br>
+      <strong>Jewelriss</strong>
+    </td>
+    <td align="center">
+      <img src="docs/images/Kiki%20Inland.png" width="160" alt="Kiki Inland"><br>
+      <strong>Kiki Inland</strong>
+    </td>
+    <td align="center">
+      <img src="docs/images/Punk%20Boy.png" width="160" alt="Punk Boy"><br>
+      <strong>Punk Boy</strong>
+    </td>
+    <td align="center">
+      <img src="docs/images/Robin%20Hood.png" width="160" alt="Robin Hood"><br>
+      <strong>Robin Hood</strong>
+    </td>
+  </tr>
+</table>
+
+Game screenshots are included solely to demonstrate emulator functionality. All game titles, characters, artwork, and other game content remain the property of their respective copyright holders. This project is not affiliated with or endorsed by those rights holders.
+
 ## Provenance and license
 
 superwhizkid began development inside a fork of armNES, but its Gamate implementation was authored
