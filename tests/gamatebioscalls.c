@@ -26,6 +26,9 @@ struct CallContext {
 	uint16_t vramAddress;
 	uint8_t opcode, bank, firstBank;
 	uint8_t a, x, y, s, p;
+	uint8_t waitCounter;
+	uint32_t irqClocks;
+	bool irqPending;
 	uint8_t scrollX, scrollY, lcdFlags, ayAddress;
 	uint8_t ram[0x400], vram[0x4000], ayRegisters[16];
 	uint64_t startClocks, startIrqs, startNmis;
@@ -146,6 +149,7 @@ static void beginCall(struct CallContext* call, const struct Gamate* g, uint16_t
 		.source = source, .target = target, .expectedReturn = expectedReturn,
 		.opcode = opcode, .bank = bank, .firstBank = firstBank,
 		.a = a, .x = x, .y = y, .s = s, .p = p,
+		.waitCounter = g->ram[0x0B], .irqClocks = g->irqClocks, .irqPending = g->irq,
 		.vramAddress = g->vramAddress, .scrollX = g->scrollX, .scrollY = g->scrollY,
 		.lcdFlags = lcdFlags(g), .ayAddress = g->ayAddress,
 		.startClocks = startClocks,
@@ -161,13 +165,14 @@ static void beginCall(struct CallContext* call, const struct Gamate* g, uint16_t
 }
 
 static void finishCall(FILE* file, const struct CallContext* call, const struct Gamate* g,
-		unsigned returnFrame) {
+		uint64_t entryClocks, unsigned returnFrame) {
 	struct ChangeSummary ram = summarizeChanges(call->ram, g->ram, sizeof(call->ram));
 	struct ChangeSummary vram = summarizeChanges(call->vram, g->vram, sizeof(call->vram));
 	uint16_t ayMask = changedMask(call->ayRegisters, g->ayRegisters,
 		sizeof(call->ayRegisters));
 	fprintf(file,
 		"%04X\t%04X\t%04X\t%02X\t%02X\t%02X\t%u\t%u\t"
+		"%llu\t%llu\t%02X\t%u\t%u\t"
 		"%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t"
 		"%04X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t"
 		"%04X\t%02X\t%02X\t%02X\t%02X\t%02X\t%02X\t"
@@ -175,13 +180,16 @@ static void finishCall(FILE* file, const struct CallContext* call, const struct 
 		"%llu\t%llu\t%llu\t%llu\t%llu\t%llu\t%llu\n",
 		call->source, call->target, call->expectedReturn, call->opcode,
 		call->bank, call->firstBank, call->frame, returnFrame,
+		(unsigned long long) call->startClocks,
+		(unsigned long long) (g->masterClocks - entryClocks),
+		call->waitCounter, call->irqClocks, call->irqPending,
 		call->a, call->x, call->y, call->s, call->p,
 		g->cpu.a, g->cpu.x, g->cpu.y, g->cpu.s, g->cpu.p,
 		call->vramAddress, call->scrollX, call->scrollY, call->lcdFlags,
 		call->ayAddress, call->bank, call->firstBank,
 		g->vramAddress, g->scrollX, g->scrollY, lcdFlags(g),
 		g->ayAddress, g->bank, g->firstBank,
-		(unsigned long long) (g->masterClocks - call->startClocks),
+		(unsigned long long) (g->masterClocks - entryClocks - call->startClocks),
 		ram.count, ram.first, ram.last, vram.count, vram.first, vram.last, ayMask,
 		(unsigned long long) (g->diagnostics.ayWrites - call->startAyWrites),
 		(unsigned long long) (g->diagnostics.lcdWrites - call->startLcdWrites),
@@ -233,7 +241,9 @@ int main(int argc, char** argv) {
 			return 2;
 		}
 		fprintf(callFile, "source\ttarget\texpected_return\topcode\tbank\tfirst_bank\t"
-			"entry_frame\treturn_frame\tin_a\tin_x\tin_y\tin_s\tin_p\t"
+			"entry_frame\treturn_frame\tentry_clock\treturn_clock\t"
+			"in_wait_counter\tin_irq_clock\tin_irq_pending\t"
+			"in_a\tin_x\tin_y\tin_s\tin_p\t"
 			"out_a\tout_x\tout_y\tout_s\tout_p\t"
 			"in_vram_address\tin_scroll_x\tin_scroll_y\tin_lcd_flags\tin_ay_address\t"
 			"in_bank\tin_first_bank\tout_vram_address\tout_scroll_x\tout_scroll_y\t"
@@ -262,8 +272,17 @@ int main(int argc, char** argv) {
 	free(bios); free(rom);
 
 	bool entered = false;
+	uint64_t lastBootIrqClock = 0;
+	uint16_t lastBootIrqPc = 0;
 	for (uint64_t instruction = 0; instruction < 20000000; instruction++) {
+		uint64_t startClocks = g.masterClocks;
+		uint64_t oldIrqs = g.diagnostics.irqsTaken;
+		uint16_t interruptedPc = g.cpu.pc;
 		unsigned cycles = gamateCpuStep(&g);
+		if (g.diagnostics.irqsTaken != oldIrqs) {
+			lastBootIrqClock = startClocks;
+			lastBootIrqPc = interruptedPc;
+		}
 		gamateRunClocks(&g, cycles * 2);
 		if (g.protectionPassed && g.cpu.pc == 0x6020) {
 			entered = true;
@@ -276,6 +295,8 @@ int main(int argc, char** argv) {
 		if (callFile) fclose(callFile);
 		return 1;
 	}
+	uint64_t entryClocks = g.masterClocks;
+	uint32_t entryIrqClocks = g.irqClocks;
 
 	struct Event events[MAX_EVENTS];
 	size_t eventCount = 0;
@@ -321,14 +342,15 @@ int main(int argc, char** argv) {
 			}
 			gamateRunClocks(&g, cycles * 2);
 			if (completedCall) {
-				finishCall(callFile, &calls[callDepth - 1], &g, frame);
+				finishCall(callFile, &calls[callDepth - 1], &g, entryClocks, frame);
 				callDepth--;
 				completedCalls++;
 			}
 			if (callFile && directServiceCall) {
 				if (callDepth == MAX_CALL_DEPTH) callStackOverflow++;
 				else beginCall(&calls[callDepth++], &g, source, target, expectedReturn, opcode,
-					bank, firstBank, inA, inX, inY, inS, inP, startClocks + cycles * 2, frame);
+					bank, firstBank, inA, inX, inY, inS, inP,
+					startClocks + cycles * 2 - entryClocks, frame);
 			}
 		}
 	}
@@ -350,11 +372,14 @@ int main(int argc, char** argv) {
 	}
 	printf("# frames=%u cartridge_instructions=%llu bios_instructions=%llu events=%zu "
 		"irqs=%llu nmis=%llu overflow=%u completed_calls=%llu open_calls=%zu "
-		"unpaired_returns=%llu call_stack_overflow=%llu\n", frames,
+		"unpaired_returns=%llu call_stack_overflow=%llu boot_entry_master=%llu "
+		"boot_entry_irq_clock=%u boot_last_irq_age=%llu boot_last_irq_pc=%04X\n", frames,
 		(unsigned long long) cartridgeInstructions, (unsigned long long) biosInstructions, eventCount,
 		(unsigned long long) g.diagnostics.irqsTaken, (unsigned long long) g.diagnostics.nmisTaken,
 		overflow, (unsigned long long) completedCalls, callDepth,
-		(unsigned long long) unpairedReturns, (unsigned long long) callStackOverflow);
+		(unsigned long long) unpairedReturns, (unsigned long long) callStackOverflow,
+		(unsigned long long) entryClocks, entryIrqClocks,
+		(unsigned long long) (entryClocks - lastBootIrqClock), lastBootIrqPc);
 	gamateFree(&g);
 	if (callFile && fclose(callFile)) return 1;
 	return overflow || callStackOverflow || unpairedReturns ? 1 : 0;

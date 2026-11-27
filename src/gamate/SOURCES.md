@@ -808,8 +808,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 - SWK startup timing: the reset routine now performs 36 repeated 24-IRQ waits plus one 20-IRQ wait
   before clearing VRAM and continuing initialization to `$6020`. Brick Blaster measured entry at
-  `30,228,402` master clocks, while UMC measured `30,239,372` and Bit `30,239,430`. All three are
-  in frame floor `414` of the 72,900-clock frame model, within `109,970` master clocks of UMC.
+  `30,228,254` master clocks in a clean current-source rebuild, while UMC measured `30,239,372` and
+  Bit `30,239,430`. All three are in frame floor `414` of the 72,900-clock frame model; SWK is
+  11,118 master clocks earlier than UMC.
   This is emulator-observed timing work, not a physical-hardware measurement or claim of exact
   frame-aligned BIOS timing. Logo rendering and image assets are not retained as part of this result.
 
@@ -930,6 +931,24 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   frame 401 before later transient differences. This is emulator evidence, not physical validation.
   Implementation impact: investigate entry phase and the pre-frame-109 service/IRQ/LCD schedule;
   do not attribute the first divergence to `$F027` or audio phase.
+
+- Brick Blaster absolute-call-timing follow-up: `gamatebioscalls` was extended to report call-entry
+  and return clocks relative to `$6020`, plus the entry wait counter, IRQ timer and pending-IRQ state.
+  The UMC, Bit and SWK runs use the same service order through frame 109, and their first `$F00C`
+  begins exactly 16,814 clocks after `$6020`. Current-source SWK reaches `$6020` 11,118 master clocks
+  before UMC with 2,526 IRQ-timer clocks elapsed, versus 218 for UMC. A controlled fixed-delay
+  experiment reached UMC's exact absolute entry clock but left 13,644 IRQ-timer clocks elapsed and
+  did not move the frame-109 comparison boundary; the delay was reverted. SWK's final boot IRQ
+  interrupts `$F187`
+  (the `INY` in its second `clear_plane`) 2,526 clocks before entry. Both authentic revisions report
+  `$F2FA` and an age of 218 clocks. The authentic address is treated only as an observed execution
+  boundary; no authentic instruction or listing was retained or reconstructed. By the second
+  `$F00C`, SWK leads by an
+  additional 2,752 clocks: the first live `$F009` contributes 2,432 and later waits differ by 32-50
+  clocks. The following `$F018` takes 119,224 SWK clocks versus 152,264 under either authentic BIOS.
+  These are local emulator observations using read-only BIOS/cartridge inputs; reports remained in
+  temporary storage and retained no payload. Implementation impact: target the final accepted boot
+  IRQ before endpoint padding, then live wait/IRQ-wrapper phase and `$F018` timing.
 
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
