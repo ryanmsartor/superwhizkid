@@ -247,7 +247,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | `$F01E` tile-literal stream | Partial | A sampled context was 314,334 prototype clocks versus 324,556 authentic clocks; exact timing and broad stream variation remain open. |
 | `$F021` row-literal stream | Exact for the executable contract | All 406 authentic corpus calls and 450 synthetic cases matched the independent model, including exact uninterrupted timing and handler-time-only additions in 280 interrupt-spanning replays. Mutable aliases, nonterminating streams and handlers that alter service inputs remain outside the contract. |
 | `$F024` record initialization | Exact for the controlled contract | Synthetic D-clear record initialization matches 824 master clocks, 32 `$FF` writes, register/status and no peripheral effects. D-set, later callback and interrupt-spanning contexts remain open. |
-| `$F027` sprite/background compositor | Shape-dependent; large-object shift corrected | Pairing two rows in the large-object shifter and applying separate zero/nonzero fixed costs makes isolated shift 0 exact and shifts 1-7 four master clocks high; the former residual range was -394 to +66. The untouched small-object arm is now `+466,+320,+176,+32,-112,-256,-400,-544` after code-layout movement. A fresh 141-call Cube Up replay still has mixed-call residuals of +4,088, +3,728, and +288 clocks by shape. Pixel output, VRAM/LCD/ROM access sequences, registers and peripherals match; stack write footprint differs. The next work is the small-object fixed/slope correction followed by mixed selector/page-alignment paths. |
+| `$F027` sprite/background compositor | Object shift formulas nearly exact | The large-object arm pairs shifted rows and uses separate zero/nonzero fixed costs; after the small-path layout change its isolated residuals are +16 at shift 0 and +20 at shifts 1-7. A dedicated eight-row small-source loader plus measured fixed/per-shift costs makes small shift 0 exact and shifts 1-7 two clocks fast, replacing the former +466 to -544 range. In the 141-call Cube Up replay, the three-large-object shape is now exact, the eight-small-object shape is +336 clocks, and the common four-redraw/four-object shape is +2,224. Pixel output, VRAM/LCD/ROM access sequences, registers and peripherals match; stack write footprint differs. Remaining timing is concentrated in selector/source-alignment and mixed redraw paths rather than the object shift slopes. |
 | `$F02A` plane-0 rectangle fill | Exact uninterrupted timing | Ordinary and zero-derived synthetic shapes now follow `126 + 58*c + 18*c*r`; tested 1×1, 2×3, 256×1, and 1×256 cases take 202, 350, 19,582, and 4,792 master clocks. Interrupt-spanning timing remains open. |
 | `$F02D` plane-1 rectangle fill | Partial | Ordinary synthetic timing is `120 + 58*c + 18*c*r`, and direct 256×1/1×256 checks measure 19,574/4,784 clocks. The 1×1 authentic residual remains 196 versus 194 in the replacement, and broad IRQ combinations remain open. |
 | `$F030` pseudorandom step | Exact uninterrupted timing | The state transition and register/status contract match the exhaustive checker; SWK now takes 174 master clocks for every tested nonzero input and 188 for zero, matching both authentic revisions. Interrupt interleaving, reentrancy, and callback-alias timing remain open. |
@@ -316,10 +316,10 @@ Timing differs from the authentic BIOSes:
   same 141-call Cube Up schedule found much smaller but shape-dependent residuals: 139 common calls
   were 3,936 clocks high, a three-large-object call was 3,424 high, and an eight-small-object call
   was 894 low. This supersedes the earlier 33,000–68,000-clock range; it does not yet establish
-  exact timing for other shifts, cartridges, interrupt phases, or source aliases. After the first
-  large-object shift correction, the same three current mixed shapes measure +4,088, +3,728, and
-  +288 clocks; isolated large objects are exact or four clocks high, showing that selector/source
-  alignment and the untouched small-object arm still dominate these whole-call residuals.
+  exact timing for other shifts, cartridges, interrupt phases, or source aliases. After both object
+  shift corrections, the same current mixed shapes measure +2,224, 0, and +336 clocks. The exact
+  three-large-object result and near-exact isolated matrices leave selector/source alignment, mixed
+  redraw paths, and stack footprint as the next bounded discrepancies.
 - `$F018` timing also differs.
 - `$F01B` matched UMC timing in the synthetic cases.
 

@@ -860,6 +860,18 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   and mixed selector/source-alignment timing must both be rechecked after each layout change. No
   commercial payload was retained; the local inputs remained read-only.
 
+- SWK `$F027` small-object specialization: the generic variable-height source traversal was replaced
+  for eight-pixel objects by a dedicated two-plane, eight-row loader that writes the same source and
+  spill buffers. Measured fixed and per-shift timing blocks then bring the isolated small-object
+  residual to zero at shift 0 and -2 master clocks at shifts 1-7; the prior post-layout range was
+  +466 through -544. The accompanying layout movement leaves isolated large objects +16/+20 clocks,
+  while the 141-call Cube Up replay now measures 0 for its three-large-object shape, +336 for its
+  eight-small-object shape, and +2,224 for the common four-small-redraw/four-small-object shape.
+  Pixels, ordered VRAM/LCD/cartridge accesses, registers, status and unrelated peripherals still
+  match. The remaining replay gaps therefore target selector/source alignment, mixed redraw work,
+  and the already identified stack footprint rather than object shift slopes. The synthetic loader
+  contains no commercial data; local BIOS and cartridge inputs remained read-only.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

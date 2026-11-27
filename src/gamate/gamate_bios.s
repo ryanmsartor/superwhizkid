@@ -1485,6 +1485,12 @@ draw_object:
 	lda $0300
 	and #$07
 	sta $1B
+	lda $1C
+	cmp #$08
+	bne @generic_source
+	jsr prepare_small_object_source
+	jmp @source_ready
+@generic_source:
 	ldx #$00
 	stx $00
 @source_plane:
@@ -1545,6 +1551,7 @@ draw_object:
 	ldx #$30
 	bne @source_plane
 :
+@source_ready:
 	ldy $1B
 	bne @shift_nonzero
 	lda $1C
@@ -1572,6 +1579,15 @@ draw_object:
 	ror $0370 + row
 	lsr $0398 + row
 	ror $03A0 + row
+	.endrepeat
+	; The specialized source loader removes the generic traversal's excess fixed work. Restore the
+	; authentic 72-cycle cost for each applied horizontal shift without changing object state.
+	ldx #$0D
+@small_shift_timing:
+	dex
+	bne @small_shift_timing
+	.repeat 3
+	nop
 	.endrepeat
 	dey
 	bne @shift_small
@@ -1755,6 +1771,47 @@ draw_object:
 	sta $1C
 	lda $08
 	sta $02
+	rts
+
+; The eight-pixel object needs one eight-row source tile and one cleared spill column per plane.
+; Keep this fixed-size path separate from the large object's variable two-tile traversal.
+prepare_small_object_source:
+	lda $0302
+	ldx #$00
+	jsr point_tile
+	tay
+	ldx #$00
+@plane0_row:
+	lda ($02),y
+	sta $0368,x
+	lda #$00
+	sta $0370,x
+	iny
+	inx
+	cpx #$08
+	bne @plane0_row
+	lda $0302
+	ldx #$02
+	jsr point_tile
+	tay
+	ldx #$00
+@plane1_row:
+	lda ($02),y
+	sta $0398,x
+	lda #$00
+	sta $03A0,x
+	iny
+	inx
+	cpx #$08
+	bne @plane1_row
+	; Fixed 255-cycle component of the authentic small-object path.
+	ldx #$32
+@small_fixed_timing:
+	dex
+	bne @small_fixed_timing
+	.repeat 2
+	nop
+	.endrepeat
 	rts
 
 .segment "CODE"
