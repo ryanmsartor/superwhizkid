@@ -872,6 +872,29 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   and the already identified stack footprint rather than object shift slopes. The synthetic loader
   contains no commercial data; local BIOS and cartridge inputs remained read-only.
 
+- SWK `$F027` selector-group matrix and rejected local correction: a purpose-written small-object
+  matrix now exercises every callable object selector `$00-$FE` against the authentic
+  `T(selector)` formula (`$FF` disables an object record). Residuals are
+  constant within each 32-selector group and measure `0,-48,-92,-140,-180,-228,-272,-320` master
+  clocks from group 0 through 7. The differences decompose through selector bits, but adding those
+  costs directly to `point_tile` exposed compensating traversal overhead: the controlled large and
+  small redraw samples became 2,640 and 1,108 clocks slow. Because code placement also changes 6502
+  branch page-crossing costs, that local correction was reverted. Implementation impact: rewrite or
+  retime tile selection and redraw traversal as one measured unit, then rerun object and mixed-call
+  matrices. The test uses synthetic cartridge data; local commercial inputs remained read-only and
+  no payload bytes were retained.
+
+- SWK `$F027` object-only selector correction: object source loading now uses an out-of-line
+  `point_object_tile` path while redraw retains its existing jointly calibrated lookup/traversal.
+  Selector timing is applied once across the two graphics planes. After rebalancing the existing
+  object fixed-cost blocks, groups 0-3 match the authentic `T(selector)` formula and groups 4-7 are
+  two master clocks fast; the controlled combined case is +2 clocks. In the 141-call Cube Up replay,
+  the three-large-object and eight-small-object shapes are both exact. The common shape remains
+  +2,224 clocks with four small redraws, identifying a 556-clock-per-redraw residual in that context.
+  Functional outputs and ordered accesses continue to match. This retained split avoids changing
+  redraw behavior while establishing that the next timing target is redraw traversal/selector
+  interaction. Inputs remained read-only and no payload bytes were retained.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

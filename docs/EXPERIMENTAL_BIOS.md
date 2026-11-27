@@ -247,7 +247,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | `$F01E` tile-literal stream | Partial | A sampled context was 314,334 prototype clocks versus 324,556 authentic clocks; exact timing and broad stream variation remain open. |
 | `$F021` row-literal stream | Exact for the executable contract | All 406 authentic corpus calls and 450 synthetic cases matched the independent model, including exact uninterrupted timing and handler-time-only additions in 280 interrupt-spanning replays. Mutable aliases, nonterminating streams and handlers that alter service inputs remain outside the contract. |
 | `$F024` record initialization | Exact for the controlled contract | Synthetic D-clear record initialization matches 824 master clocks, 32 `$FF` writes, register/status and no peripheral effects. D-set, later callback and interrupt-spanning contexts remain open. |
-| `$F027` sprite/background compositor | Object shift formulas nearly exact | The large-object arm pairs shifted rows and uses separate zero/nonzero fixed costs; after the small-path layout change its isolated residuals are +16 at shift 0 and +20 at shifts 1-7. A dedicated eight-row small-source loader plus measured fixed/per-shift costs makes small shift 0 exact and shifts 1-7 two clocks fast, replacing the former +466 to -544 range. In the 141-call Cube Up replay, the three-large-object shape is now exact, the eight-small-object shape is +336 clocks, and the common four-redraw/four-object shape is +2,224. Pixel output, VRAM/LCD/ROM access sequences, registers and peripherals match; stack write footprint differs. Remaining timing is concentrated in selector/source-alignment and mixed redraw paths rather than the object shift slopes. |
+| `$F027` sprite/background compositor | Object formulas nearly exact; redraw timing open | Objects now use a separate selector-timed lookup: callable selector groups 0-3 are exact and groups 4-7 are two master clocks fast. Large-object shift residuals are 0/+4 and small-object residuals 0/-2; the controlled combined case is +2. In the 141-call Cube Up replay, both object-only shapes (three large and eight small) are now exact. The common four-small-redraw/four-small-object shape remains +2,224 clocks, isolating the next timing work to 556 clocks per small redraw in that context. Pixel output, VRAM/LCD/ROM access sequences, registers and peripherals match; stack write footprint differs. |
 | `$F02A` plane-0 rectangle fill | Exact uninterrupted timing | Ordinary and zero-derived synthetic shapes now follow `126 + 58*c + 18*c*r`; tested 1×1, 2×3, 256×1, and 1×256 cases take 202, 350, 19,582, and 4,792 master clocks. Interrupt-spanning timing remains open. |
 | `$F02D` plane-1 rectangle fill | Partial | Ordinary synthetic timing is `120 + 58*c + 18*c*r`, and direct 256×1/1×256 checks measure 19,574/4,784 clocks. The 1×1 authentic residual remains 196 versus 194 in the replacement, and broad IRQ combinations remain open. |
 | `$F030` pseudorandom step | Exact uninterrupted timing | The state transition and register/status contract match the exhaustive checker; SWK now takes 174 master clocks for every tested nonzero input and 188 for zero, matching both authentic revisions. Interrupt interleaving, reentrancy, and callback-alias timing remain open. |
@@ -292,6 +292,19 @@ targeted timing equations or could not be defended across the tested shape class
   had 0/3 records at 76,304 predicted/138,848 actual; and one had 0/8 at 66,774 predicted/120,458
   actual. These gaps span 30,588–62,544 master clocks and are not a single safe NOP constant.
   Temporary diagnostics were removed and no padding or functional rewrite was retained.
+- **`$F027` isolated `point_tile` correction:** the exhaustive callable-object selector matrix
+  (`$00-$FE`; `$FF` disables the record) shows residuals
+  by selector group `$00-$1F` through `$E0-$FF` of `0,-48,-92,-140,-180,-228,-272,-320`
+  master clocks. Adding the corresponding bitwise timing directly to `point_tile` made its
+  `T(selector)` term exact, but exposed 2,640 clocks of large-redraw and 1,108 clocks of small-redraw
+  overhead previously hidden by the under-timed lookup. It also moved later code across instruction
+  page boundaries. The change was reverted: tile selection and redraw traversal must be corrected
+  together rather than trading one compensating error for another.
+
+  A later retained implementation split object lookup into `point_object_tile` while leaving redraw
+  lookup unchanged. This makes the object selector spectrum exact within two clocks without exposing
+  the compensating redraw overhead. The rejected experiment remains relevant specifically to a
+  shared lookup correction; redraw traversal still requires a unit-level rewrite or retiming.
 
 No speculative fill, random, formatter, or compositor timing change remains in production code.
 Retained timing corrections are limited to measured contracts with synthetic assertions; the

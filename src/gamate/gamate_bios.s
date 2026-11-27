@@ -1517,7 +1517,7 @@ draw_object:
 	pha
 	ldx $00
 	lda $1A
-	jsr point_tile
+	jsr point_object_tile
 	tay
 	pla
 	tax
@@ -1561,11 +1561,11 @@ draw_object:
 @large_zero_shift:
 	; The paired-row loop below removes 32 CPU cycles per large-object shift. A zero-shift
 	; large object bypasses it, so retain its separately measured fixed cost here.
-	ldx #$1C
+	ldx #$06
 @large_zero_timing:
 	dex
 	bne @large_zero_timing
-	.repeat 3
+	.repeat 4
 	nop
 	.endrepeat
 	jmp @shifted
@@ -1618,10 +1618,11 @@ draw_object:
 	.endrepeat
 	dey
 	bne @shift_large
-	ldx #$1E
+	ldx #$08
 @large_shift_timing:
 	dex
 	bne @large_shift_timing
+	nop
 @shifted:
 	lda LCD_CONTROL_BASE
 	ora #$40
@@ -1778,7 +1779,7 @@ draw_object:
 prepare_small_object_source:
 	lda $0302
 	ldx #$00
-	jsr point_tile
+	jsr point_object_tile
 	tay
 	ldx #$00
 @plane0_row:
@@ -1792,7 +1793,7 @@ prepare_small_object_source:
 	bne @plane0_row
 	lda $0302
 	ldx #$02
-	jsr point_tile
+	jsr point_object_tile
 	tay
 	ldx #$00
 @plane1_row:
@@ -1805,13 +1806,62 @@ prepare_small_object_source:
 	cpx #$08
 	bne @plane1_row
 	; Fixed 255-cycle component of the authentic small-object path.
-	ldx #$32
+	ldx #$2F
 @small_fixed_timing:
 	dex
 	bne @small_fixed_timing
-	.repeat 2
+	.repeat 3
 	nop
 	.endrepeat
+	rts
+
+; Object fetches expose the authentic selector-dependent timing directly. Redraw traversal still
+; uses point_tile because its current fixed traversal cost is calibrated together with that lookup;
+; the two paths must remain separate until redraw is rewritten as a unit.
+point_object_tile:
+	cpx #$00
+	beq :+
+	jmp point_tile
+:
+	sta $1A
+	lda $06,x
+	sta $02
+	lda $07,x
+	sta $03
+	lda $1A
+	asl a
+	bcc :+
+	inc $03
+	inc $03
+	inc $03
+	inc $03
+	ldx #$11
+@selector_bit7_timing:
+	dex
+	bne @selector_bit7_timing
+	nop
+	nop
+:
+	asl a
+	bcc :+
+	inc $03
+	inc $03
+	ldx #$09
+@selector_bit6_timing:
+	dex
+	bne @selector_bit6_timing
+:
+	asl a
+	bcc :+
+	inc $03
+	ldx #$03
+@selector_bit5_timing:
+	dex
+	bne @selector_bit5_timing
+	.repeat 4
+	nop
+	.endrepeat
+:
 	rts
 
 .segment "CODE"
