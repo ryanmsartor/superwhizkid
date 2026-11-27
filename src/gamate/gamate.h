@@ -46,7 +46,11 @@ typedef void (*GamateRomReadCallback)(void* context, const struct Gamate* gamate
 	uint16_t address, size_t physicalOffset);
 typedef void (*GamateLcdWriteCallback)(void* context, const struct Gamate* gamate,
 	uint8_t reg, uint8_t value);
+typedef void (*GamateWatchpointCallback)(void* context, const struct Gamate* gamate,
+	bool write, bool dummy, uint16_t address, uint8_t previous, uint8_t value);
 #endif
+
+enum GamateWatchpointMode { GAMATE_WATCHPOINT_READ, GAMATE_WATCHPOINT_WRITE, GAMATE_WATCHPOINT_ACCESS };
 
 struct GamateCpu {
 	uint16_t pc;
@@ -82,6 +86,12 @@ struct GamateDiagnostics {
 	bool ramWatchEnabled;
 	GamateRamAccessCallback ramAccessCallback;
 	void* ramAccessContext;
+	bool watchpointDummyAccess;
+	uint8_t watchpointRead[0x10000 / 8];
+	uint8_t watchpointWrite[0x10000 / 8];
+	uint8_t watchpointAccess[0x10000 / 8];
+	GamateWatchpointCallback watchpointCallback;
+	void* watchpointContext;
 	GamateRomReadCallback romReadCallback;
 	GamateLcdWriteCallback lcdWriteCallback;
 	void* lcdWriteContext;
@@ -200,6 +210,13 @@ void gamateSetRomDiagnosticWatch(struct Gamate* gamate,
 	GamateRomReadCallback callback, void* context);
 void gamateSetLcdDiagnosticWatch(struct Gamate* gamate,
 	GamateLcdWriteCallback callback, void* context);
+void gamateSetWatchpoint(struct Gamate* gamate, uint16_t address,
+	enum GamateWatchpointMode mode, GamateWatchpointCallback callback, void* context);
+void gamateClearWatchpoint(struct Gamate* gamate, uint16_t address,
+	enum GamateWatchpointMode mode);
+void gamateClearWatchpoints(struct Gamate* gamate);
+bool gamateWatchpointEnabled(const struct Gamate* gamate, uint16_t address,
+	enum GamateWatchpointMode mode);
 #endif
 void gamateSetAudio(struct Gamate* gamate, int16_t* output, size_t frameCapacity, unsigned sampleRate);
 void gamateCpuReset(struct Gamate* gamate);

@@ -25,6 +25,13 @@ struct RomReadCapture {
 	size_t physicalOffset;
 };
 
+struct WatchpointCapture {
+	unsigned count;
+	bool write, dummy;
+	uint16_t address;
+	uint8_t previous, value;
+};
+
 static void captureRamAccess(void* context, const struct Gamate* g, bool write,
 		uint16_t address, uint8_t previous, uint8_t value) {
 	struct RamAccessCapture* capture = context;
@@ -44,6 +51,19 @@ static void captureRomRead(void* context, const struct Gamate* g,
 	capture->count++;
 	capture->address = address;
 	capture->physicalOffset = physicalOffset;
+}
+
+static void captureWatchpoint(void* context, const struct Gamate* g,
+		bool write, bool dummy, uint16_t address,
+		uint8_t previous, uint8_t value) {
+	struct WatchpointCapture* capture = context;
+	assert(g);
+	capture->count++;
+	capture->write = write;
+	capture->dummy = dummy;
+	capture->address = address;
+	capture->previous = previous;
+	capture->value = value;
 }
 
 static void captureLinkBit(void* context, bool bit) {
@@ -936,6 +956,65 @@ static void testSampleEventBatching(void) {
 	}
 }
 
+static void testWatchpoints(void) {
+	struct Gamate g;
+	gamateInit(&g);
+	uint8_t bios[GAMATE_BIOS_SIZE] = { 0 }, rom[0x4000] = { 0 };
+	bios[0x000] = 0xEA; // NOP
+	bios[0x001] = 0xEA;
+	bios[0xFFC] = 0x00;
+	bios[0xFFD] = 0xE0;
+	assert(gamateLoad(&g, rom, sizeof(rom), bios, sizeof(bios)));
+
+	struct WatchpointCapture capture = { 0 };
+	g.ram[0x123] = 0x5A;
+	gamateSetWatchpoint(&g, 0x0523, GAMATE_WATCHPOINT_READ,
+		captureWatchpoint, &capture);
+	assert(gamateWatchpointEnabled(&g, 0x0523, GAMATE_WATCHPOINT_READ));
+	assert(!gamateWatchpointEnabled(&g, 0x0523, GAMATE_WATCHPOINT_WRITE));
+	assert(gamateRead(&g, 0x0523) == 0x5A);
+	assert(capture.count == 1 && !capture.write && !capture.dummy &&
+		capture.address == 0x0523 && capture.previous == 0x5A && capture.value == 0x5A);
+
+	gamateClearWatchpoint(&g, 0x0523, GAMATE_WATCHPOINT_READ);
+	assert(!gamateWatchpointEnabled(&g, 0x0523, GAMATE_WATCHPOINT_READ));
+	capture.count = 0;
+	assert(gamateRead(&g, 0x0523) == 0x5A);
+	assert(capture.count == 0);
+
+	gamateSetWatchpoint(&g, 0x0523, GAMATE_WATCHPOINT_WRITE,
+		captureWatchpoint, &capture);
+	gamateWrite(&g, 0x0523, 0xA5);
+	assert(g.ram[0x123] == 0xA5);
+	assert(capture.count == 1 && capture.write && !capture.dummy &&
+		capture.address == 0x0523 && capture.previous == 0x5A && capture.value == 0xA5);
+
+	gamateClearWatchpoints(&g);
+	gamateSetWatchpoint(&g, 0x400B, GAMATE_WATCHPOINT_ACCESS,
+		captureWatchpoint, &capture);
+	assert(gamateWatchpointEnabled(&g, 0x400B, GAMATE_WATCHPOINT_ACCESS));
+	capture.count = 0;
+	gamateWrite(&g, 0x400B, 3);
+	assert(capture.count == 1 && capture.write &&
+		capture.address == 0x400B && capture.value == 3);
+	gamateRead(&g, 0x400B);
+	assert(capture.count == 2 && !capture.write &&
+		capture.address == 0x400B);
+
+	gamateClearWatchpoints(&g);
+	gamateSetWatchpoint(&g, 0xE001, GAMATE_WATCHPOINT_READ,
+		captureWatchpoint, &capture);
+	gamateReset(&g);
+	assert(gamateWatchpointEnabled(&g, 0xE001, GAMATE_WATCHPOINT_READ));
+	capture.count = 0;
+	gamateCpuStep(&g);
+	assert(capture.count >= 1);
+	assert(capture.address == 0xE001 && capture.dummy);
+
+	gamateClearWatchpoints(&g);
+	gamateFree(&g);
+}
+
 static void assertPeekMatchesRead(const struct Gamate* g, uint16_t address) {
 	struct Gamate copy = *g; // reads on the copy leave the machine under test untouched
 	assert(gamatePeek(g, address) == gamateRead(&copy, address));
@@ -1146,6 +1225,7 @@ int main(void) {
 	testMemory();
 	testDebugAccess();
 	testDebugExecutionControl();
+	testWatchpoints();
 	testUart();
 	testVideo();
 	testVideoWindows();

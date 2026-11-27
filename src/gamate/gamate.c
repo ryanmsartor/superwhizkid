@@ -95,6 +95,16 @@ void gamateFree(struct Gamate* g) {
 }
 
 void gamateReset(struct Gamate* g) {
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+	uint8_t watchpointRead[0x10000 / 8];
+	uint8_t watchpointWrite[0x10000 / 8];
+	uint8_t watchpointAccess[0x10000 / 8];
+	GamateWatchpointCallback watchpointCallback = g->diagnostics.watchpointCallback;
+	void* watchpointContext = g->diagnostics.watchpointContext;
+	memcpy(watchpointRead, g->diagnostics.watchpointRead, sizeof(watchpointRead));
+	memcpy(watchpointWrite, g->diagnostics.watchpointWrite, sizeof(watchpointWrite));
+	memcpy(watchpointAccess, g->diagnostics.watchpointAccess, sizeof(watchpointAccess));
+#endif
 	memset(g->ram, 0xFF, sizeof(g->ram));
 	memset(g->vram, 0, sizeof(g->vram));
 	g->vramAddress = 0;
@@ -136,6 +146,13 @@ void gamateReset(struct Gamate* g) {
 	memset(g->lcdAccum, 0, sizeof(g->lcdAccum));
 	memset(g->frameBuffer, 0, sizeof(g->frameBuffer));
 	memset(&g->diagnostics, 0, sizeof(g->diagnostics));
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+	memcpy(g->diagnostics.watchpointRead, watchpointRead, sizeof(watchpointRead));
+	memcpy(g->diagnostics.watchpointWrite, watchpointWrite, sizeof(watchpointWrite));
+	memcpy(g->diagnostics.watchpointAccess, watchpointAccess, sizeof(watchpointAccess));
+	g->diagnostics.watchpointCallback = watchpointCallback;
+	g->diagnostics.watchpointContext = watchpointContext;
+#endif
 	g->debug.mode = GAMATE_DEBUG_MODE_NONE;
 	g->debug.runToAddress = g->debug.stepAddress = 0;
 	g->debug.stepStackPointer = 0;
@@ -245,6 +262,60 @@ void gamateSetLcdDiagnosticWatch(struct Gamate* g,
 		GamateLcdWriteCallback callback, void* context) {
 	g->diagnostics.lcdWriteCallback = callback;
 	g->diagnostics.lcdWriteContext = context;
+}
+
+void gamateSetWatchpoint(struct Gamate* g, uint16_t address,
+		enum GamateWatchpointMode mode, GamateWatchpointCallback callback, void* context) {
+	size_t offset = (size_t) address;
+	uint8_t mask = (uint8_t) 1 << (offset & 7);
+	uint8_t* map = mode == GAMATE_WATCHPOINT_READ ? g->diagnostics.watchpointRead :
+		mode == GAMATE_WATCHPOINT_WRITE ? g->diagnostics.watchpointWrite :
+		g->diagnostics.watchpointAccess;
+	if (callback) {
+		map[offset >> 3] |= mask;
+		g->diagnostics.watchpointCallback = callback;
+		g->diagnostics.watchpointContext = context;
+	} else {
+		map[offset >> 3] &= (uint8_t) ~mask;
+	}
+}
+
+void gamateClearWatchpoint(struct Gamate* g, uint16_t address,
+		enum GamateWatchpointMode mode) {
+	gamateSetWatchpoint(g, address, mode, NULL, NULL);
+}
+
+void gamateClearWatchpoints(struct Gamate* g) {
+	memset(g->diagnostics.watchpointRead, 0, sizeof(g->diagnostics.watchpointRead));
+	memset(g->diagnostics.watchpointWrite, 0, sizeof(g->diagnostics.watchpointWrite));
+	memset(g->diagnostics.watchpointAccess, 0, sizeof(g->diagnostics.watchpointAccess));
+	g->diagnostics.watchpointCallback = NULL;
+	g->diagnostics.watchpointContext = NULL;
+}
+
+bool gamateWatchpointEnabled(const struct Gamate* g, uint16_t address,
+		enum GamateWatchpointMode mode) {
+	size_t offset = (size_t) address;
+	uint8_t mask = (uint8_t) 1 << (offset & 7);
+	const uint8_t* map = mode == GAMATE_WATCHPOINT_READ ? g->diagnostics.watchpointRead :
+		mode == GAMATE_WATCHPOINT_WRITE ? g->diagnostics.watchpointWrite :
+		g->diagnostics.watchpointAccess;
+	return (map[offset >> 3] & mask) != 0;
+}
+
+static void markWatchpointAccess(struct Gamate* g, uint16_t address, bool write,
+		uint8_t previous, uint8_t value) {
+	size_t offset = (size_t) address;
+	uint8_t mask = (uint8_t) 1 << (offset & 7);
+	const uint8_t* modeMap = write ?
+		g->diagnostics.watchpointWrite : g->diagnostics.watchpointRead;
+	if (!g->diagnostics.watchpointCallback ||
+			(!((modeMap[offset >> 3] & mask) ||
+			(g->diagnostics.watchpointAccess[offset >> 3] & mask)))) {
+		return;
+	}
+	g->diagnostics.watchpointCallback(g->diagnostics.watchpointContext, g, write,
+		g->diagnostics.watchpointDummyAccess, address, previous, value);
 }
 
 void gamateSetRamDiagnosticWatch(struct Gamate* g, uint16_t address,
@@ -411,11 +482,17 @@ uint8_t gamateRead(struct Gamate* g, uint16_t address) {
 	}
 	value = readValue(g, address);
 done:
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+	markWatchpointAccess(g, address, false, value, value);
+#endif
 	g->openBus = value;
 	return value;
 }
 
 void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+	uint8_t watchpointPrevious = gamatePeek(g, address);
+#endif
 	if (address < 0x2000) {
 		uint16_t offset = address & 0x3FF;
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
@@ -428,6 +505,7 @@ void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
 			g->diagnostics.ramAccessCallback(g->diagnostics.ramAccessContext,
 				g, true, offset, previous, value);
 		}
+		markWatchpointAccess(g, address, true, previous, value);
 #endif
 		return;
 	}
@@ -462,16 +540,25 @@ void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
 			g->ay.envelopeStep = 15;
 			g->ay.envelopeCounter = 0;
 		}
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+		markWatchpointAccess(g, address, true, watchpointPrevious, value);
+#endif
 		return;
 	}
 	if ((address & 0xFC00) == 0x4400) {
 		g->uartTx = value;
 		g->uartTxBits = 0;
 		g->uartTxLine = value & 0x80;
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+		markWatchpointAccess(g, address, true, watchpointPrevious, value);
+#endif
 		return;
 	}
 	if ((address & 0xFC00) == 0x4C00) {
 		uartClock(g);
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+		markWatchpointAccess(g, address, true, watchpointPrevious, value);
+#endif
 		return;
 	}
 	if ((address & 0xFC00) == 0x5000) {
@@ -509,10 +596,16 @@ void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
 		}
 		default: break;
 		}
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+		markWatchpointAccess(g, address, true, watchpointPrevious, value);
+#endif
 		return;
 	}
 	if (address >= 0x6000 && address < 0xE000 && !g->protectionPassed) {
 		protectionWrite(g, (value & 4) != 0);
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+		markWatchpointAccess(g, address, true, watchpointPrevious, value);
+#endif
 		return;
 	}
 	if (g->mapper == GAMATE_MAPPER_4IN1 && address == 0x8000) {
@@ -522,6 +615,9 @@ void gamateWrite(struct Gamate* g, uint16_t address, uint8_t value) {
 		if (g->bank != value) g->diagnostics.bankWrites++;
 		g->bank = value;
 	}
+#ifdef GAMATE_ACCESS_DIAGNOSTICS
+	markWatchpointAccess(g, address, true, watchpointPrevious, value);
+#endif
 }
 
 uint8_t gamatePeek(const struct Gamate* g, uint16_t address) {
