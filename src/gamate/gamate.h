@@ -36,7 +36,28 @@ enum GamateDebugRunMode {
 	GAMATE_DEBUG_MODE_STEP_OUT
 };
 
+enum { GAMATE_TRACE_CAPACITY = 256 };
+
+enum GamateTraceKind {
+	GAMATE_TRACE_NORMAL,
+	GAMATE_TRACE_IRQ,
+	GAMATE_TRACE_NMI,
+	GAMATE_TRACE_BRK,
+	GAMATE_TRACE_UNSUPPORTED
+};
+
+struct GamateTraceEntry {
+	uint16_t pc;
+	uint64_t cpuCycles;
+	uint8_t opcode[3];
+	uint8_t opcodeSize;
+	uint8_t a, x, y, s, p;
+	uint8_t irqMask;
+	enum GamateTraceKind kind;
+};
+
 typedef void (*GamateLinkBitCallback)(void* context, bool bit);
+typedef const char* (*GamateDisassemblyLabelCallback)(void* context, uint16_t address);
 
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
 struct Gamate;
@@ -123,6 +144,9 @@ struct GamateDebug {
 	enum GamateDebugStopReason stopReason;
 	bool breakOnIrq, breakOnNmi, breakOnBrk;
 	bool breakOnUnsupportedOpcode, breakOnBiosTrap;
+	bool traceEnabled;
+	size_t traceCount, traceHead;
+	struct GamateTraceEntry trace[GAMATE_TRACE_CAPACITY];
 };
 
 struct Gamate {
@@ -247,6 +271,16 @@ void gamateSetBreakOnBrk(struct Gamate* gamate, bool enabled);
 void gamateSetBreakOnUnsupported(struct Gamate* gamate, bool enabled);
 void gamateSetBreakOnBiosTrap(struct Gamate* gamate, bool enabled);
 void gamateSetBreakOnInterrupt(struct Gamate* gamate, bool irq, bool nmi, bool brk);
+void gamateTraceEnable(struct Gamate* gamate, bool enabled);
+void gamateTraceClear(struct Gamate* gamate);
+bool gamateTraceIsEnabled(const struct Gamate* gamate);
+size_t gamateTraceCount(const struct Gamate* gamate);
+bool gamateTraceGet(const struct Gamate* gamate, size_t index,
+	struct GamateTraceEntry* entry);
+void gamateTraceRecord(struct Gamate* gamate, const struct GamateTraceEntry* entry);
+uint8_t gamateDisassemble(const struct Gamate* gamate, uint16_t address,
+	char* output, size_t outputSize,
+	GamateDisassemblyLabelCallback labelCallback, void* labelContext);
 
 size_t gamateStateSize(const struct Gamate* gamate);
 bool gamateSaveState(const struct Gamate* gamate, void* data, size_t size);

@@ -270,8 +270,39 @@ static bool hasImpliedOpcodeFetch(uint8_t opcode) {
 	}
 }
 
+static void recordTrace(struct Gamate* g, uint16_t pc, enum GamateTraceKind kind,
+		const uint8_t* bytes, uint8_t byteCount, uint64_t cpuCyclesBefore,
+		unsigned cycles) {
+	if (!g->debug.traceEnabled) return;
+	struct GamateTraceEntry entry = { 0 };
+	entry.pc = pc;
+	entry.cpuCycles = g->cpu.cycles;
+	entry.opcodeSize = byteCount;
+	for (unsigned i = 0; i < byteCount && i < 3; i++) entry.opcode[i] = bytes[i];
+	entry.a = g->cpu.a;
+	entry.x = g->cpu.x;
+	entry.y = g->cpu.y;
+	entry.s = g->cpu.s;
+	entry.p = g->cpu.p;
+	entry.irqMask = g->cpu.irqMask;
+	entry.kind = kind;
+	(void) cpuCyclesBefore;
+	(void) cycles;
+	gamateTraceRecord(g, &entry);
+}
+
 unsigned gamateCpuStep(struct Gamate* g) {
 	struct GamateCpu* c = &g->cpu;
+	uint64_t traceCyclesBefore = c->cycles;
+	uint16_t tracePc = c->pc;
+	uint8_t traceBytes[3] = { 0 };
+	uint8_t traceByteCount = 0;
+	if (g->debug.traceEnabled) {
+		for (unsigned i = 0; i < 3; i++) {
+			traceBytes[i] = gamatePeek(g, (uint16_t) (tracePc + i));
+		}
+		traceByteCount = gamateDisassemble(g, tracePc, NULL, 0, NULL, NULL);
+	}
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
 	g->diagnostics.diagnosticInstructionPc = c->pc;
 #endif
@@ -284,6 +315,8 @@ unsigned gamateCpuStep(struct Gamate* g) {
 #endif
 		unsigned cycles = interrupt(g, 0xFFFA, false);
 		c->cycles += cycles;
+		recordTrace(g, tracePc, GAMATE_TRACE_NMI, traceBytes,
+			traceByteCount, traceCyclesBefore, cycles);
 		return cycles;
 	}
 	if (g->irq && !c->irqMask) {
@@ -292,12 +325,15 @@ unsigned gamateCpuStep(struct Gamate* g) {
 #endif
 		unsigned cycles = interrupt(g, 0xFFFE, false);
 		c->cycles += cycles;
+		recordTrace(g, tracePc, GAMATE_TRACE_IRQ, traceBytes,
+			traceByteCount, traceCyclesBefore, cycles);
 		return cycles;
 	}
 	uint8_t opcode = fetch(g);
 	if (hasImpliedOpcodeFetch(opcode)) readDummy(g, c->pc);
 	bool oldIrqMask = c->p & I;
 	bool delayedIrqMask = opcode == 0x28 || opcode == 0x58 || opcode == 0x78; // PLP, CLI, SEI
+	enum GamateTraceKind traceKind = GAMATE_TRACE_NORMAL;
 	unsigned cycles = 2;
 	if ((opcode & 3) == 1 && opcode != 0x89) cycles = group1(g, opcode);
 	else if ((opcode & 3) == 2 && opcode != 0x8A && opcode != 0x9A && opcode != 0xAA &&
@@ -307,6 +343,7 @@ unsigned gamateCpuStep(struct Gamate* g) {
 #ifdef GAMATE_ACCESS_DIAGNOSTICS
 		g->diagnostics.diagnosticInterrupt = 3;
 #endif
+		traceKind = GAMATE_TRACE_BRK;
 		readDummy(g, c->pc++); cycles = interrupt(g, 0xFFFE, true); break;
 	case 0x08: readDummy(g, c->pc); push(g, c->p | B | U); cycles = 3; break;
 	case 0x10: cycles = branch(g, !(c->p & N)); break;
@@ -369,10 +406,12 @@ unsigned gamateCpuStep(struct Gamate* g) {
 	case 0xEC: compare(c, c->x, read8(g, fetch16(g))); cycles = 4; break;
 	case 0xF0: cycles = branch(g, c->p & Z); break;
 	case 0xF8: c->p |= D; break;
-	default: cycles = unsupported(g, opcode); break;
+	default: traceKind = GAMATE_TRACE_UNSUPPORTED; cycles = unsupported(g, opcode); break;
 	}
 	c->p |= U;
 	c->irqMask = delayedIrqMask ? oldIrqMask : (c->p & I) != 0;
 	c->cycles += cycles;
+	recordTrace(g, tracePc, traceKind, traceBytes,
+		traceByteCount, traceCyclesBefore, cycles);
 	return cycles;
 }

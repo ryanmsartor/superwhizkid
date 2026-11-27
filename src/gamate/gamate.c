@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 // The LCD receives 72,900 clocks per frame from the 4.433 MHz master oscillator.
 enum { STATE_MAGIC = 0x54414D47, STATE_VERSION = 4 };
@@ -1078,6 +1079,333 @@ enum GamateDebugStopReason gamateDebugStepOut(struct Gamate* g) {
 
 enum GamateDebugStopReason gamateDebugGetStopReason(const struct Gamate* g) {
 	return g->debug.stopReason;
+}
+
+void gamateTraceEnable(struct Gamate* g, bool enabled) {
+	g->debug.traceEnabled = enabled;
+	if (enabled) gamateTraceClear(g);
+}
+
+void gamateTraceClear(struct Gamate* g) {
+	g->debug.traceCount = 0;
+	g->debug.traceHead = 0;
+	memset(g->debug.trace, 0, sizeof(g->debug.trace));
+}
+
+bool gamateTraceIsEnabled(const struct Gamate* g) {
+	return g->debug.traceEnabled;
+}
+
+size_t gamateTraceCount(const struct Gamate* g) {
+	return g->debug.traceCount;
+}
+
+bool gamateTraceGet(const struct Gamate* g, size_t index,
+		struct GamateTraceEntry* entry) {
+	if (!entry || index >= g->debug.traceCount) return false;
+	size_t oldest = g->debug.traceCount < GAMATE_TRACE_CAPACITY ? 0 :
+		g->debug.traceHead;
+	size_t position = (oldest + index) % GAMATE_TRACE_CAPACITY;
+	*entry = g->debug.trace[position];
+	return true;
+}
+
+void gamateTraceRecord(struct Gamate* g, const struct GamateTraceEntry* entry) {
+	if (!g->debug.traceEnabled || !entry) return;
+	g->debug.trace[g->debug.traceHead] = *entry;
+	g->debug.traceHead = (g->debug.traceHead + 1) % GAMATE_TRACE_CAPACITY;
+	if (g->debug.traceCount < GAMATE_TRACE_CAPACITY) g->debug.traceCount++;
+}
+
+enum GamateDisasmMode {
+	GAMATE_DISASM_BYTE,
+	GAMATE_DISASM_IMPLIED,
+	GAMATE_DISASM_ACCUMULATOR,
+	GAMATE_DISASM_IMMEDIATE,
+	GAMATE_DISASM_ZEROPAGE,
+	GAMATE_DISASM_ZEROPAGE_X,
+	GAMATE_DISASM_ZEROPAGE_Y,
+	GAMATE_DISASM_ABSOLUTE,
+	GAMATE_DISASM_ABSOLUTE_X,
+	GAMATE_DISASM_ABSOLUTE_Y,
+	GAMATE_DISASM_INDIRECT,
+	GAMATE_DISASM_INDEXED_INDIRECT,
+	GAMATE_DISASM_INDIRECT_INDEXED,
+	GAMATE_DISASM_RELATIVE
+};
+
+struct GamateDisasmEntry {
+	const char* mnemonic;
+	enum GamateDisasmMode mode;
+};
+
+static const struct GamateDisasmEntry gamateDisasmTable[256] = {
+	[0x00] = { "BRK", GAMATE_DISASM_IMPLIED },
+	[0x01] = { "ORA", GAMATE_DISASM_INDEXED_INDIRECT },
+	[0x05] = { "ORA", GAMATE_DISASM_ZEROPAGE },
+	[0x06] = { "ASL", GAMATE_DISASM_ZEROPAGE },
+	[0x08] = { "PHP", GAMATE_DISASM_IMPLIED },
+	[0x09] = { "ORA", GAMATE_DISASM_IMMEDIATE },
+	[0x0A] = { "ASL", GAMATE_DISASM_ACCUMULATOR },
+	[0x0D] = { "ORA", GAMATE_DISASM_ABSOLUTE },
+	[0x0E] = { "ASL", GAMATE_DISASM_ABSOLUTE },
+	[0x10] = { "BPL", GAMATE_DISASM_RELATIVE },
+	[0x11] = { "ORA", GAMATE_DISASM_INDIRECT_INDEXED },
+	[0x15] = { "ORA", GAMATE_DISASM_ZEROPAGE_X },
+	[0x16] = { "ASL", GAMATE_DISASM_ZEROPAGE_X },
+	[0x18] = { "CLC", GAMATE_DISASM_IMPLIED },
+	[0x19] = { "ORA", GAMATE_DISASM_ABSOLUTE_Y },
+	[0x1D] = { "ORA", GAMATE_DISASM_ABSOLUTE_X },
+	[0x1E] = { "ASL", GAMATE_DISASM_ABSOLUTE_X },
+	[0x20] = { "JSR", GAMATE_DISASM_ABSOLUTE },
+	[0x21] = { "AND", GAMATE_DISASM_INDEXED_INDIRECT },
+	[0x24] = { "BIT", GAMATE_DISASM_ZEROPAGE },
+	[0x25] = { "AND", GAMATE_DISASM_ZEROPAGE },
+	[0x26] = { "ROL", GAMATE_DISASM_ZEROPAGE },
+	[0x28] = { "PLP", GAMATE_DISASM_IMPLIED },
+	[0x29] = { "AND", GAMATE_DISASM_IMMEDIATE },
+	[0x2A] = { "ROL", GAMATE_DISASM_ACCUMULATOR },
+	[0x2C] = { "BIT", GAMATE_DISASM_ABSOLUTE },
+	[0x2D] = { "AND", GAMATE_DISASM_ABSOLUTE },
+	[0x2E] = { "ROL", GAMATE_DISASM_ABSOLUTE },
+	[0x30] = { "BMI", GAMATE_DISASM_RELATIVE },
+	[0x31] = { "AND", GAMATE_DISASM_INDIRECT_INDEXED },
+	[0x35] = { "AND", GAMATE_DISASM_ZEROPAGE_X },
+	[0x36] = { "ROL", GAMATE_DISASM_ZEROPAGE_X },
+	[0x38] = { "SEC", GAMATE_DISASM_IMPLIED },
+	[0x39] = { "AND", GAMATE_DISASM_ABSOLUTE_Y },
+	[0x3D] = { "AND", GAMATE_DISASM_ABSOLUTE_X },
+	[0x3E] = { "ROL", GAMATE_DISASM_ABSOLUTE_X },
+	[0x40] = { "RTI", GAMATE_DISASM_IMPLIED },
+	[0x41] = { "EOR", GAMATE_DISASM_INDEXED_INDIRECT },
+	[0x45] = { "EOR", GAMATE_DISASM_ZEROPAGE },
+	[0x46] = { "LSR", GAMATE_DISASM_ZEROPAGE },
+	[0x48] = { "PHA", GAMATE_DISASM_IMPLIED },
+	[0x49] = { "EOR", GAMATE_DISASM_IMMEDIATE },
+	[0x4A] = { "LSR", GAMATE_DISASM_ACCUMULATOR },
+	[0x4C] = { "JMP", GAMATE_DISASM_ABSOLUTE },
+	[0x4D] = { "EOR", GAMATE_DISASM_ABSOLUTE },
+	[0x4E] = { "LSR", GAMATE_DISASM_ABSOLUTE },
+	[0x50] = { "BVC", GAMATE_DISASM_RELATIVE },
+	[0x51] = { "EOR", GAMATE_DISASM_INDIRECT_INDEXED },
+	[0x55] = { "EOR", GAMATE_DISASM_ZEROPAGE_X },
+	[0x56] = { "LSR", GAMATE_DISASM_ZEROPAGE_X },
+	[0x58] = { "CLI", GAMATE_DISASM_IMPLIED },
+	[0x59] = { "EOR", GAMATE_DISASM_ABSOLUTE_Y },
+	[0x5D] = { "EOR", GAMATE_DISASM_ABSOLUTE_X },
+	[0x5E] = { "LSR", GAMATE_DISASM_ABSOLUTE_X },
+	[0x60] = { "RTS", GAMATE_DISASM_IMPLIED },
+	[0x61] = { "ADC", GAMATE_DISASM_INDEXED_INDIRECT },
+	[0x65] = { "ADC", GAMATE_DISASM_ZEROPAGE },
+	[0x66] = { "ROR", GAMATE_DISASM_ZEROPAGE },
+	[0x68] = { "PLA", GAMATE_DISASM_IMPLIED },
+	[0x69] = { "ADC", GAMATE_DISASM_IMMEDIATE },
+	[0x6A] = { "ROR", GAMATE_DISASM_ACCUMULATOR },
+	[0x6C] = { "JMP", GAMATE_DISASM_INDIRECT },
+	[0x6D] = { "ADC", GAMATE_DISASM_ABSOLUTE },
+	[0x6E] = { "ROR", GAMATE_DISASM_ABSOLUTE },
+	[0x70] = { "BVS", GAMATE_DISASM_RELATIVE },
+	[0x71] = { "ADC", GAMATE_DISASM_INDIRECT_INDEXED },
+	[0x75] = { "ADC", GAMATE_DISASM_ZEROPAGE_X },
+	[0x76] = { "ROR", GAMATE_DISASM_ZEROPAGE_X },
+	[0x78] = { "SEI", GAMATE_DISASM_IMPLIED },
+	[0x79] = { "ADC", GAMATE_DISASM_ABSOLUTE_Y },
+	[0x7D] = { "ADC", GAMATE_DISASM_ABSOLUTE_X },
+	[0x7E] = { "ROR", GAMATE_DISASM_ABSOLUTE_X },
+	[0x81] = { "STA", GAMATE_DISASM_INDEXED_INDIRECT },
+	[0x84] = { "STY", GAMATE_DISASM_ZEROPAGE },
+	[0x85] = { "STA", GAMATE_DISASM_ZEROPAGE },
+	[0x86] = { "STX", GAMATE_DISASM_ZEROPAGE },
+	[0x88] = { "DEY", GAMATE_DISASM_IMPLIED },
+	[0x8A] = { "TXA", GAMATE_DISASM_IMPLIED },
+	[0x8C] = { "STY", GAMATE_DISASM_ABSOLUTE },
+	[0x8D] = { "STA", GAMATE_DISASM_ABSOLUTE },
+	[0x8E] = { "STX", GAMATE_DISASM_ABSOLUTE },
+	[0x90] = { "BCC", GAMATE_DISASM_RELATIVE },
+	[0x91] = { "STA", GAMATE_DISASM_INDIRECT_INDEXED },
+	[0x94] = { "STY", GAMATE_DISASM_ZEROPAGE_X },
+	[0x95] = { "STA", GAMATE_DISASM_ZEROPAGE_X },
+	[0x96] = { "STX", GAMATE_DISASM_ZEROPAGE_Y },
+	[0x98] = { "TYA", GAMATE_DISASM_IMPLIED },
+	[0x99] = { "STA", GAMATE_DISASM_ABSOLUTE_Y },
+	[0x9A] = { "TXS", GAMATE_DISASM_IMPLIED },
+	[0x9D] = { "STA", GAMATE_DISASM_ABSOLUTE_X },
+	[0xA0] = { "LDY", GAMATE_DISASM_IMMEDIATE },
+	[0xA1] = { "LDA", GAMATE_DISASM_INDEXED_INDIRECT },
+	[0xA2] = { "LDX", GAMATE_DISASM_IMMEDIATE },
+	[0xA4] = { "LDY", GAMATE_DISASM_ZEROPAGE },
+	[0xA5] = { "LDA", GAMATE_DISASM_ZEROPAGE },
+	[0xA6] = { "LDX", GAMATE_DISASM_ZEROPAGE },
+	[0xA8] = { "TAY", GAMATE_DISASM_IMPLIED },
+	[0xA9] = { "LDA", GAMATE_DISASM_IMMEDIATE },
+	[0xAA] = { "TAX", GAMATE_DISASM_IMPLIED },
+	[0xAC] = { "LDY", GAMATE_DISASM_ABSOLUTE },
+	[0xAD] = { "LDA", GAMATE_DISASM_ABSOLUTE },
+	[0xAE] = { "LDX", GAMATE_DISASM_ABSOLUTE },
+	[0xB0] = { "BCS", GAMATE_DISASM_RELATIVE },
+	[0xB1] = { "LDA", GAMATE_DISASM_INDIRECT_INDEXED },
+	[0xB4] = { "LDY", GAMATE_DISASM_ZEROPAGE_X },
+	[0xB5] = { "LDA", GAMATE_DISASM_ZEROPAGE_X },
+	[0xB6] = { "LDX", GAMATE_DISASM_ZEROPAGE_Y },
+	[0xB8] = { "CLV", GAMATE_DISASM_IMPLIED },
+	[0xB9] = { "LDA", GAMATE_DISASM_ABSOLUTE_Y },
+	[0xBA] = { "TSX", GAMATE_DISASM_IMPLIED },
+	[0xBC] = { "LDY", GAMATE_DISASM_ABSOLUTE_X },
+	[0xBD] = { "LDA", GAMATE_DISASM_ABSOLUTE_X },
+	[0xBE] = { "LDX", GAMATE_DISASM_ABSOLUTE_Y },
+	[0xC0] = { "CPY", GAMATE_DISASM_IMMEDIATE },
+	[0xC1] = { "CMP", GAMATE_DISASM_INDEXED_INDIRECT },
+	[0xC4] = { "CPY", GAMATE_DISASM_ZEROPAGE },
+	[0xC5] = { "CMP", GAMATE_DISASM_ZEROPAGE },
+	[0xC6] = { "DEC", GAMATE_DISASM_ZEROPAGE },
+	[0xC8] = { "INY", GAMATE_DISASM_IMPLIED },
+	[0xC9] = { "CMP", GAMATE_DISASM_IMMEDIATE },
+	[0xCA] = { "DEX", GAMATE_DISASM_IMPLIED },
+	[0xCC] = { "CPY", GAMATE_DISASM_ABSOLUTE },
+	[0xCD] = { "CMP", GAMATE_DISASM_ABSOLUTE },
+	[0xCE] = { "DEC", GAMATE_DISASM_ABSOLUTE },
+	[0xD0] = { "BNE", GAMATE_DISASM_RELATIVE },
+	[0xD1] = { "CMP", GAMATE_DISASM_INDIRECT_INDEXED },
+	[0xD5] = { "CMP", GAMATE_DISASM_ZEROPAGE_X },
+	[0xD6] = { "DEC", GAMATE_DISASM_ZEROPAGE_X },
+	[0xD8] = { "CLD", GAMATE_DISASM_IMPLIED },
+	[0xD9] = { "CMP", GAMATE_DISASM_ABSOLUTE_Y },
+	[0xDD] = { "CMP", GAMATE_DISASM_ABSOLUTE_X },
+	[0xDE] = { "DEC", GAMATE_DISASM_ABSOLUTE_X },
+	[0xE0] = { "CPX", GAMATE_DISASM_IMMEDIATE },
+	[0xE1] = { "SBC", GAMATE_DISASM_INDEXED_INDIRECT },
+	[0xE4] = { "CPX", GAMATE_DISASM_ZEROPAGE },
+	[0xE5] = { "SBC", GAMATE_DISASM_ZEROPAGE },
+	[0xE6] = { "INC", GAMATE_DISASM_ZEROPAGE },
+	[0xE8] = { "INX", GAMATE_DISASM_IMPLIED },
+	[0xE9] = { "SBC", GAMATE_DISASM_IMMEDIATE },
+	[0xEA] = { "NOP", GAMATE_DISASM_IMPLIED },
+	[0xEC] = { "CPX", GAMATE_DISASM_ABSOLUTE },
+	[0xED] = { "SBC", GAMATE_DISASM_ABSOLUTE },
+	[0xEE] = { "INC", GAMATE_DISASM_ABSOLUTE },
+	[0xF0] = { "BEQ", GAMATE_DISASM_RELATIVE },
+	[0xF1] = { "SBC", GAMATE_DISASM_INDIRECT_INDEXED },
+	[0xF5] = { "SBC", GAMATE_DISASM_ZEROPAGE_X },
+	[0xF6] = { "INC", GAMATE_DISASM_ZEROPAGE_X },
+	[0xF8] = { "SED", GAMATE_DISASM_IMPLIED },
+	[0xF9] = { "SBC", GAMATE_DISASM_ABSOLUTE_Y },
+	[0xFD] = { "SBC", GAMATE_DISASM_ABSOLUTE_X },
+	[0xFE] = { "INC", GAMATE_DISASM_ABSOLUTE_X }
+};
+
+static uint8_t gamateDisasmSize(enum GamateDisasmMode mode) {
+	switch (mode) {
+	case GAMATE_DISASM_IMMEDIATE:
+	case GAMATE_DISASM_ZEROPAGE:
+	case GAMATE_DISASM_ZEROPAGE_X:
+	case GAMATE_DISASM_ZEROPAGE_Y:
+	case GAMATE_DISASM_INDEXED_INDIRECT:
+	case GAMATE_DISASM_INDIRECT_INDEXED:
+	case GAMATE_DISASM_RELATIVE:
+		return 2;
+	case GAMATE_DISASM_ABSOLUTE:
+	case GAMATE_DISASM_ABSOLUTE_X:
+	case GAMATE_DISASM_ABSOLUTE_Y:
+	case GAMATE_DISASM_INDIRECT:
+		return 3;
+	default:
+		return 1;
+	}
+}
+
+static void gamateDisasmAddress(char* output, size_t outputSize, uint16_t address,
+		GamateDisassemblyLabelCallback labelCallback, void* labelContext) {
+	const char* label = labelCallback ? labelCallback(labelContext, address) : NULL;
+	if (label) snprintf(output, outputSize, "%s", label);
+	else snprintf(output, outputSize, "$%04X", address);
+}
+
+uint8_t gamateDisassemble(const struct Gamate* g, uint16_t address,
+		char* output, size_t outputSize,
+		GamateDisassemblyLabelCallback labelCallback, void* labelContext) {
+	uint8_t opcode = gamatePeek(g, address);
+	const struct GamateDisasmEntry* entry = &gamateDisasmTable[opcode];
+	uint8_t size = gamateDisasmSize(entry->mode);
+	if (!output || outputSize == 0) return size;
+	if (entry->mode == GAMATE_DISASM_BYTE) {
+		snprintf(output, outputSize, ".byte $%02X", opcode);
+		return size;
+	}
+	if (entry->mode == GAMATE_DISASM_IMPLIED) {
+		snprintf(output, outputSize, "%s", entry->mnemonic);
+		return size;
+	}
+	if (entry->mode == GAMATE_DISASM_ACCUMULATOR) {
+		snprintf(output, outputSize, "%s A", entry->mnemonic);
+		return size;
+	}
+
+	uint8_t lo = size > 1 ? gamatePeek(g, (uint16_t) (address + 1)) : 0;
+	uint8_t hi = size > 2 ? gamatePeek(g, (uint16_t) (address + 2)) : 0;
+	char operand[64];
+	switch (entry->mode) {
+	case GAMATE_DISASM_IMMEDIATE:
+		snprintf(output, outputSize, "%s #$%02X", entry->mnemonic, lo);
+		break;
+	case GAMATE_DISASM_ZEROPAGE:
+		gamateDisasmAddress(operand, sizeof(operand), lo,
+			labelCallback, labelContext);
+		snprintf(output, outputSize, "%s %s", entry->mnemonic, operand);
+		break;
+	case GAMATE_DISASM_ZEROPAGE_X:
+		gamateDisasmAddress(operand, sizeof(operand), lo,
+			labelCallback, labelContext);
+		snprintf(output, outputSize, "%s %s,X", entry->mnemonic, operand);
+		break;
+	case GAMATE_DISASM_ZEROPAGE_Y:
+		gamateDisasmAddress(operand, sizeof(operand), lo,
+			labelCallback, labelContext);
+		snprintf(output, outputSize, "%s %s,Y", entry->mnemonic, operand);
+		break;
+	case GAMATE_DISASM_ABSOLUTE:
+		gamateDisasmAddress(operand, sizeof(operand),
+			(uint16_t) lo | (uint16_t) hi << 8, labelCallback, labelContext);
+		snprintf(output, outputSize, "%s %s", entry->mnemonic, operand);
+		break;
+	case GAMATE_DISASM_ABSOLUTE_X:
+		gamateDisasmAddress(operand, sizeof(operand),
+			(uint16_t) lo | (uint16_t) hi << 8, labelCallback, labelContext);
+		snprintf(output, outputSize, "%s %s,X", entry->mnemonic, operand);
+		break;
+	case GAMATE_DISASM_ABSOLUTE_Y:
+		gamateDisasmAddress(operand, sizeof(operand),
+			(uint16_t) lo | (uint16_t) hi << 8, labelCallback, labelContext);
+		snprintf(output, outputSize, "%s %s,Y", entry->mnemonic, operand);
+		break;
+	case GAMATE_DISASM_INDIRECT:
+		gamateDisasmAddress(operand, sizeof(operand),
+			(uint16_t) lo | (uint16_t) hi << 8, labelCallback, labelContext);
+		snprintf(output, outputSize, "%s (%s)", entry->mnemonic, operand);
+		break;
+	case GAMATE_DISASM_INDEXED_INDIRECT:
+		gamateDisasmAddress(operand, sizeof(operand), lo,
+			labelCallback, labelContext);
+		snprintf(output, outputSize, "%s (%s,X)", entry->mnemonic, operand);
+		break;
+	case GAMATE_DISASM_INDIRECT_INDEXED:
+		gamateDisasmAddress(operand, sizeof(operand), lo,
+			labelCallback, labelContext);
+		snprintf(output, outputSize, "%s (%s),Y", entry->mnemonic, operand);
+		break;
+	case GAMATE_DISASM_RELATIVE: {
+		uint16_t target = (uint16_t) (address + 2 +
+			(int16_t) (int8_t) lo);
+		gamateDisasmAddress(operand, sizeof(operand), target,
+			labelCallback, labelContext);
+		snprintf(output, outputSize, "%s %s", entry->mnemonic, operand);
+		break;
+	}
+	default:
+		snprintf(output, outputSize, ".byte $%02X", opcode);
+		size = 1;
+		break;
+	}
+	return size;
 }
 
 size_t gamateStateSize(const struct Gamate* g) {

@@ -66,6 +66,13 @@ static void captureWatchpoint(void* context, const struct Gamate* g,
 	capture->value = value;
 }
 
+static const char* labelAt(void* context, uint16_t address) {
+	(void) context;
+	if (address == 0xE010) return "subroutine";
+	if (address == 0xE003) return "return_site";
+	return NULL;
+}
+
 static void captureLinkBit(void* context, bool bit) {
 	struct LinkCapture* capture = context;
 	capture->bits = (uint8_t) (capture->bits << 1 | bit);
@@ -1015,6 +1022,66 @@ static void testWatchpoints(void) {
 	gamateFree(&g);
 }
 
+static void testTraceAndDisassembly(void) {
+	struct Gamate g;
+	gamateInit(&g);
+	uint8_t bios[GAMATE_BIOS_SIZE] = { 0 }, rom[0x4000] = { 0 };
+	bios[0x000] = 0xA9; bios[0x001] = 0x45; // LDA #$45
+	bios[0x002] = 0x20; bios[0x003] = 0x10; bios[0x004] = 0xE0; // JSR subroutine
+	bios[0x010] = 0x60; // RTS
+	bios[0x100] = 0x02;
+	bios[0xFFC] = 0x00;
+	bios[0xFFD] = 0xE0;
+	assert(gamateLoad(&g, rom, sizeof(rom), bios, sizeof(bios)));
+	gamateReset(&g);
+	gamateTraceEnable(&g, true);
+
+	gamateStep(&g);
+	gamateStep(&g);
+	gamateStep(&g);
+	assert(gamateTraceCount(&g) == 3);
+	struct GamateTraceEntry oldest, newest;
+	assert(gamateTraceGet(&g, 0, &oldest));
+	assert(gamateTraceGet(&g, 2, &newest));
+	assert(oldest.pc == 0xE000 && oldest.opcodeSize == 2 &&
+		oldest.opcode[0] == 0xA9 && oldest.opcode[1] == 0x45);
+	assert(oldest.a == 0x45);
+	assert(newest.pc == 0xE010 && newest.opcodeSize == 1 &&
+		newest.opcode[0] == 0x60);
+
+	char text[64];
+	assert(gamateDisassemble(&g, 0xE000, text, sizeof(text), NULL, NULL) == 2);
+	assert(!strcmp(text, "LDA #$45"));
+	assert(gamateDisassemble(&g, 0xE002, text, sizeof(text),
+		labelAt, NULL) == 3);
+	assert(!strcmp(text, "JSR subroutine"));
+	assert(gamateDisassemble(&g, 0xE010, text, sizeof(text),
+		labelAt, NULL) == 1);
+	assert(!strcmp(text, "RTS"));
+	assert(gamateDisassemble(&g, 0xE100, text, sizeof(text),
+		NULL, NULL) == 1);
+	assert(!strcmp(text, ".byte $02"));
+
+	gamateTraceClear(&g);
+	assert(gamateTraceCount(&g) == 0);
+	for (unsigned i = 0; i < GAMATE_TRACE_CAPACITY + 17; i++) {
+		struct GamateTraceEntry entry = { .pc = (uint16_t) i,
+			.opcodeSize = 1, .opcode = { 0xEA }, .kind = GAMATE_TRACE_NORMAL };
+		gamateTraceRecord(&g, &entry);
+	}
+	assert(gamateTraceCount(&g) == GAMATE_TRACE_CAPACITY);
+	assert(gamateTraceGet(&g, 0, &oldest));
+	assert(gamateTraceGet(&g, GAMATE_TRACE_CAPACITY - 1, &newest));
+	assert(oldest.pc == 17 && newest.pc == GAMATE_TRACE_CAPACITY + 16);
+
+	gamateTraceEnable(&g, false);
+	assert(!gamateTraceIsEnabled(&g));
+	gamateTraceClear(&g);
+	gamateTraceEnable(&g, true);
+	assert(gamateTraceIsEnabled(&g) && gamateTraceCount(&g) == 0);
+	gamateFree(&g);
+}
+
 static void assertPeekMatchesRead(const struct Gamate* g, uint16_t address) {
 	struct Gamate copy = *g; // reads on the copy leave the machine under test untouched
 	assert(gamatePeek(g, address) == gamateRead(&copy, address));
@@ -1226,6 +1293,7 @@ int main(void) {
 	testDebugAccess();
 	testDebugExecutionControl();
 	testWatchpoints();
+	testTraceAndDisassembly();
 	testUart();
 	testVideo();
 	testVideoWindows();
