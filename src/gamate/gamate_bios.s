@@ -199,6 +199,7 @@ reset:
 	sta LCD_CONTROL
 	jsr clear_plane
 	lda #$80
+	sei
 	jsr clear_plane
 
 	lda #$00
@@ -237,15 +238,10 @@ reset:
 	sta LCD_VRAM_ADDR_LO
 	lda #$C6
 	sta LCD_VRAM_ADDR_HI
-	lda #$01
-	sta CALLBACK_ENABLE
-	ldx #$28
-	ldy #$FF
-	lda #$FF
-	clv
-	cld
-	sec
-	jmp CART_ENTRY
+	jmp finalize_boot
+	.repeat 12
+	nop
+	.endrepeat
 
 animate_logo:
 	ldx #$24
@@ -2036,6 +2032,54 @@ fill_rectangle_common:
 	ldx #$00
 	ldy #$00
 	rts
+
+finalize_boot:
+	; Release the pending final boot IRQ only after initialization is complete, then restore the
+	; cartridge-visible counter state before entry. The 5,705-cycle masked delay, together with the
+	; reset-tail jump and counter writes, places Brick Blaster's release at the measured UMC clock.
+	lda #$00
+	sta WAIT_COUNTER
+	ldx #$04
+@final_irq_delay_outer:
+	ldy #$00
+@final_irq_delay_inner:
+	dey
+	bne @final_irq_delay_inner
+	dex
+	bne @final_irq_delay_outer
+	ldy #$6F
+@final_irq_delay_tail:
+	dey
+	bne @final_irq_delay_tail
+	nop
+	nop
+	cli
+@final_boot_irq:
+	lda WAIT_COUNTER
+	beq @final_boot_irq
+	; Complete the measured 218-master-clock interval from IRQ acceptance to cartridge entry.
+	nop
+	nop
+	nop
+	nop
+	nop
+	lda #$00
+	sta WAIT_COUNTER
+	sta IRQ_COUNTER_31_24
+	sta IRQ_COUNTER_23_16
+	lda #$03
+	sta IRQ_COUNTER_15_8
+	lda #$94
+	sta IRQ_COUNTER_7_0
+	lda #$01
+	sta CALLBACK_ENABLE
+	ldx #$28
+	ldy #$FF
+	lda #$FF
+	clv
+	cld
+	sec
+	jmp CART_ENTRY
 
 overflow_flag:
 	.byte $40

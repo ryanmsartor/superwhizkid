@@ -806,11 +806,12 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
 
 #### Corpus and general method
 
-- SWK startup timing: the reset routine now performs 36 repeated 24-IRQ waits plus one 20-IRQ wait
-  before clearing VRAM and continuing initialization to `$6020`. Brick Blaster measured entry at
-  `30,228,254` master clocks in a clean current-source rebuild, while UMC measured `30,239,372` and
-  Bit `30,239,430`. All three are in frame floor `414` of the 72,900-clock frame model; SWK is
-  11,118 master clocks earlier than UMC.
+- SWK startup timing, before the final-IRQ correction: the reset routine performed 36 repeated
+  24-IRQ waits plus one 20-IRQ wait before clearing VRAM and continuing initialization to `$6020`.
+  Brick Blaster measured entry at `30,228,254` master clocks in a clean rebuild, while UMC measured
+  `30,239,372` and Bit `30,239,430`. All three were in frame floor `414` of the 72,900-clock frame
+  model; SWK was 11,118 master clocks earlier than UMC. The later absolute-call-timing follow-up
+  below records the retained correction.
   This is emulator-observed timing work, not a physical-hardware measurement or claim of exact
   frame-aligned BIOS timing. Logo rendering and image assets are not retained as part of this result.
 
@@ -918,7 +919,8 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   Pixels, ordered accesses, registers and peripheral state also match. The replay still reports only
   the known stack write-footprint mismatch. Inputs remained read-only and no payload was retained.
 
-- Brick Blaster three-BIOS per-frame matrix: the project-authored `gamatebioscompare` diagnostic ran
+- Brick Blaster three-BIOS per-frame matrix, before the final-IRQ correction: the project-authored
+  `gamatebioscompare` diagnostic ran
   the local standalone cartridge for 1,000 post-entry frames under both authentic BIOS revisions and
   SWK, with no input and the standard controller-cycle schedule. It compared derived framebuffer,
   VRAM and RAM hashes, CPU/register state, hardware registers, and cumulative activity while
@@ -947,8 +949,17 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   additional 2,752 clocks: the first live `$F009` contributes 2,432 and later waits differ by 32-50
   clocks. The following `$F018` takes 119,224 SWK clocks versus 152,264 under either authentic BIOS.
   These are local emulator observations using read-only BIOS/cartridge inputs; reports remained in
-  temporary storage and retained no payload. Implementation impact: target the final accepted boot
-  IRQ before endpoint padding, then live wait/IRQ-wrapper phase and `$F018` timing.
+  temporary storage and retained no payload.
+  Implementation impact: the retained reset tail masks IRQs before the final clear, completes
+  initialization with a request pending, releases it at a calibrated boundary, and restores the
+  cartridge-visible counters afterward. Boot-only synchronization was moved after the runtime
+  services so their addresses and page-cross timing remain unchanged. Brick Blaster SWK now matches
+  UMC at entry clock `30,239,372`, final-IRQ clock `30,239,154`, and IRQ age 218; Bit enters 58 clocks
+  later with the same age. SWK accepts 913 boot IRQs versus 917 authentic because requests coalesce
+  while masked; this diagnostic history is not machine state. The corrected 1,000-frame no-input
+  matrix first differs again at frame 113 and matches video/VRAM on 111/108 frames, up from 110/106.
+  Controller-cycle matching rises from 442/443 to 445/450. The next targets are live `$F009`/IRQ
+  wrapper timing and `$F018`.
 
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add

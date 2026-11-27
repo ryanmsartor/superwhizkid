@@ -100,6 +100,11 @@ reported but is not by itself a compatibility verdict: independently authored fi
 different resident code and scratch, and even the authentic revisions can occupy different
 instruction boundaries while presenting the same settled frame.
 
+`gamatebioscalls` reports completed-service clocks relative to `$6020`, entry wait/timer state, and
+the final two boot IRQ boundaries. Setting `GAMATEBIOSCALLS_BOOT_IRQ_REPORT` to a temporary output
+path additionally writes the full boot IRQ index, master clock, and interrupted PC sequence. This
+report contains derived execution metadata only and should remain under temporary storage.
+
 The frontend displays an experimental-BIOS notice when SWK is loaded, including through fallback.
 It does not detect the prototype's unsupported-service traps, which can leave the game halted.
 This integration enables testing; it is not a compatibility claim.
@@ -194,40 +199,44 @@ A 1,000-post-entry-frame matrix compared standalone Brick Blaster under UMC, Bit
 input and with the standard controller-cycle schedule. Audio samples and audio/AY phase were
 excluded. All six runs completed without a trap.
 
-SWK differs at frame 1 because its blank startup presentation does not retain the authentic image.
-Video reconverges at frame 2 and VRAM at frame 5. The first later video deviation is a one-frame
-boundary at frame 109: SWK has blanked the display while entering its `$F00C` clear, and the authentic
-revisions reach the corresponding blank frame at 110. SWK VRAM first diverges again at frame 111;
-the first continuing no-input video divergence begins at frame 113. This ordering is consistent with
-different boot/service phase moving progressive clear work across frame boundaries, not with an
-incorrect `$F00C` data contract.
+Before the boot-IRQ correction, SWK differed at frame 1 because its blank startup presentation does
+not retain the authentic image. Video reconverged at frame 2 and VRAM at frame 5. A later one-frame
+video boundary began at frame 109, VRAM diverged at 111, and continuing video divergence began at
+113. Absolute-call tracing showed that boot/IRQ phase moved the progressive `$F00C` clear across
+frame boundaries; its data contract was not responsible.
 
-In the no-input run, video matched either authentic BIOS on 110/1,000 frames and VRAM on 106/1,000;
-after frame 113 neither reconverged within the window. With controller-cycle input, video matched on
-442 frames and VRAM on 443. That campaign reconverged at frame 401 after the Select pulse and then
-showed later short match/diverge intervals around input and progressive-update boundaries; its final
-frame still differed. UMC and Bit also occasionally differ on individual progressive boundaries,
+The corrected reset tail masks the final clear, finishes initialization with the timer request
+pending, and releases that IRQ at a calibrated boundary. It restores the cartridge-visible counters
+after the handler and preserves all runtime-service addresses. For Brick Blaster, SWK now matches
+UMC entry exactly at master clock `30,239,372`; both accept their final boot IRQ at `30,239,154` and
+enter 218 clocks later. Bit enters 58 clocks later with the same 218-clock IRQ phase. SWK accepts 913
+boot IRQs versus 917 authentic because four requests coalesce while masked; those historical counts
+are diagnostic-only, and the exposed counters are restored to the measured entry values.
+
+After correction, both campaigns retain the known frame-1 startup difference, reconverge at frames
+2/5, and remain matched through frame 112. Their first later video and VRAM difference is frame 113,
+where the known `$F018` timing deficit begins. No-input video/VRAM matches rise from 110/106 to
+111/108 frames. Controller-cycle matches rise from 442/443 to 445/450; it still reconverges at frame
+401 and shows later progressive-update boundaries. UMC and Bit can also differ on such boundaries,
 so a transient hash mismatch is not automatically a functional failure.
 
 An absolute-call-timing follow-up found the same pre-frame-109 service order under all three BIOSes.
 Measured from `$6020`, the first `$F00C` starts at exactly 16,814 clocks in each run. The initial
 boundary is therefore inherited boot/IRQ phase, not an early cartridge call. Current-source SWK
 enters 11,118 master clocks before UMC with its IRQ timer 2,526 clocks past the last accepted
-interrupt; UMC enters only 218 clocks after its last accepted interrupt. A fixed 11,118-clock
-endpoint delay matched UMC's absolute entry clock but necessarily left the IRQ timer at 13,644
-clocks and did not remove the frame-109 boundary. That experiment was reverted. A correct phase
-change must alter when
-the final boot IRQ is accepted, not append fixed padding. The improved diagnostic places SWK's last
+interrupt; UMC enters only 218 clocks after its last accepted interrupt. A rejected fixed
+11,118-clock endpoint delay matched UMC's absolute entry clock but left the IRQ timer at 13,644
+clocks and did not remove the frame-109 boundary. The improved diagnostic placed SWK's last
 boot IRQ at `$F187`, the `INY` in the second `clear_plane` loop, 2,526 clocks before entry. Both
 authentic revisions accept their last boot IRQ at `$F2FA`, only 218 clocks before entry. These PCs
 identify boundaries in independently executed firmware; no authentic instructions were retained or
-reconstructed.
+reconstructed. This evidence led to the pending-IRQ release design described above.
 
 By the second `$F00C`, SWK has accumulated an additional 2,752-clock lead. The first live `$F009`
 accounts for 2,432 clocks of the baseline difference, while later waits differ by 32-50 clocks each.
 After the clear, `$F018` is the first large drawing-service difference: 119,224 SWK clocks versus
-152,264 authentic. `$F027` is not implicated in the first divergence. The next bounded target is the
-final boot IRQ schedule, followed by live `$F009`/IRQ-wrapper phase and `$F018` timing. Longer play,
+152,264 authentic. `$F027` is not implicated in the first divergence. The next bounded targets are
+live `$F009`/IRQ-wrapper timing and `$F018`. Longer play,
 alternative schedules, physical hardware, and user-perceived playability remain untested here.
 
 ## Validation and limits
@@ -294,7 +303,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 
 | Area | Timing status | Remaining issue |
 | --- | --- | --- |
-| Reset and `$6020` entry | Partial frame match | SWK uses repeated measured 24-IRQ and a 20-IRQ wait at reset. A clean current-source Brick Blaster build enters `$6020` on frame floor 414, matching UMC/Bit; exact master clocks differ (`30,228,254` versus `30,239,372/30,239,430`) and frame/LCD/AY/audio phase remains unmeasured broadly. |
+| Reset and `$6020` entry | Exact Brick Blaster UMC clock/IRQ phase; broader phase partial | SWK uses repeated measured waits and an explicit pending-final-IRQ release. Brick Blaster SWK and UMC enter at master clock `30,239,372`, 218 clocks after their final boot IRQ; Bit enters at `30,239,430` with the same phase. Startup presentation, AY/audio phase, physical timing, and broad cartridge-specific timing remain unresolved. |
 | Periodic IRQ wrapper and `$6026` callback | Partial | Counter carry and callback gating are synthetic-tested, and callback register effects are bounded, but arbitrary callback work, IRQ timing inside services, stack bus timing, and full frame-level phase are not established. |
 | Link NMI and `$6023` callback | Exact synthetic timing; live timing unknown | Disabled, direct, and absolute-JMP synthetic forms measured 66, 110, and 116 master clocks respectively at instruction-granular emulator boundaries. The 64 P/256 S matrix and partial receive-state save/load pass. Live UART/Netpacket edges, callback reentrancy, nested IRQ/NMI and physical timing remain open. |
 | `$F000` fixed bitmap placeholder | Partially complete | The independently authored blank placeholder matches the measured geometry, write counts, final LCD address, return state, and 3,278-master-clock uninterrupted duration. It does not reproduce the authentic asset or claim matching intermediate event timing and interrupt interference. |

@@ -252,6 +252,17 @@ int main(int argc, char** argv) {
 			"ay_changed_mask\tay_writes\tlcd_writes\tvram_writes\tbank_writes\t"
 			"uart_clocks\tirqs\tnmis\n");
 	}
+	FILE* bootIrqFile = NULL;
+	const char* bootIrqPath = getenv("GAMATEBIOSCALLS_BOOT_IRQ_REPORT");
+	if (bootIrqPath && *bootIrqPath) {
+		bootIrqFile = fopen(bootIrqPath, "w");
+		if (!bootIrqFile) {
+			fprintf(stderr, "could not create boot IRQ report\n");
+			if (callFile) fclose(callFile);
+			return 2;
+		}
+		fprintf(bootIrqFile, "index\tmaster_clock\tinterrupted_pc\n");
+	}
 	size_t biosSize, romSize;
 	uint8_t* bios = readFile(argv[1], &biosSize);
 	uint8_t* rom = readFile(argv[2], &romSize);
@@ -259,6 +270,7 @@ int main(int argc, char** argv) {
 		fprintf(stderr, "could not read BIOS or cartridge\n");
 		free(bios); free(rom);
 		if (callFile) fclose(callFile);
+		if (bootIrqFile) fclose(bootIrqFile);
 		return 2;
 	}
 	struct Gamate g;
@@ -267,21 +279,27 @@ int main(int argc, char** argv) {
 		fprintf(stderr, "invalid BIOS or cartridge size\n");
 		free(bios); free(rom);
 		if (callFile) fclose(callFile);
+		if (bootIrqFile) fclose(bootIrqFile);
 		return 2;
 	}
 	free(bios); free(rom);
 
 	bool entered = false;
-	uint64_t lastBootIrqClock = 0;
-	uint16_t lastBootIrqPc = 0;
+	uint64_t bootIrqClocks[2] = { 0 };
+	uint16_t bootIrqPcs[2] = { 0 };
 	for (uint64_t instruction = 0; instruction < 20000000; instruction++) {
 		uint64_t startClocks = g.masterClocks;
 		uint64_t oldIrqs = g.diagnostics.irqsTaken;
 		uint16_t interruptedPc = g.cpu.pc;
 		unsigned cycles = gamateCpuStep(&g);
 		if (g.diagnostics.irqsTaken != oldIrqs) {
-			lastBootIrqClock = startClocks;
-			lastBootIrqPc = interruptedPc;
+			bootIrqClocks[0] = bootIrqClocks[1];
+			bootIrqClocks[1] = startClocks;
+			bootIrqPcs[0] = bootIrqPcs[1];
+			bootIrqPcs[1] = interruptedPc;
+			if (bootIrqFile) fprintf(bootIrqFile, "%llu\t%llu\t%04X\n",
+				(unsigned long long) g.diagnostics.irqsTaken,
+				(unsigned long long) startClocks, interruptedPc);
 		}
 		gamateRunClocks(&g, cycles * 2);
 		if (g.protectionPassed && g.cpu.pc == 0x6020) {
@@ -293,6 +311,7 @@ int main(int argc, char** argv) {
 		fprintf(stderr, "BIOS did not reach cartridge entry: PC=$%04X\n", g.cpu.pc);
 		gamateFree(&g);
 		if (callFile) fclose(callFile);
+		if (bootIrqFile) fclose(bootIrqFile);
 		return 1;
 	}
 	uint64_t entryClocks = g.masterClocks;
@@ -373,14 +392,17 @@ int main(int argc, char** argv) {
 	printf("# frames=%u cartridge_instructions=%llu bios_instructions=%llu events=%zu "
 		"irqs=%llu nmis=%llu overflow=%u completed_calls=%llu open_calls=%zu "
 		"unpaired_returns=%llu call_stack_overflow=%llu boot_entry_master=%llu "
-		"boot_entry_irq_clock=%u boot_last_irq_age=%llu boot_last_irq_pc=%04X\n", frames,
+		"boot_entry_irq_clock=%u boot_previous_irq_age=%llu boot_previous_irq_pc=%04X "
+		"boot_last_irq_age=%llu boot_last_irq_pc=%04X\n", frames,
 		(unsigned long long) cartridgeInstructions, (unsigned long long) biosInstructions, eventCount,
 		(unsigned long long) g.diagnostics.irqsTaken, (unsigned long long) g.diagnostics.nmisTaken,
 		overflow, (unsigned long long) completedCalls, callDepth,
 		(unsigned long long) unpairedReturns, (unsigned long long) callStackOverflow,
 		(unsigned long long) entryClocks, entryIrqClocks,
-		(unsigned long long) (entryClocks - lastBootIrqClock), lastBootIrqPc);
+		(unsigned long long) (entryClocks - bootIrqClocks[0]), bootIrqPcs[0],
+		(unsigned long long) (entryClocks - bootIrqClocks[1]), bootIrqPcs[1]);
 	gamateFree(&g);
 	if (callFile && fclose(callFile)) return 1;
+	if (bootIrqFile && fclose(bootIrqFile)) return 1;
 	return overflow || callStackOverflow || unpairedReturns ? 1 : 0;
 }

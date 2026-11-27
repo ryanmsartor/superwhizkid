@@ -59,6 +59,7 @@ static void checkEntry(struct Gamate* g) {
 	assert(g->cpu.pc == ENTRY && g->cpu.a == 0xFF && g->cpu.x == 0x28);
 	assert(g->cpu.y == 0xFF && g->cpu.s == 0xFF && g->cpu.p == 0xA1);
 	assert(!g->cpu.irqMask && !g->irq && !g->nmi);
+	assert(g->irqClocks == 218);
 	for (unsigned i = 0; i < 0x20; i++) {
 		uint8_t expected = 0;
 		if (i == 4) expected = 0x47;
