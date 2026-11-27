@@ -261,9 +261,30 @@ remaining difference is now the known `$F018` fixed/row and edge-term timing rat
 `$F009`, `$F00C`, or interrupt overhead. These are emulator measurements of authentic firmware,
 not physical hardware timing.
 
+The next `$F018` pass decomposed that 422-clock difference using derived stream statistics rather
+than cartridge payload: Brick Blaster's call has 18 rows, 83 pairs (21 transparent), 125 opaque
+columns, and tile-index groups concentrated in groups 0, 1, 6, and 7. The old residual is exactly
+`+78 fixed - 14*rows + 4*transparent - 4*group6 - 8*group7 = -422`. A plane-aware row adjustment
+now supplies the missing 14 master clocks per logical row, matching the authentic 260-clock row
+term. Keeping earlier service addresses fixed places the enlarged `$F018` body at a different
+internal page alignment, adding another 44 clocks in this long call. The live call rises from
+151,842 to 152,138 clocks versus 152,264 authentic, leaving 126 clocks. Output, earlier service
+timing, and entry phase remain unchanged; the remaining fixed, transparent-pair, high-group, and
+code-page terms must be corrected together rather than treated as an unexplained delay.
+
+The following high-group pass corrected tile-index bit 7 without adding dispatch overhead. Carry is
+known set on that path, so a taken branch replaces one NOP and supplies the missing odd CPU cycle in
+each plane. Groups 4-7 consequently gain four master clocks per logical pair while groups 0-3 are
+unchanged. Brick Blaster's masked `$F018` becomes 150,802 clocks versus 150,724 authentic, and the
+live call becomes 152,342 versus 152,264: a 78-clock residual in both cases. For this stream the
+`+4 * 83` pair surplus now cancels the remaining group-6/7 deficits exactly, isolating the residual
+to the fixed-call term. Groups 5/6 remain four clocks short and group 7 eight clocks short in minimal
+cases; pair and fixed terms remain deliberately open rather than being hidden by a game-specific pad.
+
 The 1,000-frame matrix retains the startup-only frame-1 presentation difference and the first later
-VRAM/video boundaries at frames 114/116. No-input matching is 109 VRAM and 114 video frames.
-Under the controller-cycle schedule, both video and VRAM match on 720 frames, a substantial increase
+VRAM/video boundaries at frames 114/116. After the bit-7 correction, no-input matching is 110 VRAM
+and 114 video frames. Under the controller-cycle schedule, video matches on 720 frames and VRAM on
+721, a substantial increase
 from the earlier 483/482 result because the corrected IRQ cost permits later reconvergence. This is
 still a frame-hash compatibility result, not proof of complete functional equivalence; `$F018`
 timing remains the next causal target.
@@ -343,7 +364,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | `$F00F` fixed plane-0 clear | Exact for the controlled contract | Synthetic 775-byte VRAM, 829-LCD-write and 15,930-master-clock results agree; broader interrupt and side-effectful contexts are not claimed. NOP padding is an implementation convenience, not a timing substitute. |
 | `$F012` glyph run | Partial, improved | The fixed-row unroll, direct selector transfer, reduced stack bookkeeping, and combined C/V decision tree preserve the measured output, flags, and stack footprint. Across all 256 one-tile selectors and both tested entry-V states, SWK is now 68-130 clocks over the authentic selector/page formula; the original worst residual was 274. Exact class-dependent timing remains open. |
 | `$F015` two-plane bitmap copy | Partial, improved | Geometry, LCD writes and tail-JMP behavior are implemented. Keeping status on the stack lets `$01A` count columns while preserving `$01C`, eliminating both width stack round trips. Reordering the saved status/X values avoids a temporary status copy, and the entry X value is consumed directly when deriving the destination column. An out-of-line 256-row pointer path removes the ordinary per-column taken branch. Tested nonzero-height shapes now take `322 + c*(184 + 76*r)` versus the authentic `234 + c*(132 + 76*r)`; zero height uses `r=256` and a 176-clock column term. The per-byte cost is exact; the ordinary remaining difference is 88 fixed clocks plus 52 per column. A source-pointer carry still adds eight clocks beyond the authentic indexed-read page penalty. |
-| `$F018` pair stream | Partial, substantially improved | The emitted-column term now matches 330 master clocks, opaque-pair setup is within a few clocks in minimal cases, and tile-group timing is within 0-12 clocks there. Brick Blaster's first live call improves from 119,224 to 151,676 clocks versus 152,264 authentic. All 133,725 synthetic boundary/open-bus/flag cases retain matching non-timing behavior. Fixed/row residuals, zero opaque counts, page-cross combinations, and interrupt-spanning exactness remain open. |
+| `$F018` pair stream | Partial, substantially improved | The emitted-column, 260-clock row, and bit-7 group terms now match. Brick Blaster's first live call takes 152,342 clocks versus 152,264 authentic, leaving an isolated +78-clock fixed residual. Minimal groups 5/6 remain four clocks short and group 7 eight short; the pair term remains four clocks long. All synthetic boundary/open-bus/flag cases retain matching non-timing behavior. Zero opaque counts and page-cross combinations remain open. |
 | `$F01B` row-run stream | Partial | Synthetic ordinary and escape/wrap cases matched UMC timing. Later callbacks, RAM aliases, decimal mode and interrupt-handler work are not fully timing-equivalent. |
 | `$F01E` tile-literal stream | Partial | A sampled context was 314,334 prototype clocks versus 324,556 authentic clocks; exact timing and broad stream variation remain open. |
 | `$F021` row-literal stream | Exact for the executable contract | All 406 authentic corpus calls and 450 synthetic cases matched the independent model, including exact uninterrupted timing and handler-time-only additions in 280 interrupt-spanning replays. Mutable aliases, nonterminating streams and handlers that alter service inputs remain outside the contract. |

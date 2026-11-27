@@ -1018,6 +1018,34 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   their already documented blank-output failures. This was a short regression screen, not the
   standard 1,000-frame compatibility window.
 
+- `$F018` row-term follow-up: the executable model's derived counters report 18 rows, 83 pairs,
+  21 transparent pairs, 125 opaque columns, no stream crossing/wrap, and tile-group counts
+  `21,11,0,0,0,0,19,32` for Brick Blaster's first call. No stream or graphics payload was retained.
+  Minimal synthetic cases show the pre-change timing residual as `+78` fixed, `-14` per logical
+  row, `+4` per transparent pair, `-4` for each group-6 pair and `-8` for each group-7 pair; these
+  terms reproduce the measured `-422` exactly. A plane-aware delay supplies seven CPU cycles across
+  the two passes, correcting the authentic 260-master-clock row term. Preserving all earlier service
+  addresses changes internal `$F018` page alignment and contributes another 44 clocks in this long
+  path. The live call becomes 152,138 clocks versus 152,264 UMC while retaining identical output
+  and five IRQs, leaving 126 clocks across the fixed, transparent-pair, high-group, and code-page
+  terms. The repeated 1,000-frame matrix retains 109/114 no-input VRAM/video matches and records
+  719/719 controller-cycle matches. A repeated 62-cartridge, 100-frame smoke sweep remains 59 normal
+  passes plus the same three known blank-output titles. This is emulator-derived timing evidence,
+  not a physical measurement.
+
+- `$F018` bit-7 timing follow-up: minimal group cases showed that the row-aligned implementation's
+  bit-7 pointer path was one CPU cycle short per plane. Because its preceding ASL guarantees carry
+  set, replacing one NOP with an always-taken branch adds that single cycle without changing flags,
+  registers, RAM, or port activity. Groups 4-7 gain four master clocks per logical pair; groups 0-3
+  are unchanged. Brick Blaster's masked call changes from 150,598 to 150,802 clocks versus 150,724
+  UMC, and its live call changes from 152,138 to 152,342 versus 152,264. The identical +78 residual
+  isolates the next Brick target to fixed-call timing: this stream's +332-clock pair surplus cancels
+  its remaining -332-clock groups 6/7 deficit. Groups 5/6 remain four clocks short and group 7 eight
+  clocks short in minimal tests, so this does not claim complete `$F018` timing alignment. The
+  repeated 1,000-frame comparison records 110/114 no-input VRAM/video matches and 721/720
+  controller-cycle VRAM/video matches. Audio samples, AY/audio phase, and master-clock equality
+  remain excluded from that frame-hash comparison.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

@@ -993,6 +993,10 @@ f018_row:
 	pha
 	tsx
 	lda $0102,x
+	; The authentic row term is seven CPU cycles across the two plane passes.
+	bne :+
+	nop
+:
 	beq :+
 	lda #$80
 :
@@ -2116,15 +2120,18 @@ f018_point_tile:
 	sta $03
 	lda $1A
 	asl a
-	bcc :+
+	bcc @bit7_clear
 	inc $03
 	inc $03
 	inc $03
 	inc $03
-	.repeat 22
+	; Carry is set on this path. An always-taken branch supplies the odd cycle needed by bit 7.
+	bcs @bit7_delay_done
+@bit7_delay_done:
+	.repeat 21
 	nop
 	.endrepeat
-:
+@bit7_clear:
 	asl a
 	bcc :+
 	inc $03

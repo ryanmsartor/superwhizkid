@@ -37,6 +37,9 @@ struct Model {
 	uint8_t ram[0x1C], written[0x1C];
 	uint8_t a, x, y, p;
 	uint64_t clocks;
+	unsigned rows, pairs, transparentPairs, tileGroups, opaqueColumns;
+	unsigned streamCrossings, streamWraps, tileCrossingReads;
+	unsigned tileGroupCounts[8];
 };
 
 struct Result {
@@ -202,8 +205,12 @@ static bool model(const struct Gamate* g, struct Model* m) {
 			if (index >= 0x10000 || !sourceByte(g, (uint16_t) (pointer + index), &row))
 				return false;
 			modelRead(m, (uint16_t) (pointer + (index & ~255u)), index & 255);
-			if ((pointer & 255) + (index & 255) > 255) m->clocks += 2;
+			if ((pointer & 255) + (index & 255) > 255) {
+				m->clocks += 2;
+				m->streamCrossings++;
+			}
 			if (row == 0xFE) break;
+			if (!plane) m->rows++;
 			index++;
 			m->clocks += 130;
 			uint8_t column = (uint8_t) (plane << 7);
@@ -214,14 +221,26 @@ static bool model(const struct Gamate* g, struct Model* m) {
 				if (index >= 0xFFFF ||
 						!sourceByte(g, (uint16_t) (pointer + index), &tile)) return false;
 				modelRead(m, (uint16_t) (pointer + (index & ~255u)), index & 255);
-				if ((pointer & 255) + (index & 255) > 255) m->clocks += 2;
+				if ((pointer & 255) + (index & 255) > 255) {
+					m->clocks += 2;
+					m->streamCrossings++;
+				}
 				index++;
 				if (tile == 0xFF) break;
 				if (!LITERAL) {
 					if (!sourceByte(g, (uint16_t) (pointer + index), &count)) return false;
 					modelRead(m, (uint16_t) (pointer + (index & ~255u)), index & 255);
-					if ((pointer & 255) + (index & 255) > 255) m->clocks += 2;
+					if ((pointer & 255) + (index & 255) > 255) {
+						m->clocks += 2;
+						m->streamCrossings++;
+					}
 					index++;
+				}
+				if (!plane) {
+					m->pairs++;
+					m->transparentPairs += !tile;
+					m->tileGroups += tile >> 5;
+					m->tileGroupCounts[tile >> 5]++;
 				}
 				m->clocks += LITERAL ? 196 : 236;
 				m->clocks += 32 * (tile >> 5);
@@ -250,17 +269,22 @@ static bool model(const struct Gamate* g, struct Model* m) {
 						uint16_t address = (uint16_t) ((high << 8 | low) + indexed);
 						if (!sourceByte(g, address, &value)) return false;
 						modelRead(m, (uint16_t) (high << 8 | low), indexed);
-						if (low + indexed > 255) m->clocks += 2;
+						if (low + indexed > 255) {
+							m->clocks += 2;
+							m->tileCrossingReads++;
+						}
 						lcdWrite(&m->ports, g, 7, value);
 					}
 					if (m->ports.count > MAX_EVENTS) return false;
 					column++;
 				}
+				if (!plane) m->opaqueColumns += length;
 				modelWrite(m, 0x18, column);
 				modelWrite(m, 0x1B, 0);
 			}
 		}
 		m->clocks += 8 * (index >> 8);
+		m->streamWraps += index >> 8;
 		m->y = (uint8_t) index;
 		modelWrite(m, 1, (uint8_t) (g->ram[1] + (index >> 8)));
 	}
@@ -335,6 +359,7 @@ static int corpus(struct Gamate* g, struct Gamate* copy, struct Capture* capture
 	unsigned calls = 0, unsupported = 0, ports = 0, rom = 0, registers = 0, ram = 0;
 	unsigned clocks = 0, peripherals = 0, returned = 0, spanned = 0, openMismatch = 0;
 	unsigned decimal = 0, maxStack = 0;
+	long long lastClockDelta = 0;
 	const char* press = getenv("GAMATEBIOSCALLS_PRESS");
 	for (unsigned frame = 1; frame <= frames; frame++) {
 		g->buttons = gamateBiosButtonsForFrame(frame, press);
@@ -349,6 +374,7 @@ static int corpus(struct Gamate* g, struct Gamate* copy, struct Capture* capture
 			copy->cpu.p |= 4;
 			copy->cpu.irqMask = true;
 			struct Result r = check(copy, capture, expected);
+			lastClockDelta = r.clockDelta;
 			unsupported += !r.supported;
 			returned += r.returned;
 			ports += !r.ports;
@@ -369,6 +395,18 @@ static int corpus(struct Gamate* g, struct Gamate* copy, struct Capture* capture
 		"ram_mismatch=%u clock_mismatch=%u peripheral_mismatch=%u decimal=%u max_stack=%u "
 		"interrupt_spanning=%u open_mismatch=%u\n", calls, returned, unsupported, ports, rom,
 		registers, ram, clocks, peripherals, decimal, maxStack, spanned, openMismatch);
+	if (calls == 1 && !unsupported) {
+		printf("rows=%u pairs=%u transparent_pairs=%u tile_groups=%u opaque_columns=%u "
+			"stream_crossings=%u stream_wraps=%u tile_crossing_reads=%u clock_delta=%lld\n",
+			expected->rows, expected->pairs, expected->transparentPairs, expected->tileGroups,
+			expected->opaqueColumns, expected->streamCrossings, expected->streamWraps,
+			expected->tileCrossingReads, lastClockDelta);
+		printf("tile_group_counts=%u,%u,%u,%u,%u,%u,%u,%u\n",
+			expected->tileGroupCounts[0], expected->tileGroupCounts[1],
+			expected->tileGroupCounts[2], expected->tileGroupCounts[3],
+			expected->tileGroupCounts[4], expected->tileGroupCounts[5],
+			expected->tileGroupCounts[6], expected->tileGroupCounts[7]);
+	}
 	return unsupported || returned != calls || ports || rom || registers || ram || clocks ||
 		peripherals || openMismatch;
 }
