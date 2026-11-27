@@ -994,6 +994,30 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   remains 59 normal passes plus the same three known blank-output titles. This is local emulator
   evidence, not physical IRQ timing; reports stayed temporary and inputs were read-only.
 
+- Enabled IRQ-wrapper cost follow-up: comparing each live `$F00C` duration against its independently
+  established 247,326-master-clock uninterrupted contract shows that UMC adds exactly 308 master
+  clocks per enabled `$6026` callback IRQ: 2,464 clocks for eight IRQs and 2,156 for seven. SWK
+  added 270 per IRQ. Supplying the missing 38 clocks in the shared enabled wrapper makes both Brick
+  Blaster clears and all ten observed `$F009` waits exact, so SWK and UMC enter the first `$F018` at
+  master clock 8,114,978 with IRQ phase 20,608. An I-masked authentic-occurrence replay isolates the
+  remaining `$F018` deficit at 422 clocks: SWK takes 150,302 versus UMC's 150,724 while producing the
+  same LCD/VRAM result. This is local emulator evidence from independently executed firmware, not a
+  physical timing measurement. Diagnostic reports remained temporary and no firmware or cartridge
+  payload was retained.
+
+- The corresponding three-BIOS 1,000-frame comparison excludes audio samples, AY/audio phase and
+  master-clock equality. SWK retains its startup-only frame-1 difference, then first differs again
+  in VRAM at frame 114 and video at frame 116. It matches UMC on 109/114 no-input VRAM/video frames
+  and 720/720 controller-cycle frames; the latter improves from the preceding 482/483 result due to
+  later reconvergence. The remaining boundary begins during the isolated 422-clock `$F018` timing
+  deficit, so this matrix guides the next implementation pass rather than establishing complete
+  equivalence.
+
+- A 100-post-entry-frame SWK smoke sweep after the IRQ-wrapper change covered all 62 local
+  cartridges: 59 completed normally, while Famous 7, One Million Whys and QuizFighter retained
+  their already documented blank-output failures. This was a short regression screen, not the
+  standard 1,000-frame compatibility window.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

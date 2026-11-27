@@ -150,6 +150,7 @@ static void call(struct Gamate* g, uint16_t slot, uint8_t a, uint8_t x,
 }
 
 static void testIrq(struct Gamate* g) {
+	uint64_t clocks[2];
 	for (unsigned enabled = 0; enabled <= 1; enabled++) {
 		g->cpu.pc = RETURN;
 		g->cpu.a = 0xC1;
@@ -164,14 +165,17 @@ static void testIrq(struct Gamate* g) {
 		g->ram[0x0F] = g->ram[0x10] = g->ram[0x11] = 0xFF;
 		g->irq = true;
 		g->nmi = false;
+		uint64_t start = g->masterClocks;
 		step(g);
 		runUntil(g, RETURN, 1000);
+		clocks[enabled] = g->masterClocks - start;
 		assert(g->cpu.a == 0xC1 && g->cpu.y == 0x19 && g->cpu.p == 0xA1);
 		assert(g->cpu.x == (enabled ? 0x44 : 0x47) && g->cpu.s == 0xFF);
 		assert(g->ram[0x0B] == 24);
 		assert(g->ram[0x0E] == 1 && g->ram[0x0F] == 0);
 		assert(g->ram[0x10] == 0 && g->ram[0x11] == 0);
 	}
+	assert(clocks[1] - clocks[0] == 82);
 }
 
 static void testNmi(struct Gamate* g) {

@@ -239,7 +239,7 @@ reset:
 	lda #$C6
 	sta LCD_VRAM_ADDR_HI
 	jmp finalize_boot
-	.repeat 11
+	.repeat 6
 	nop
 	.endrepeat
 
@@ -282,8 +282,13 @@ irq:
 	lda CALLBACK_ENABLE
 	beq :+
 	jsr CART_IRQ_CALLBACK
-	; Align the enabled callback return with the observed live wait-service IRQ phase.
-	nop
+	; An enabled callback IRQ adds 308 master clocks to uninterrupted services.
+	; The callback and surrounding wrapper account for 266; this 21-cycle tail
+	; supplies the remaining 42 while preserving the callback's accumulator.
+	.repeat 3
+	pha
+	pla
+	.endrepeat
 :
 	pla
 	tay
