@@ -365,6 +365,28 @@ branch changed helper placement enough to worsen the live call to +438 clocks. B
 reverted. The old batched tail delay and low-group pointer path are coupled: transferring exact
 inter-byte phase must occur without moving the group-sensitive helper boundary.
 
+A compact `INC $01B` variant then supplied five cycles in two bytes between adjacent tile writes.
+Although final output and `$01B` still matched because X held the live repeat count, it added seven
+RAM read-modify-write accesses per column, changed status during each gap, moved the helper by nine
+bytes, and worsened Brick Blaster to +2,622 clocks. It was rejected; final-RAM equality is not enough
+when timing, scratch accesses, and flags are part of the service contract.
+
+The next primitive trial used `TXA; BNE` between writes because the live repeat count guarantees X
+is nonzero, giving five cycles while A is overwritten by the next source-byte load. A 21-cycle
+bit-7 NOP delay was replaced by a cycle-equivalent X loop. Both are behaviorally plausible, but the
+combined body moved the opaque helper by 13 bytes, its point helper by 13 bytes, and following
+services by 16 bytes. The one- and two-column residual rose to +74, and the live Brick Blaster
+residual became -4,170 clocks. This variant was reverted. The remaining redesign must keep external
+service addresses and the two helper entries fixed while relocating internal cycle distribution.
+
+A direct-wrapper phase trial removed the two pass `JSR` entries and placed the plane transition in
+the terminator. It saved 13 CPU cycles and reduced the masked fixed residual to +44 clocks, with all
+functional model properties intact. The second pass began 26 master clocks earlier, however,
+shifting the five IRQ-visible boundaries and producing a +336-clock live residual. VRAM frame
+matches fell from 110 to 109. The trial was reverted: the 26-clock saving must be compensated before
+the affected IRQ boundaries while a separate 22 CPU-cycle reduction still closes the remaining
+masked error.
+
 An explicit-plane ground-up controller redesign then removed the two pass-subroutine calls and
 encoded "opaque seen" alongside the plane selector. It remained behaviorally exact in the prototype
 and synthetic boundary suite, and its row, transparent and 330-clock column terms could be

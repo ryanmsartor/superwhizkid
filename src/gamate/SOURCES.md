@@ -1138,6 +1138,37 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   aggregate column duration are necessary but insufficient: low-group pointer selection and code
   placement must be redesigned together with the delay transfer.
 
+- `$F018` compact scratch-RMW experiment: `INC $01B` supplies five CPU cycles in two bytes and was
+  tested between each adjacent tile-byte write. The live repeat count is held in X, so changing the
+  scratch count between bytes did not alter final output, and the service later overwrites `$01B`
+  to zero. This eliminated the large inline code expansion, but it added seven undocumented RAM
+  read/write-modify-write actions per column and changed N/Z during the loop. It also moved the
+  group helper by nine bytes; the one-column synthetic residual was +126, the two-column residual
+  +146, and Brick Blaster's live call +2,622 clocks. The variant was reverted. A compact timing
+  primitive must also preserve observed bus accesses and helper placement; final RAM equality alone
+  is insufficient.
+
+- `$F018` address-neutral primitive trial: `TXA; BNE +0` provides five CPU cycles only after each
+  opaque byte write because X is the nonzero repeat count; A is immediately overwritten by the next
+  source load, so the result is not callback-visible between bytes. Replacing the batched column tail
+  with JMP boundaries and replacing the 21-cycle bit-7 NOP run by `LDX #$04; DEX/BNE` preserved the
+  nominal cycles and shrank the tail regions. It nevertheless moved `f018_repeat` by -5 bytes,
+  the following services by +16 bytes, the column delay by +16, the opaque helper entry by +13 and
+  the point helper by +13. One/two-column cases acquired +74 rather than the retained +70, and the
+  live Brick Blaster residual became -4,170 clocks. A fixed-size low-group branch experiment
+  additionally changed pointer reads. The trial was reverted. The target is now explicit: every
+  external service address and both opaque helper entries must remain at their verified positions
+  until the 35-cycle distribution can be moved without relocating the group-sensitive path.
+
+- `$F018` direct-wrapper phase trial: replacing the two pass `JSR` entries with `JMP` and carrying
+  the second-pass transition in `f018_end` saves 13 CPU cycles, reducing the masked empty/ordinary
+  residual from +70 to +44 clocks while preserving all model outputs. The second pass then begins
+  26 master clocks earlier; in Brick Blaster that changes which service instructions coincide with
+  the five live IRQs and produces a +336-clock call residual, with VRAM frame matches falling from
+  110 to 109. The trial was reverted. This establishes that wrapper savings alone are not phase
+  neutral: compensating delay must be placed before the affected IRQ boundaries, while the remaining
+  22 CPU-cycle reduction is still required for the masked contract.
+
 - `$F018` direct-return follow-up: the independently authored second-pass tail-call experiment
   reduced the isolated residual from 70 to 62 master clocks, but the added first-pass conditional
   shifted that pass terminator by two CPU cycles. In the live Brick Blaster call this changed
