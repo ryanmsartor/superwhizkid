@@ -1229,6 +1229,21 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   were deleted. No authentic code was disassembled or copied. The remaining +26 is pass
   bookkeeping (85 versus 72 CPU cycles on the empty path), not a row, pair or column coefficient.
 
+- `$F018` post-return liveness audit (local experiment; UMC as a black box): each local cartridge
+  ran for 1,000 frames under the no-input and controller-cycle schedules, covering up to 24
+  `$F018` returns per title. At each return, one of A, X, Y, N, Z, C, V, `$00`, `$01` or `$18`-`$1B`
+  was inverted in a machine copy. That copy and an unperturbed copy each ran 60 frames, and their
+  frame hashes and serialized states were compared. Across 77 returns in 23 titles, A and N/Z/C
+  never mattered. `$18`-`$1B` only persisted unread. X, Y and V changed later state in GP Race, and
+  V also in Vindicators. `$01` changed video in Mighty Tank and Vindicators, and `$00` changed
+  Mighty Tank state.
+  Effect: compatibility policy, not hardware behavior. SWK omits the authentic A=`$FE`/N/Z/C
+  result and does not reproduce final scratch values. `gamatebiosf018` and the prototype test
+  check X, Y, V/D/I and the pointer only. The fixed residual falls from +26 to +18 clocks.
+  Limitations: finite horizon (60 frames), two input schedules, at most 24 calls per title, and
+  untested game paths. Only derived pass/fail counts were retained; the temporary probe lived under
+  `/tmp` and was deleted.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

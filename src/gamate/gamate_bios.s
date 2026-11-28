@@ -962,17 +962,12 @@ tile_stream_pass:
 
 ; Two-pass row stream of (tile, count) pairs; tile zero advances the column by count.
 	; Unexecuted padding keeps pair_stream_pass and the following services at fixed addresses.
+	.repeat 10
 	nop
-	nop
-	nop
-	nop
-	nop
-	nop
+	.endrepeat
 f018_end:
 	pla
 	beq @second_pass
-	lda #$FE
-	cmp #$FE
 	rts
 @second_pass:
 	pla

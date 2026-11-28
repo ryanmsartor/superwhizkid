@@ -858,18 +858,16 @@ static void testPairStream(struct Gamate* g) {
 	call(g, 0xF018, 0x42, 0x55, 0x71, 0x74, 100000);
 	assert(!memcmp(g->vram, expected, sizeof(expected)));
 	assert(g->diagnostics.vramWrites - writes == 48);
-	assert(g->cpu.a == 0xFE && g->cpu.x == 0xFF && g->cpu.y == 10 && g->cpu.p == 0x37);
+	// A, N, Z, C and the $18-$1B scratch bytes are not part of the retained return contract.
+	assert(g->cpu.x == 0xFF && g->cpu.y == 10 && (g->cpu.p & 0x7C) == 0x34);
 	assert(g->ram[0] == 0 && g->ram[1] == 3 && g->ram[2] == 0x7F && g->ram[3] == 0x6B);
-	assert(g->ram[0x18] == 0x81 && g->ram[0x19] == 5);
-	assert(g->ram[0x1A] == 8 && g->ram[0x1B] == 0);
 
 	static const uint8_t transparent[] = { 1, 0, 0x80, 0xFF, 0xFE };
 	memcpy(g->ram + 0x300, transparent, sizeof(transparent));
 	writes = g->diagnostics.vramWrites;
 	call(g, 0xF018, 0x42, 0x55, 0x71, 0x24, 100000);
 	assert(g->diagnostics.vramWrites == writes);
-	assert(g->cpu.a == 0xFE && g->cpu.x == 0x55 && g->cpu.y == 4 && g->cpu.p == 0x67);
-	assert(g->ram[0x18] == 0 && g->ram[0x19] == 1 && g->ram[0x1A] == 0 && g->ram[0x1B] == 0x80);
+	assert(g->cpu.x == 0x55 && g->cpu.y == 4 && (g->cpu.p & 0x7C) == 0x64);
 }
 
 static void putLinear(uint8_t* vram, unsigned address, uint8_t value) {

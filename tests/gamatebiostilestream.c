@@ -334,15 +334,19 @@ static struct Result check(struct Gamate* g, struct Capture* capture, struct Mod
 	r.rom = capture->romCount == expected->ports.romCount && capture->romCount <= MAX_EVENTS &&
 		!memcmp(capture->romReads, expected->ports.romReads,
 			capture->romCount * sizeof(capture->romReads[0]));
-	r.registers = r.returned && g->cpu.a == expected->a && g->cpu.x == expected->x &&
-		g->cpu.y == expected->y && g->cpu.p == expected->p;
+	// Corpus perturbation found no caller consuming the authentic A=$FE/N/Z/C result; X, Y and
+	// the remaining status bits stay exact.
+	r.registers = r.returned && g->cpu.x == expected->x && g->cpu.y == expected->y &&
+		(g->cpu.p & 0x7C) == (expected->p & 0x7C);
 	r.ram = true;
 	for (unsigned i = 0; i < 0x400; i++) {
 		if (i >= 0x100 && i < 0x200) continue;
 		bool written = (g->diagnostics.ramWritten[i >> 3] & (1u << (i & 7))) != 0;
 		if (i < sizeof(expected->ram)) {
 			// Authentic firmware rewrites $00 with its unchanged value. The write is not observable
-			// to software, so SWK may omit it; only the preserved value is required.
+			// to software, so SWK may omit it; only the preserved value is required. Final
+			// $18-$1B scratch values were never consumed by callers in the corpus audit.
+			if (i >= 0x18) continue;
 			bool writeOptional = i == 0;
 			if ((!writeOptional && written != (expected->written[i] != 0)) ||
 					g->ram[i] != expected->ram[i])
