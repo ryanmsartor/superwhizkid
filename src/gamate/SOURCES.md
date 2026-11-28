@@ -1129,6 +1129,18 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   remains 23,852 versus 24,910 instructions, 152,264 versus 152,334 clocks, and five IRQs for
   UMC and SWK respectively. No replacement logic from this phase was retained.
 
+- `$F018` explicit-plane ground-up redesign: a replacement controller encoded plane selection in
+  X and used one low bit as an "opaque pair seen" marker, removing the two pass-subroutine calls and
+  their PHA/PLA marker from the parser. It passed the synthetic prototype and 1,373 boundary cases
+  on every non-timing property, and row, transparent-pair and 330-clock emitted-column terms could
+  be calibrated independently. However, opaque pairs required saving/restoring the encoded X state
+  around the count loop; that cost 17 CPU cycles per physical plane pass. An opaque pair therefore
+  retained a 34-clock residual, and Brick Blaster's 62 opaque pairs contributed 2,096 extra clocks
+  relative to the isolated +70 fixed wrapper term. The redesign was reverted. It establishes that
+  replacing the pass wrapper is insufficient unless X/count/opaque state can remain resident without
+  a per-opaque push/restore cycle, so the next retained attempt must solve the opaque-loop state
+  ownership as part of the controller redesign rather than after it.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

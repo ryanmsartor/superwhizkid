@@ -340,6 +340,15 @@ The remaining implementation must therefore redesign the fixed two-pass wrapper 
 the five IRQ offsets and their LCD-progress positions, not merely adjust the tile loop or terminal
 duration.
 
+An explicit-plane ground-up controller redesign then removed the two pass-subroutine calls and
+encoded "opaque seen" alongside the plane selector. It remained behaviorally exact in the prototype
+and synthetic boundary suite, and its row, transparent and 330-clock column terms could be
+calibrated independently. Opaque output exposed the remaining architectural cost: preserving the
+encoded selector around each count loop added 17 CPU cycles per plane, or 34 clocks per logical
+pair. Brick Blaster's 62 opaque pairs consequently produced 2,096 extra clocks before group and
+layout effects, so this redesign was reverted. The next attempt must redesign selector ownership
+inside the opaque loop rather than optimize only the outer two-pass wrapper.
+
 The 1,000-frame matrix retains the startup-only frame-1 presentation difference and the first later
 VRAM/video boundaries at frames 114/116. After the bit-7 correction, no-input matching is 110 VRAM
 and 114 video frames. Under the controller-cycle schedule, video matches on 720 frames and VRAM on
