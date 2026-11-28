@@ -67,5 +67,5 @@ runtime reads before documenting a format as used by game software.
   nearest-neighbor scaling, and range selection. No `rc2tools` implementation code was copied or
   translated. Its Game Boy tile decoder was specifically not reused because Gamate storage remains
   an open research question.
-- [`VIDEO_HARDWARE.md`](VIDEO_HARDWARE.md) records the hardware model that constrains the decoder.
+- [`VIDEO_HARDWARE.md`](../VIDEO_HARDWARE.md) records the hardware model that constrains the decoder.
 

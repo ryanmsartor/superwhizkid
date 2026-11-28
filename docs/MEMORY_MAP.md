@@ -79,8 +79,8 @@ $0E0-$0E1/$0E5-$0E6
                    Inherited cartridge-checksum scratch copies established by replacement analysis
 ```
 
-The low-RAM ABI is covered by [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md) and
-[`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md). Physical values above `$01F` are
+The low-RAM ABI is covered by [`BIOS_ENTRY_RAM_ANALYSIS.md`](bios/BIOS_ENTRY_RAM_ANALYSIS.md) and
+[`BIOS_RUNTIME_API_ANALYSIS.md`](bios/BIOS_RUNTIME_API_ANALYSIS.md). Physical values above `$01F` are
 largely title-defined. Cartridge/block sweeps found broad or repeated sensitivity in particular
 ranges, including `$000-$03F`, `$0C0-$0FF`, `$200-$23F`, and `$240-$27F`, but those observations
 do not establish shared meanings or reserved bytes.
@@ -302,7 +302,7 @@ The only known 16 KiB cartridge is Cube Up. The core wraps its ROM offset by ima
 presenting the image twice in the 32 KiB window. That is emulator policy, not proof of physical
 mirroring; the behavior of `$A000-$DFFF` on the original cartridge remains unresolved. See
 [`MAPPER_DETECTION.md`](MAPPER_DETECTION.md) and
-[`ROM_LAYOUT_ANALYSIS.md`](ROM_LAYOUT_ANALYSIS.md).
+[`ROM_LAYOUT_ANALYSIS.md`](roms/ROM_LAYOUT_ANALYSIS.md).
 
 ## References
 
@@ -311,5 +311,5 @@ mirroring; the behavior of `$A000-$DFFF` on the original cartridge remains unres
   offset selection.
 - [`MAPPER_DETECTION.md`](MAPPER_DETECTION.md): known mapper arrangements and decode uncertainty.
 - [`VIDEO_HARDWARE.md`](VIDEO_HARDWARE.md): LCD and VRAM organization.
-- [`BIOS_BOOT_BEHAVIOR.md`](BIOS_BOOT_BEHAVIOR.md): BIOS behavior and the unresolved `$5900`
+- [`BIOS_BOOT_BEHAVIOR.md`](bios/BIOS_BOOT_BEHAVIOR.md): BIOS behavior and the unresolved `$5900`
   function.

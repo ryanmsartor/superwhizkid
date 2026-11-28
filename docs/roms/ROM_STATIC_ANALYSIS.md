@@ -41,7 +41,7 @@ The corpus could establish:
 - Whether reachable bank-selection behavior is consistent with ROM size.
 
 This work directly supports the CRC-independent mapper-detection investigation documented in
-[`MAPPER_DETECTION.md`](MAPPER_DETECTION.md). Static opcode scanning can find candidates, but it
+[`MAPPER_DETECTION.md`](../MAPPER_DETECTION.md). Static opcode scanning can find candidates, but it
 cannot distinguish code from data or prove reachability. Dynamic traces should confirm every
 behavioral conclusion used to change emulation.
 
@@ -90,7 +90,7 @@ analysis could document:
 - Whether moving objects erase pixels, restore saved backgrounds, or redraw larger regions.
 
 These findings would complement the hardware description in
-[`VIDEO_HARDWARE.md`](VIDEO_HARDWARE.md).
+[`VIDEO_HARDWARE.md`](../VIDEO_HARDWARE.md).
 
 ## 5. Drawing strategies and LCD artifacts
 
@@ -200,14 +200,14 @@ UART. Analysis could determine:
 ## 12. BIOS dependencies after cartridge entry
 
 The two authentic firmware revisions are compared structurally and behaviorally in
-[`BIOS_DIFFERENCE_ANALYSIS.md`](BIOS_DIFFERENCE_ANALYSIS.md). That report records derived offsets,
+[`BIOS_DIFFERENCE_ANALYSIS.md`](../bios/BIOS_DIFFERENCE_ANALYSIS.md). That report records derived offsets,
 relocations, vectors, and boot effects without distributing BIOS bytes or disassembly.
 The resulting high-level boot and interrupt specification is separated into
-[`BIOS_BOOT_BEHAVIOR.md`](BIOS_BOOT_BEHAVIOR.md).
+[`BIOS_BOOT_BEHAVIOR.md`](../bios/BIOS_BOOT_BEHAVIOR.md).
 The full cartridge-entry state sweep and replacement/skip implications are documented in
-[`BIOS_REPLACEMENT_ANALYSIS.md`](BIOS_REPLACEMENT_ANALYSIS.md).
+[`BIOS_REPLACEMENT_ANALYSIS.md`](../bios/BIOS_REPLACEMENT_ANALYSIS.md).
 Executed post-entry calls and the stable `$F000-$F033` service table are tracked in
-[`BIOS_RUNTIME_API_ANALYSIS.md`](BIOS_RUNTIME_API_ANALYSIS.md).
+[`BIOS_RUNTIME_API_ANALYSIS.md`](../bios/BIOS_RUNTIME_API_ANALYSIS.md).
 
 The corpus could reveal whether cartridges only inherit BIOS-created state or continue using BIOS
 code after `$6020`:
@@ -254,7 +254,7 @@ logic-analyzer traces.
 The 62-image inventory and local hashes are recorded in [`ROM_CORPUS.md`](ROM_CORPUS.md). Topic
 reports linked above distinguish static candidates from reachable or dynamically confirmed behavior;
 record new implementation-relevant methods and findings in
-[`../src/gamate/SOURCES.md`](../src/gamate/SOURCES.md).
+[`../../src/gamate/SOURCES.md`](../../src/gamate/SOURCES.md).
 
 - The local 62-cartridge collection is user-supplied and must remain read-only. Do not copy ROM
   bytes into the repository, retained traces, reports, tests, or releases.

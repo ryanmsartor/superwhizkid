@@ -78,7 +78,7 @@ Both revisions reset through `$FC0D`. Their early initialization is mostly share
 - The BIT revision explicitly initializes the BIOS callback/control flag in RAM at two additional
   points.
 - The UMC revision contains the alternate cartridge-format-marker path already identified in
-  [`ROM_HEADER_ANALYSIS.md`](ROM_HEADER_ANALYSIS.md). It examines cartridge offset `$0002` and can
+  [`ROM_HEADER_ANALYSIS.md`](../roms/ROM_HEADER_ANALYSIS.md). It examines cartridge offset `$0002` and can
   bypass the small RAM trampoline for the recognized `$01` marker. The BIT revision unconditionally
   installs and enters its trampoline on this path.
 - Branches, trampoline source addresses, and subsequent helper calls were adjusted to accommodate

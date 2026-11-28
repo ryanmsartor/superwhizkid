@@ -167,7 +167,7 @@ only the boot document's high-level control flow.
 
 The per-title access evidence and phase sensitivity are maintained in
 [`BIOS_ENTRY_RAM_ANALYSIS.md`](BIOS_ENTRY_RAM_ANALYSIS.md) and the source record in
-[`../src/gamate/SOURCES.md`](../src/gamate/SOURCES.md), rather than repeated here.
+[`../../src/gamate/SOURCES.md`](../../src/gamate/SOURCES.md), rather than repeated here.
 
 | Vector | UMC/NCR wrapper | Bit Corporation wrapper |
 | --- | --- | --- |
@@ -207,8 +207,8 @@ Those points should remain unknown rather than be inferred from convenient names
 
 This specification derives from the local two-BIOS comparison in
 [`BIOS_DIFFERENCE_ANALYSIS.md`](BIOS_DIFFERENCE_ANALYSIS.md), cartridge-header results in
-[`ROM_HEADER_ANALYSIS.md`](ROM_HEADER_ANALYSIS.md), measured hardware behavior recorded in
-[`VIDEO_HARDWARE.md`](VIDEO_HARDWARE.md), and controlled Superwhizkid execution. It preserves
+[`ROM_HEADER_ANALYSIS.md`](../roms/ROM_HEADER_ANALYSIS.md), measured hardware behavior recorded in
+[`VIDEO_HARDWARE.md`](../VIDEO_HARDWARE.md), and controlled Superwhizkid execution. It preserves
 behavioral inputs, outputs, conditions, and interoperability addresses while deliberately excluding:
 
 - Firmware bytes, instruction listings, and binary patches.

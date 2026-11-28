@@ -393,7 +393,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   catalogued dumps. Neo Fuji is treated as historical catalogue
   evidence rather than dump verification because its page explicitly combines owned material,
   auctions, other websites, and rumors.
-- Full inventory and methodology: [`../../docs/ROM_CORPUS.md`](../../docs/ROM_CORPUS.md).
+- Full inventory and methodology: [`../../docs/roms/ROM_CORPUS.md`](../../docs/roms/ROM_CORPUS.md).
 
 ### MAME Gamate implementation
 
@@ -530,9 +530,9 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   No dump is a systematic half mirror. Four 512 KiB games have terminal uniform banks, while Hot
   Hero has the corpus's only repeated nonuniform regions at 16/32 KiB granularity. Bytes
   `$6003-$6004` and `$601E-$601F` remain unexplained and are not assigned semantics.
-- Header and boot-ABI findings: [`../../docs/ROM_HEADER_ANALYSIS.md`](../../docs/ROM_HEADER_ANALYSIS.md).
+- Header and boot-ABI findings: [`../../docs/roms/ROM_HEADER_ANALYSIS.md`](../../docs/roms/ROM_HEADER_ANALYSIS.md).
 - Capacity, padding, and repetition findings:
-  [`../../docs/ROM_LAYOUT_ANALYSIS.md`](../../docs/ROM_LAYOUT_ANALYSIS.md).
+  [`../../docs/roms/ROM_LAYOUT_ANALYSIS.md`](../../docs/roms/ROM_LAYOUT_ANALYSIS.md).
 
 ### Commercial software-library comparison
 
@@ -548,7 +548,7 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   Matches remain classified as code-or-data until disassembly and reachability analysis establish
   their role.
 - Full findings and limitations:
-  [`../../docs/SOFTWARE_LIBRARY_ANALYSIS.md`](../../docs/SOFTWARE_LIBRARY_ANALYSIS.md).
+  [`../../docs/roms/SOFTWARE_LIBRARY_ANALYSIS.md`](../../docs/roms/SOFTWARE_LIBRARY_ANALYSIS.md).
 - Complete-corpus extension: the same independently authored fixed-bank comparison was rerun after
   four locally dumped, MAME-hash-matched cartridges completed the 62-image catalogue. No new pair
   reached the original 500-window summary threshold. Mighty Boxer shares a consistently placed

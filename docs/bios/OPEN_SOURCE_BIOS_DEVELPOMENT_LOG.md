@@ -138,7 +138,7 @@ This log contains the project’s development history, provenance, validation, d
   and the result is an emulator observation rather than a physical measurement.
 - Prototype inputs and implementation: the published physical-hardware notes by Kevtris cited
   above supplied the protection identifier and serial protocol; the project-authored
-  [`ROM_HEADER_ANALYSIS.md`](../ROM_HEADER_ANALYSIS.md), boot and replacement analyses
+  [`ROM_HEADER_ANALYSIS.md`](../roms/ROM_HEADER_ANALYSIS.md), boot and replacement analyses
   supplied the exact header field, checksum range, entry boundary and candidate RAM policy; and
   [detailed runtime-service evidence](#detailed-runtime-api-evidence-and-contracts) supplied the
   observed service and callback effects. The new firmware was written independently from those behavioral
