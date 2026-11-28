@@ -961,6 +961,22 @@ tile_stream_pass:
 	rts
 
 ; Two-pass row stream of (tile, count) pairs; tile zero advances the column by count.
+	; Unexecuted padding keeps pair_stream_pass and the following services at fixed addresses.
+	nop
+	nop
+f018_end:
+	pla
+	beq @second_pass
+	lda #$FE
+	cmp #$FE
+	rts
+@second_pass:
+	pla
+	sta $01
+	lda $00
+	sta $00
+	lda #$02
+	jmp pair_stream_pass
 draw_pair_stream:
 	lda LCD_CONTROL_BASE
 	ora #$40
@@ -968,21 +984,6 @@ draw_pair_stream:
 	lda $01
 	pha
 	lda #$00
-	jsr pair_stream_pass
-	lda $00
-	sta $00
-	pla
-	sta $01
-	lda #$02
-	jsr pair_stream_pass
-	lda #$FE
-	cmp #$FE
-	rts
-
-f018_end:
-	pla
-	rts
-
 pair_stream_pass:
 	pha
 	ldy #$00
@@ -1069,41 +1070,26 @@ f018_repeat:
 	asl a
 	sta LCD_VRAM_ADDR_HI
 	ldy $1A
+	ldx #$08
+@column_byte:
+	; Sixteen CPU cycles per byte reproduce the authentic 32-master-clock write spacing.
 	lda ($02),y
 	sta LCD_VRAM_WRITE
 	iny
-	lda ($02),y
-	sta LCD_VRAM_WRITE
-	iny
-	lda ($02),y
-	sta LCD_VRAM_WRITE
-	iny
-	lda ($02),y
-	sta LCD_VRAM_WRITE
-	iny
-	lda ($02),y
-	sta LCD_VRAM_WRITE
-	iny
-	lda ($02),y
-	sta LCD_VRAM_WRITE
-	iny
-	lda ($02),y
-	sta LCD_VRAM_WRITE
-	iny
-	lda ($02),y
-	sta LCD_VRAM_WRITE
-	; Complete the authentic 330-master-clock emitted-column term without duplicating this loop.
-	jsr f018_column_delay
-	inc $18
 	dex
+	bne @column_byte
+	inc $18
+	dec $1B
 	bne f018_repeat
 	stx $1B
 	pla
 	tay
 	ldx #$FF
 	jmp f018_pair
-	; Preserve the placement of following services after moving the two-byte epilogue above.
+	; Preserve the placement of following services.
+	.repeat 39
 	nop
+	.endrepeat
 
 ; Clears plane-0 rows $E6-$FE, then decodes (value, count) runs on rows relative to $E6.
 draw_row_runs:
