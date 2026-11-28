@@ -480,6 +480,36 @@ controller-cycle schedule, matches rise to 724 video and 722 VRAM frames. In the
 sequence, `$F01B` now contributes 0 clocks, leaving `$F015` (+360 to +512 per call) and `$F027`
 as the next live disagreements.
 
+The `$F015` pass first audited which outputs callers consume, with the same post-return
+perturbation method as `$F018` (969 returns in 47 titles, 60-frame horizon, no-input and
+controller-cycle schedules). A and N/Z/C never mattered. `$00`, `$01`, `$18`, `$19`, `$1A`, `$1B`,
+`$1C`, `$1E` and `$1F` only persisted unread. X, Y and V changed later state in a few titles, and
+Kill Shot read `$1D` after the call. `$1D` is an input, so it stays preserved. SWK therefore no
+longer reproduces A, N/Z/C, the final source pointer or the scratch values, which is a
+compatibility policy rather than a hardware claim. X, Y, V, I, D, `$02`-`$03` and `$1D` are exact.
+
+A first redesign used the freed registers: the destination column in X, the row count compared
+against Y, the carry left by `CPY` to fold the 256-row case into the pointer add, one loop for both
+planes, and entry X saved in `$1E`. It reduced the synthetic residual from `88 + 52*c` to an exact
+`0` for ordinary no-carry shapes while still matching the old pointer-update model. Real calls
+disproved that model. Brick Blaster's first call copies 10x16 bytes from `$AD40` and `$ADE0`. UMC
+takes 256 clocks longer than the formula predicts, and 128 indexed reads cross a page. The pointer
+update model predicts none. A continuously running Y over the whole plane produces exactly 128 (the
+second plane's base low byte `$E0` crosses for indices from 32), and it also explains why authentic
+returns `columns*rows & $FF` in Y.
+
+The retained version therefore keeps Y running over each plane and advances the page byte when Y
+wraps. The wrap check replaces the per-byte filler, so the row loop stays at 19 cycles. This
+removes all pointer arithmetic, so V, I and D pass through without a status save. The destination
+column is a zero-page counter whose bit 7 marks the second pass, and two small cycle pads (four per
+column and nineteen fixed) bring the totals to the authentic terms. All four Brick Blaster calls
+are exact, and no-input VRAM matches rise from 110 to 111. On a ten-title F015-heavy sample, video
+matches rise in Legend of Dragon Knight (120 to 799), Myth of Asamia (531 to 925), Monster Pitfall
+(879 to 967), GP Race and Tennis, with no title regressing. Across 7,890 comparable corpus calls
+(300 frames per title), LCD/VRAM write counts, output X/Y and scroll and VRAM-address state match
+in 7,889. The remaining one, a Fantasy Travel call, differs only in the changed-VRAM summary and
+probably reflects earlier divergence in surrounding VRAM content.
+
 The 1,000-frame matrix retains the startup-only frame-1 presentation difference and the first later
 VRAM/video boundaries at frames 114/116. After the bit-7 correction, no-input matching is 110 VRAM
 and 114 video frames. Under the controller-cycle schedule, video matches on 720 frames and VRAM on
@@ -562,7 +592,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | `$F00C` two-plane clear | Exact uninterrupted and observed interrupt-spanning timing | The ordered 12,800 VRAM writes, 13,602 LCD writes, registers, scratch, LCD state, and 247,326-master-clock duration match the controlled contract for both ordinary and row-increment control modes. Brick Blaster's seven- and eight-IRQ calls also match UMC exactly. Mid-call mutation and exact individual event timestamps remain open. |
 | `$F00F` fixed plane-0 clear | Exact for the controlled contract | Synthetic 775-byte VRAM, 829-LCD-write and 15,930-master-clock results agree; broader interrupt and side-effectful contexts are not claimed. NOP padding is an implementation convenience, not a timing substitute. |
 | `$F012` glyph run | Partial, improved | The fixed-row unroll, direct selector transfer, reduced stack bookkeeping, and combined C/V decision tree preserve the measured output, flags, and stack footprint. Across all 256 one-tile selectors and both tested entry-V states, SWK is now 68-130 clocks over the authentic selector/page formula; the original worst residual was 274. Exact class-dependent timing remains open. |
-| `$F015` two-plane bitmap copy | Partial, improved | Geometry, LCD writes and tail-JMP behavior are implemented. Keeping status on the stack lets `$01A` count columns while preserving `$01C`, eliminating both width stack round trips. Reordering the saved status/X values avoids a temporary status copy, and the entry X value is consumed directly when deriving the destination column. An out-of-line 256-row pointer path removes the ordinary per-column taken branch. Tested nonzero-height shapes now take `322 + c*(184 + 76*r)` versus the authentic `234 + c*(132 + 76*r)`; zero height uses `r=256` and a 176-clock column term. The per-byte cost is exact; the ordinary remaining difference is 88 fixed clocks plus 52 per column. A source-pointer carry still adds eight clocks beyond the authentic indexed-read page penalty. |
+| `$F015` two-plane bitmap copy | Exact for ordinary shapes; small wrap residual | Geometry, LCD writes, X, Y, V/I/D and page-crossing reads match. Real calls show that the source index runs continuously over each plane (Y returns `columns*rows & $FF` as a natural consequence), and SWK now does the same. Durations equal `234 + c*(132 + 76*r) + 2*crossings` clocks. Brick Blaster's four calls are exact, including one that spans an IRQ. 7,210 of 7,245 uninterrupted corpus calls are exact. The other 35 are 16 clocks long: each 256-byte wrap of the index costs 8 clocks that authentic does not spend. A, N/Z/C, `$00`-`$01` and the `$18`-`$1F` scratch bytes are intentionally not reproduced (see the liveness audit). |
 | `$F018` pair stream | Partial, substantially improved | Emitted columns, the 260-clock row term, transparent/opaque pairs, and the groups used by Brick Blaster now match. Emitted bytes use the authentic 32-clock spacing. Its first call leaves an isolated +18-clock fixed residual (down from +70; A/N/Z/C and final scratch values are not reproduced, per a corpus liveness audit) independent of tested row and pair/group shape. Duration-only dispatch trials changed IRQ phase and were rejected. Minimal group 3 is four clocks short and group 4 four clocks long. All synthetic boundary/open-bus/flag cases retain matching non-timing behavior. Zero opaque counts and page-cross combinations remain open. |
 | `$F01B` row-run stream | Exact in tested contexts | Every LCD write in Brick Blaster's first call lands on the authentic master clock, and the duration, ports, registers, status, RAM and peripherals match. This holds across the corpus campaign (masked and live) and 1,200 randomized synthetic cases covering escapes, zero counts, page crossings and wraps in RAM and ROM, `$015` classes, D-set entry and random registers. |
 | `$F01E` tile-literal stream | Partial | A sampled context was 314,334 prototype clocks versus 324,556 authentic clocks; exact timing and broad stream variation remain open. |

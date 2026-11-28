@@ -507,48 +507,25 @@ clear_display_plane:
 	bne @row
 	rts
 
-copy_plane:
-	lda $01C
-	sta $01A
-@column:
-	lda $018
-	sta LCD_VRAM_ADDR_LO
-	lda $019
-	sta LCD_VRAM_ADDR_HI
-	ldy #$00
-	ldx $01D
-@row:
-	lda ($1E),y
-	sta LCD_VRAM_WRITE
-	sta $01B
-	iny
-	dex
-	bne @row
-	tya
-	beq @full_page
-	clc
-	adc $1E
-	sta $1E
-	bcc @next_column
-	inc $1F
-@next_column:
-	; The destination column is an eight-bit counter; INC preserves its wrap behavior while
-	; avoiding redundant accumulator setup on every column of both planes.
-	inc $018
-	dec $01A
-	bne @column
-	rts
-@full_page:
-	inc $1F
-	jmp @next_column
-
+	; Unexecuted padding places the whole copy routine inside one page so taken branches stay short.
+	.repeat 4
+	nop
+	.endrepeat
+; Copies a rectangle into both planes. A, N/Z/C, `$00`-`$01` and the `$18`-`$1F` scratch bytes are
+; not part of the retained return contract; X, Y, V, I and D are exact. Nothing here executes ADC,
+; SBC or BIT, so V, I and D pass through unchanged. Entry X is kept in `$1E`.
+;
+; One loop serves both planes. Y runs continuously over each plane's source (`$00`-`$01` is the
+; base, with the page byte advanced when Y wraps), which gives the observed indexed page-crossing
+; reads and returns Y = columns*rows modulo 256. Bit 7 of `$18` (the running destination column)
+; is clear after the first pass (at most 62) and set after the second.
 copy_bitmap:
-	php
+	stx $01E
 	txa
-	pha
 	lsr a
 	lsr a
 	lsr a
+	sta $01F
 	sta $018
 	sty $019
 	lda LCD_CONTROL_BASE
@@ -559,38 +536,54 @@ copy_bitmap:
 	lsr a
 	lsr a
 	sta $01C
-	lda $000
-	sta $1E
-	lda $001
-	sta $1F
-	jsr copy_plane
+	sta $01A
+	ldy #$00
+@column:
+	lda $018
+	sta LCD_VRAM_ADDR_LO
+	lda $019
+	sta LCD_VRAM_ADDR_HI
+	; The measured per-column setup is four cycles longer than this minimal sequence.
+	nop
+	nop
+	ldx $01D
+@row:
+	lda ($00),y
+	sta LCD_VRAM_WRITE
+	iny
+	bne :+
+	inc $001
+:
+	dex
+	bne @row
+	inc $018
+	dec $01A
+	bne @column
+	lda $018
+	bmi @finish
 	lda $002
 	sta $000
-	sta $1E
 	lda $003
 	sta $001
-	sta $1F
-	lda $018
-	sec
-	sbc $01C
+	lda $01F
 	ora #$80
 	sta $018
-	jsr copy_plane
-	; The copy loop advances the second-plane source by columns*rows. Its low-byte delta is the
-	; documented modulo-256 Y result, including a 256-row count.
-	lda $1E
-	sec
-	sbc $002
-	tay
-	pla
-	tax
-	pla
-	and #$4C
-	ora #$02
-	pha
-	lda $01B
-	plp
+	lda $01C
+	sta $01A
+	ldy #$00
+	jmp @column
+@finish:
+	; The measured fixed term is 19 cycles longer than the minimal sequence above.
+	.repeat 8
+	nop
+	.endrepeat
+	cmp $000
+	ldx $01E
 	rts
+	; Unexecuted padding preserves the following service addresses.
+	.repeat 23
+	nop
+	.endrepeat
 
 clear_fixed_rectangle:
 	lda LCD_CONTROL_BASE

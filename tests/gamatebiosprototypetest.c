@@ -706,40 +706,35 @@ static void testBitmapCopy(struct Gamate* g) {
 		unsigned rows = shapes[s].rows ? shapes[s].rows : 256;
 		unsigned plane0Offset = shapes[s].plane0 - 0x6000;
 		unsigned plane1Offset = shapes[s].plane1 - 0x6000;
-		unsigned crossingReads = 0, pointerCarries = 0;
-		uint8_t finalByte = 0;
+		unsigned crossingReads = 0;
+		unsigned wraps = 2 * ((columns * rows) >> 8);
 		for (unsigned column = 0; column < columns; column++) {
 			for (unsigned row = 0; row < rows; row++) {
-				crossingReads += ((shapes[s].plane0 + column * rows) & 0xFF) + row > 0xFF;
-				crossingReads += ((shapes[s].plane1 + column * rows) & 0xFF) + row > 0xFF;
+				unsigned index = (column * rows + row) & 0xFF;
+				crossingReads += (shapes[s].plane0 & 0xFF) + index > 0xFF;
+				crossingReads += (shapes[s].plane1 & 0xFF) + index > 0xFF;
 				uint8_t source0 = g->rom[(plane0Offset + column * rows + row) & 0x3FFF];
 				uint8_t source1 = g->rom[(plane1Offset + column * rows + row) & 0x3FFF];
 				putExpected(expected, column + 2, row + 0xF8, source0);
 				putExpected(expected, 0x80 + column + 2, row + 0xF8, source1);
-				if (column == columns - 1 && row == rows - 1)
-					finalByte = source1;
-			}
-			if (shapes[s].rows) {
-				pointerCarries += ((shapes[s].plane0 + column * rows) & 0xFF) + rows > 0xFF;
-				pointerCarries += ((shapes[s].plane1 + column * rows) & 0xFF) + rows > 0xFF;
 			}
 		}
 		uint64_t writes = g->diagnostics.vramWrites;
 		uint64_t lcd = g->diagnostics.lcdWrites;
 		uint64_t clocks = g->masterClocks;
 		call(g, 0xF015, 0xA5, 0x13, 0xF8, 0x64, 100000);
-		assert(g->masterClocks - clocks == 322u + columns *
-			((shapes[s].rows ? 184u : 176u) + 76u * rows) +
-			2u * crossingReads + 8u * pointerCarries);
+		// The authentic 234 + columns * (132 + 76 * rows) plus 2 clocks per indexed page crossing.
+		// Each 256-byte wrap of the running source index costs 8 clocks that authentic firmware
+		// is not known to spend.
+		assert(g->masterClocks - clocks == 234u + columns * (132u + 76u * rows) +
+			2u * crossingReads + 8u * wraps);
 		assert(!memcmp(g->vram, expected, sizeof(g->vram)));
 		assert(g->diagnostics.vramWrites - writes == 2 * columns * rows);
 		assert(g->diagnostics.lcdWrites - lcd == 1 + 2 * columns * (2 + rows));
-		assert(g->cpu.a == finalByte);
+		// A, N/Z/C, `$00`-`$01` and the `$18`-`$1F` scratch bytes are outside the retained contract.
 		assert(g->cpu.x == 0x13);
 		assert(g->cpu.y == (columns * rows & 0xFF));
-		assert(g->cpu.p == 0x66);
-		assert(g->ram[0x000] == (uint8_t) shapes[s].plane1);
-		assert(g->ram[0x001] == (uint8_t) (shapes[s].plane1 >> 8));
+		assert((g->cpu.p & 0x4C) == 0x44);
 		assert(g->ram[0x002] == (uint8_t) shapes[s].plane1);
 		assert(g->ram[0x003] == (uint8_t) (shapes[s].plane1 >> 8));
 	}

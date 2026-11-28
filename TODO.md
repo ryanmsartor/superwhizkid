@@ -12,10 +12,18 @@
 - Explore hard clipping instead of soft clipping for audio output
 - Explore adjustable audio distortion
 - auto palette mode
-- auto flicker mode
+- auto flicker reduce mode
 - make all ghosting settings darker/longer
-- standalone emulator / debugger / dev tool
-- screenshots on the readme
-
+- standalone emulator / debugger / dev tool - needs a UI next
+- explore "widescreen hacks":
+```
+ratio   smallest    integer
+-----------------------------
+native  160x150
+1:1     160x160     180x180
+4:3     200x150     213x160
+3:2     225x150     240x160
+16:9    256x144     
+```
 
 

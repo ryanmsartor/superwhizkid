@@ -1271,6 +1271,29 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   Only derived timings and pass/fail counts were recorded. Temporary probes lived under `/tmp`
   and were deleted. No authentic code was disassembled or copied.
 
+- `$F015` liveness audit, indexing discovery and redesign (local experiments; UMC as a black box):
+  the post-return perturbation method used for `$F018` covered 969 returns in 47 titles under the
+  no-input and controller-cycle schedules (60-frame horizon, at most 24 sampled returns per title).
+  A and N/Z/C never mattered. `$00`, `$01`, `$18`, `$19`, `$1A`, `$1B`, `$1C`, `$1E` and `$1F` only
+  persisted unread. X, Y and V changed later state in a few titles, and `$1D` was read by Kill
+  Shot. Effect: SWK omits A, N/Z/C, the final source pointer and the scratch values as a
+  compatibility policy, not a hardware claim.
+  A derived-input probe then read the real pointers and dimensions of Brick Blaster's first four
+  `$F015` calls. The first (10 columns by 16 rows, planes at `$AD40` and `$ADE0`) takes 256 clocks
+  longer under UMC than the resolved formula predicts, and a running source index reproduces
+  exactly 128 indexed page crossings (none from a per-column pointer update). That also explains
+  the documented Y result. This supersedes the earlier pointer-carry surcharge model. SWK now runs Y
+  continuously over each plane, advances the page byte at wraps, and uses cycle pads for the
+  authentic per-column and fixed terms.
+  Validation: seven synthetic shapes (1x1, 1x8 to 4x8, crossing and 256-row) match the formula
+  `234 + c*(132 + 76*r) + 2*crossings + 8*wraps`. Brick Blaster's four calls are exact. Across 8,018
+  corpus calls (300 frames per title, both BIOSes), 7,890 had comparable inputs. Their LCD/VRAM
+  write counts, X, Y, scroll and VRAM-address outputs matched in 7,889. Of 7,245 uninterrupted
+  calls, 7,210 matched in duration and 35 were exactly 16 clocks long (one 8-clock wrap per plane).
+  Limitations: wrap cost is not reproduced, the horizon is finite and no game path outside the
+  corpus was tested. Only derived timings, pointers and pass/fail counts were recorded. Temporary
+  probes lived under `/tmp` and were deleted. No authentic code was disassembled or copied.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.
