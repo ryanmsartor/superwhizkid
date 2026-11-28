@@ -760,7 +760,7 @@ unsigned retro_api_version(void) { return RETRO_API_VERSION; }
 void retro_get_system_info(struct retro_system_info* info) {
 	memset(info, 0, sizeof(*info));
 	info->library_name = "superwhizkid";
-	info->library_version = "0.5.1";
+	info->library_version = "0.5.2";
 	info->valid_extensions = "bin|gam";
 	info->need_fullpath = false;
 	info->block_extract = false;
