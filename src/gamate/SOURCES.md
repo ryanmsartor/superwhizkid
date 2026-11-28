@@ -2169,9 +2169,12 @@ copied into the repository, build output, tests, or releases.
 - Result: both BIOS revisions accepted every representative cartridge and reached `$6020`.
   `gamateboot` provides the reproducible diagnostic without containing any copyrighted bytes.
 - The known 4-in-1 image has SHA-1 `4dd20632eb31023e18241290eca7d5a5acb1fa84` and CRC32
-  `10e81571`. The runtime uses the whole-image CRC32 plus the exact 128 KiB size to select its unique
-  mapper; ordinary cartridges continue to use size only to distinguish plain from commonly banked
-  hardware. This fingerprint came from the locally validated image, not an emulator source.
+  `10e81571`. The runtime now identifies its mapper from the observed four-component layout instead
+  of either digest: an exact 128 KiB image must have four 32 KiB component headers bearing
+  `COPYRIGHT BIT CORPORATION`, each with its own valid documented checksum. The full local corpus
+  contained this structure only in the 4-in-1; ordinary cartridges continue to use size to distinguish
+  plain from commonly banked hardware. This is software-structure evidence, not native hardware
+  identification, and no emulator source code was consulted or copied.
 - Current post-entry validation runs every locally available cartridge for 1,000 frames under both
   BIOS revisions. The diagnostic observes changing framebuffer hashes, nonblank output, IRQ service,
   LCD/VRAM traffic, controller reads, and expected bank changes, with no unknown opcodes or persistent
@@ -2741,5 +2744,5 @@ copied into the repository, build output, tests, or releases.
   reported bit-manipulation instructions.
 - Direct test ROMs or logic-analyzer traces for the within-sequence IRQ/BRK clearing clock and LCD
   mid-frame writes.
-- Native hardware identification for the 4-in-1 cartridge, independent of the current whole-image
-  fingerprint policy.
+- Native hardware identification for the 4-in-1 cartridge, independent of the current cartridge-layout
+  policy.

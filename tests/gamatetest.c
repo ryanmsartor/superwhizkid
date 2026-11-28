@@ -80,6 +80,37 @@ static void captureLinkBit(void* context, bool bit) {
 	gamateUartReceiveBit(capture->receiver, bit);
 }
 
+static void testMapperDetection(void) {
+	uint8_t bios[GAMATE_BIOS_SIZE] = { 0 };
+	uint8_t* rom = calloc(1, 0x20000);
+	assert(rom);
+
+	struct Gamate g;
+	gamateInit(&g);
+	assert(gamateLoad(&g, rom, 0x20000, bios, sizeof(bios)));
+	assert(g.mapper == GAMATE_MAPPER_BANKED);
+	gamateFree(&g);
+
+	for (size_t offset = 0; offset < 0x20000; offset += 0x8000) {
+		memcpy(rom + offset + 5, "COPYRIGHT BIT CORPORATION", 25);
+	}
+	assert(gamateLoad(&g, rom, 0x20000, bios, sizeof(bios)));
+	assert(g.mapper == GAMATE_MAPPER_4IN1);
+	gamateFree(&g);
+
+	rom[0x10000 + 0x1000] = 1;
+	assert(gamateLoad(&g, rom, 0x20000, bios, sizeof(bios)));
+	assert(g.mapper == GAMATE_MAPPER_BANKED);
+	gamateFree(&g);
+	rom[0x10000 + 0x1000] = 0;
+
+	rom[0x10000 + 5] = 0;
+	assert(gamateLoad(&g, rom, 0x20000, bios, sizeof(bios)));
+	assert(g.mapper == GAMATE_MAPPER_BANKED);
+	gamateFree(&g);
+	free(rom);
+}
+
 static void testMemory(void) {
 	struct Gamate g;
 	gamateInit(&g);
@@ -1380,6 +1411,7 @@ static void testDebugAccess(void) {
 }
 
 int main(void) {
+	testMapperDetection();
 	testMemory();
 	testDebugAccess();
 	testDebugExecutionControl();

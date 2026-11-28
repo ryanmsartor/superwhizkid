@@ -10,13 +10,23 @@
 // The LCD receives 72,900 clocks per frame from the 4.433 MHz master oscillator.
 enum { STATE_MAGIC = 0x54414D47, STATE_VERSION = 4 };
 
-static uint32_t crc32(const uint8_t* data, size_t size) {
-	uint32_t crc = 0xFFFFFFFF;
-	while (size--) {
-		crc ^= *data++;
-		for (int bit = 0; bit < 8; bit++) crc = crc >> 1 ^ (0xEDB88320U & -(crc & 1));
+static bool is4In1Rom(const uint8_t* rom, size_t romSize) {
+	static const uint8_t copyright[] = "COPYRIGHT BIT CORPORATION";
+	enum { COMPONENT_SIZE = 0x8000, HEADER_OFFSET = 5, CHECKSUM_START = 0x1000 };
+
+	if (romSize != COMPONENT_SIZE * 4) return false;
+	for (size_t component = 0; component < romSize; component += COMPONENT_SIZE) {
+		if (memcmp(rom + component + HEADER_OFFSET, copyright, sizeof(copyright) - 1)) return false;
 	}
-	return ~crc;
+	for (size_t component = 0; component < romSize; component += COMPONENT_SIZE) {
+		uint16_t stored = rom[component] | (uint16_t) rom[component + 1] << 8;
+		uint16_t checksum = 0;
+		for (size_t offset = CHECKSUM_START; offset < COMPONENT_SIZE / 4; offset++) {
+			checksum += rom[component + offset];
+		}
+		if (checksum != stored) return false;
+	}
+	return true;
 }
 
 struct GamateState {
@@ -74,9 +84,9 @@ bool gamateLoad(struct Gamate* g, const uint8_t* rom, size_t romSize,
 	g->rom = copy;
 	g->romSize = romSize;
 	memcpy(g->bios, bios, GAMATE_BIOS_SIZE);
-	// The only known 4-in-1 has the same size as ordinary banked games, so size cannot identify it.
-	// Use its full-image fingerprint; unknown large cartridges retain the common banked mapper.
-	g->mapper = romSize == 0x20000 && crc32(rom, romSize) == 0x10E81571 ? GAMATE_MAPPER_4IN1 :
+	// Four independently valid 32 KiB component headers identify the observed 4-in-1 layout.
+	// Other large cartridges retain the common banked mapper.
+	g->mapper = is4In1Rom(rom, romSize) ? GAMATE_MAPPER_4IN1 :
 		romSize >= 0x10000 ? GAMATE_MAPPER_BANKED : GAMATE_MAPPER_PLAIN;
 	gamateReset(g);
 	return true;

@@ -164,6 +164,11 @@ stored checksum validates against its own `$1000-$1FFF` region.
 This is primary software evidence that the multicart image is organized as four 32 KiB component
 slots and that its startup modification is not represented by the BIOS checksum.
 
+Runtime mapper policy uses this four-component layout rather than a whole-image checksum: a 128 KiB
+image selects the 4-in-1 mapper only when each 32 KiB component has the copyright signature at its
+header position and a valid component checksum. This recognizes equivalent dumps without treating
+an incidental embedded signature as mapper evidence.
+
 ## Bomb Blaster variants
 
 The two catalogued Bomb Blaster images share the same copyright header and all three callback
