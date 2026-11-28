@@ -1108,6 +1108,36 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   per-pair, per-column, stack, or IRQ-visible behavior. No authentic opcode sequence or firmware
   bytes were used for replacement design.
 
+- Brick Blaster pre-`$F018` boundary audit: completed-call reports and local state snapshots were
+  compared under UMC, Bit and SWK through frame 115. Bit and UMC agree exactly on all pre-`$F018`
+  service entry/return clocks and live ordered LCD timings. SWK's `$F00F` retains the authentic
+  15,930-clock duration and 775 VRAM writes but uses 829 LCD writes versus the authentic 838;
+  its traversal order is column-major rather than the authentic row/column register pattern.
+  SWK's first `$F012` takes 4,046 clocks versus 3,668 authentic (+378), with identical ordered LCD
+  events and output. The immediately following `$F009` is 516,282 authentic versus 515,914 SWK
+  (-368) because the later entry changes how much timer waiting remains. By the second `$F00C`,
+  both versions enter at 7,865,412 clocks and return at 8,114,894; the first `$F018` enters both at
+  8,114,978, at frame clock 8,950, LCD clock 40/row 55, IRQ clock 20,608 with no pending IRQ, and
+  identical CPU registers and `$F018` inputs. VRAM, framebuffer and LCD accumulation also match.
+  The whole machine is not identical: nonstack scratch, stack history and AY envelope counter differ
+  at this point, while AY registers and sample phase match. This proves the live `$F018` video/control
+  call itself is not contaminated by earlier timing drift, but also establishes upstream SWK audio
+  and scratch mismatches that must be resolved separately before claiming whole-machine identity.
+  No commercial payload bytes or authentic implementation code were retained or copied.
+
+- `$F018` exact-byte-spacing experiment: the retained column's 92-master-clock tail delay was
+  redistributed as five CPU cycles between each adjacent pair of tile-byte writes, using
+  independently authored flag-neutral carry/branch sequences. The resulting first-column LCD
+  timestamps advanced from 22-clock write spacing to the authentic 32-clock spacing, while a
+  purpose-written single-column case retained a 330-clock column term. An out-of-line tail shim
+  using a three-cycle A read and fixed JMP boundaries removed the direct column-size slope, but
+  code relocation introduced a shape-stable +4 clock residual for opaque tile groups 0, 1 and 2.
+  Brick Blaster's 11 group-0 logical pairs contributed 44 clocks, producing a 114-clock live
+  residual. Inverting the bit-5 branch did not recover this cost; relocation made the live residual
+  +438 clocks. The experiment was reverted. It establishes that exact inter-byte spacing and exact
+  aggregate column duration are necessary but insufficient: low-group pointer selection and code
+  placement must be redesigned together with the delay transfer.
+
 - `$F018` direct-return follow-up: the independently authored second-pass tail-call experiment
   reduced the isolated residual from 70 to 62 master clocks, but the added first-pass conditional
   shifted that pass terminator by two CPU cycles. In the live Brick Blaster call this changed

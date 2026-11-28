@@ -320,6 +320,22 @@ row and pair/group shape. A direct two-pass dispatch experiment shortened the ma
 to +336 clocks; it was reverted. The remaining work is therefore a 35-CPU-cycle fixed correction
 with unchanged observable timing phase, not a simple aggregate-duration pad or dispatch shortcut.
 
+An upstream-boundary audit checked every completed service before the first Brick Blaster `$F018`.
+It found two genuine SWK-only differences earlier in the attract sequence:
+
+- live `$F00F` takes the same 15,930 clocks and writes the same 775 VRAM bytes, but UMC/Bit issue
+  838 LCD-port writes while SWK issues 829 in a different traversal order;
+- `$F012` takes 3,668 clocks in UMC/Bit and 4,046 in SWK, a 378-clock delay.
+
+The following first `$F009` is 368 clocks shorter in SWK because it reaches the IRQ gate later.
+Subsequent waits reconverge: the second `$F00C` and first `$F018` both enter at the identical
+master clock, frame clock, LCD clock/row, IRQ clock and pending state. CPU registers, VRAM,
+framebuffer, LCD accumulation, AY registers, scroll, bank, and every documented `$F018` input also
+match at that boundary. Nonstack scratch, stack history and AY envelope phase are not identical,
+so the complete machine state remains contaminated for audio and later scratch-sensitive behavior.
+Those differences do not change the documented `$F018` call in this context: its +70 masked/live
+duration remains an isolated service discrepancy after the video/control boundary has reconverged.
+
 LCD-port timestamps add a second constraint: authentic UMC spacing is 32 master clocks between
 successive bytes in a repeated tile column, whereas SWK retains the same 330-clock column total by
 placing a 92-clock delay after the eighth write. Exact redistribution matches the byte timestamps,
@@ -339,6 +355,15 @@ call to +354 clocks and reducing 1,000-frame VRAM matches to 109. Both experimen
 The remaining implementation must therefore redesign the fixed two-pass wrapper while preserving
 the five IRQ offsets and their LCD-progress positions, not merely adjust the tile loop or terminal
 duration.
+
+A later exact-spacing experiment redistributed the old 92-master-clock column-tail delay as five
+CPU cycles between adjacent tile bytes. It achieved authentic 32-clock byte spacing and, with a
+separate tail shim, removed the per-column duration slope in one- and two-column cases. The
+implementation nevertheless gained four clocks for opaque groups 0-2. Brick Blaster's 11 group-0
+logical pairs therefore added 44 clocks to the retained +70 fixed residual. Inverting the bit-5
+branch changed helper placement enough to worsen the live call to +438 clocks. Both variants were
+reverted. The old batched tail delay and low-group pointer path are coupled: transferring exact
+inter-byte phase must occur without moving the group-sensitive helper boundary.
 
 An explicit-plane ground-up controller redesign then removed the two pass-subroutine calls and
 encoded "opaque seen" alongside the plane selector. It remained behaviorally exact in the prototype
