@@ -21,6 +21,31 @@ void gamateWrite(struct Gamate* gamate, uint16_t address, uint8_t value) {
 	memory[address] = value;
 }
 
+// cpu.c also supports the production debugger and trace recorder. The functional-test runner keeps
+// tracing disabled, but supplies its flat-bus equivalents so it can link cpu.c independently of the
+// Gamate machine implementation.
+uint8_t gamatePeek(const struct Gamate* gamate, uint16_t address) {
+	(void) gamate;
+	return memory[address];
+}
+
+void gamateTraceRecord(struct Gamate* gamate, const struct GamateTraceEntry* entry) {
+	(void) gamate;
+	(void) entry;
+}
+
+uint8_t gamateDisassemble(const struct Gamate* gamate, uint16_t address,
+		char* output, size_t outputSize,
+		GamateDisassemblyLabelCallback labelCallback, void* labelContext) {
+	(void) gamate;
+	(void) address;
+	(void) output;
+	(void) outputSize;
+	(void) labelCallback;
+	(void) labelContext;
+	return 0;
+}
+
 int main(int argc, char** argv) {
 	if (argc != 2) {
 		fprintf(stderr, "usage: %s 6502_functional_test.bin\n", argv[0]);
