@@ -1169,6 +1169,16 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   neutral: compensating delay must be placed before the affected IRQ boundaries, while the remaining
   22 CPU-cycle reduction is still required for the masked contract.
 
+- `$F018` compensated-wrapper trial: the direct two-pass wrapper was paired with an out-of-line
+  28-master-clock delay at the second-pass transition, intended to cancel its 26-clock early start
+  without moving inline helper addresses. It moved the helper entry by nine bytes and brought IRQ
+  1, 3, 4 and 5 near authentic clock offsets, but at IRQ 5 SWK had completed only 2,279 LCD writes
+  versus 2,289 authentic. The call still required 152,640 clocks (+376). This proves the extra live
+  duration is not removable by restoring timer alignment alone: the direct wrapper executes less
+  progress before the same interrupt boundary. An inline 26-clock compensation moved more code and
+  performed worse. The variants were reverted; future wrapper work must match both IRQ clock and
+  write count at every boundary.
+
 - `$F018` direct-return follow-up: the independently authored second-pass tail-call experiment
   reduced the isolated residual from 70 to 62 master clocks, but the added first-pass conditional
   shifted that pass terminator by two CPU cycles. In the live Brick Blaster call this changed

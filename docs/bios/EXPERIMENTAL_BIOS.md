@@ -365,6 +365,12 @@ branch changed helper placement enough to worsen the live call to +438 clocks. B
 reverted. The old batched tail delay and low-group pointer path are coupled: transferring exact
 inter-byte phase must occur without moving the group-sensitive helper boundary.
 
+Compensating that wrapper's 26-clock early second pass with an out-of-line 28-clock transition
+delay restored several IRQ clock offsets, but did not restore work progress: at IRQ 5 SWK had
+2,279 LCD writes versus 2,289 authentic, and the live call still took 152,640 clocks (+376).
+Inline compensation moved more code and was worse. The direct wrapper was reverted. Future work
+must match both interrupt clock and completed LCD writes, not timer phase alone.
+
 A compact `INC $01B` variant then supplied five cycles in two bytes between adjacent tile writes.
 Although final output and `$01B` still matched because X held the live repeat count, it added seven
 RAM read-modify-write accesses per column, changed status during each gap, moved the helper by nine
