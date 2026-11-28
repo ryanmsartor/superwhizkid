@@ -328,6 +328,18 @@ but relocation makes the fixed residual +114 clocks and leaves the 1,000-frame n
 reverted. Early-call phase, per-byte spacing, terminal fixed cost and interrupt placement must
 therefore be corrected together for framelock.
 
+IRQ-progress instrumentation now separates those terms more directly. In the first live Brick
+Blaster call, UMC accepts IRQs 1-5 at 12,160, 44,928, 77,702, 110,470, and 143,240 clocks with 258,
+641, 1,295, 1,769, and 2,289 LCD writes complete. SWK accepts them 2, 4, 2, 10, and 12 clocks later,
+at 257, 641, 1,291, 1,766, and 2,287 writes. A replacement column loop can match UMC's 32-clock
+byte spacing and be calibrated to the same 330-clock column total, but this produces a 44-clock
+live code-layout residual; it does not remove the empty-stream wrapper's +70 clocks. A status-safe
+direct second-pass return likewise improves the masked residual to +62 while worsening the live
+call to +354 clocks and reducing 1,000-frame VRAM matches to 109. Both experiments were reverted.
+The remaining implementation must therefore redesign the fixed two-pass wrapper while preserving
+the five IRQ offsets and their LCD-progress positions, not merely adjust the tile loop or terminal
+duration.
+
 The 1,000-frame matrix retains the startup-only frame-1 presentation difference and the first later
 VRAM/video boundaries at frames 114/116. After the bit-7 correction, no-input matching is 110 VRAM
 and 114 video frames. Under the controller-cycle schedule, video matches on 720 frames and VRAM on

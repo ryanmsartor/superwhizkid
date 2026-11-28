@@ -1098,6 +1098,37 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   therefore also reverted: successful framelock work must solve early-call phase, per-write spacing,
   terminal fixed cost, and IRQ placement as one coupled change.
 
+- `$F018` aggregate instruction-count check: on the retained first Brick Blaster call, UMC executes
+  23,852 instructions in 152,264 master clocks and SWK executes 24,910 in 152,334 clocks; both take
+  the same five IRQs. The difference is therefore not 35 extra instructions that can be deleted in
+  isolation: the independent SWK implementation uses 1,058 more instructions with a different
+  average cycle distribution. A purpose-written empty-stream probe isolates the fixed wrapper at
+  the documented 144-master-clock contract versus 214 in the current replacement. The next
+  implementation target is the two-pass wrapper: remove 35 CPU cycles without changing per-row,
+  per-pair, per-column, stack, or IRQ-visible behavior. No authentic opcode sequence or firmware
+  bytes were used for replacement design.
+
+- `$F018` direct-return follow-up: the independently authored second-pass tail-call experiment
+  reduced the isolated residual from 70 to 62 master clocks, but the added first-pass conditional
+  shifted that pass terminator by two CPU cycles. In the live Brick Blaster call this changed
+  interrupt-visible alignment enough to raise the residual from 70 to 354 clocks and reduced the
+  1,000-frame VRAM match count from 110 to 109. This rejects optimizations that change the first
+  terminator even when the measured final branch appears irrelevant to the call's data result.
+  The candidate was reverted.
+
+- `$F018` IRQ-progress decomposition: a diagnostic overlay counted emitted LCD writes at each
+  accepted IRQ in Brick Blaster's first live call. UMC accepts its five IRQs at 12,160, 44,928,
+  77,702, 110,470, and 143,240 master clocks with 258, 641, 1,295, 1,769, and 2,289 writes
+  complete; SWK accepts them 2, 4, 2, 10, and 12 clocks later. SWK is at 257 writes at IRQ 1,
+  641 at IRQ 2, 1,291 at IRQ 3, 1,766 at IRQ 4, and 2,287 at IRQ 5. Equal 32-clock spacing between
+  the eight bytes of a column can be achieved independently, but calibrating that replacement to
+  the 330-clock column total produces a 44-clock live code-layout term, while the empty-stream
+  +70-clock wrapper term remains. This separates three requirements: wrapper duration, byte-write
+  phase, and IRQ progress. A final solution must satisfy all three together; per-write spacing
+  alone, even with an exact column coefficient, is not sufficient. The independent aggregate test
+  remains 23,852 versus 24,910 instructions, 152,264 versus 152,334 clocks, and five IRQs for
+  UMC and SWK respectively. No replacement logic from this phase was retained.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.
