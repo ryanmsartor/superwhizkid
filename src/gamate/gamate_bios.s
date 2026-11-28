@@ -1090,14 +1090,16 @@ f018_repeat:
 
 ; Clears plane-0 rows $E6-$FE, then decodes (value, count) runs on rows relative to $E6.
 draw_row_runs:
+	; Align the port-write timeline with the authentic service; the epilogue needs no register setup.
+	nop
 	lda LCD_CONTROL_BASE
 	sta LCD_CONTROL
 	ldy #$E6
 @clear_row:
 	sty LCD_VRAM_ADDR_HI
 	lda #$00
-	sta LCD_VRAM_ADDR_LO
 	ldx #$20
+	sta LCD_VRAM_ADDR_LO
 @clear:
 	sta LCD_VRAM_WRITE
 	dex
@@ -1116,6 +1118,8 @@ draw_row_runs:
 	lda #$00
 	sta LCD_VRAM_ADDR_LO
 @value:
+	; Every row and every completed pair passes here once.
+	jsr f01b_pair_delay
 	iny
 	bne :+
 	inc $01
@@ -1143,10 +1147,11 @@ draw_row_runs:
 :
 	jmp @offset
 @end:
-	ldx #$00
-	lda #$FE
-	cmp #$FE
+	; The terminator compare already leaves A=$FE with Z/C set, and every loop exits with X=0.
 	rts
+	; Unexecuted padding keeps the following services at fixed addresses.
+	nop
+	nop
 
 ; Clears plane-0 rows $E6-$FE, then writes literal stream bytes on absolute row offsets.
 draw_row_literals:
@@ -2080,15 +2085,15 @@ finalize_boot:
 	sec
 	jmp CART_ENTRY
 
-f018_column_delay:
-	; JSR + body + RTS contributes 46 CPU cycles (92 master clocks) per emitted column.
-	ldy #$06
-:
-	dey
-	bne :-
-	jmp :+
-:
+f01b_pair_delay:
+	; JSR + body + RTS contributes the 24 CPU cycles missing from each $F01B row or pair.
+	.repeat 6
+	nop
+	.endrepeat
 	rts
+	; Unexecuted padding preserves the following helper addresses.
+	nop
+	nop
 
 f018_opaque_setup:
 	; Opaque pairs return X=$FF, so the caller's X need not take the transparent preservation path.

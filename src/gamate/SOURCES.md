@@ -1254,6 +1254,23 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   realigning frames. Only derived entry and duration clocks were recorded. Temporary reports were
   deleted.
 
+- `$F01B` timing correction and liveness audit (local experiments; UMC as a black box): synthetic
+  `gamatebiosrowstream` cases decomposed the SWK residual into +8 fixed and -48 clocks per row and
+  per pair. A 60-frame post-return perturbation audit covered 51 returns in 22 titles under the
+  no-input and controller-cycle schedules. Only X was consumed (Dino Ball); A, Y, N/Z/C/V, `$00`,
+  `$01` and `$1A` were not.
+  Effect: the redundant epilogue was removed, and a shared 24-cycle delay now runs once per row and
+  per pair. Instruction reordering aligns all 1,247 LCD writes of Brick Blaster's first call with
+  UMC. The full contract, including A/status, is retained.
+  Validation: Brick Blaster's masked/live replay, all 18 corpus calls in the no-input 1,000-frame
+  campaign, and 1,200 randomized synthetic cases matched with zero clock delta. The cases cover
+  escapes, zero counts, crossings/wraps in RAM and ROM, `$015` classes, D-set entry and random
+  registers.
+  Model limitation: 56 empty-stream cases entered with N or V set differ from the model's status
+  formula identically under UMC and SWK.
+  Only derived timings and pass/fail counts were recorded. Temporary probes lived under `/tmp`
+  and were deleted. No authentic code was disassembled or copied.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

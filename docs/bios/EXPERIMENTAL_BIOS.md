@@ -459,6 +459,27 @@ clocks earlier than UMC. Subsequent `$F015` calls run +360 to +512 clocks, and `
 +1,316 to +2,958. The `$F003` IRQ waits then realign entries to within tens of clocks each frame.
 Framelock work should move to live `$F01B`, then `$F015` and `$F027`, before revisiting `$F018`.
 
+The `$F01B` decomposition showed that the retained SWK body was 24 CPU cycles short for every row
+and every pair, and 4 cycles long in the fixed part. For Brick Blaster's 18 rows and 83 pairs,
+this is -4,840 clocks. The masked and live replays had the same error, so the earlier tracker
+claim of matching synthetic timing no longer described the current firmware. A post-return
+liveness audit then repeated the `$F018` method for 51 `$F01B` returns in 22 titles. Only X=0
+reached later machine state (Dino Ball). A, Y, N/Z/C/V, `$00`, `$01` and `$1A` never mattered.
+
+No contract relaxation was required. The terminator compare already leaves A=`$FE` with Z/C set,
+and every loop exits with X=0, so the explicit `LDX #0; LDA #$FE; CMP #$FE` epilogue was redundant.
+One shared 24-cycle `JSR` delay at the value-read label executes exactly once per row and once
+per completed pair. It reuses the bytes of the now-unused `$F018` column-delay helper. A
+prologue `NOP` and a reordered clear-row `LDX` place all 1,247 LCD writes in Brick Blaster's
+first call on the authentic master clocks. Following services keep their addresses.
+
+The checker's 1,200-case randomized batch exposed one model gap. Empty streams entered with N or V
+set produce a status that the model predicts differently, and UMC and SWK agree with each other
+case for case. The no-input 1,000-frame matrix stays at 114 video and 110 VRAM matches. Under the
+controller-cycle schedule, matches rise to 724 video and 722 VRAM frames. In the 200-frame call
+sequence, `$F01B` now contributes 0 clocks, leaving `$F015` (+360 to +512 per call) and `$F027`
+as the next live disagreements.
+
 The 1,000-frame matrix retains the startup-only frame-1 presentation difference and the first later
 VRAM/video boundaries at frames 114/116. After the bit-7 correction, no-input matching is 110 VRAM
 and 114 video frames. Under the controller-cycle schedule, video matches on 720 frames and VRAM on
@@ -543,7 +564,7 @@ measured or modeled. These labels are not claims of physical Gamate timing.
 | `$F012` glyph run | Partial, improved | The fixed-row unroll, direct selector transfer, reduced stack bookkeeping, and combined C/V decision tree preserve the measured output, flags, and stack footprint. Across all 256 one-tile selectors and both tested entry-V states, SWK is now 68-130 clocks over the authentic selector/page formula; the original worst residual was 274. Exact class-dependent timing remains open. |
 | `$F015` two-plane bitmap copy | Partial, improved | Geometry, LCD writes and tail-JMP behavior are implemented. Keeping status on the stack lets `$01A` count columns while preserving `$01C`, eliminating both width stack round trips. Reordering the saved status/X values avoids a temporary status copy, and the entry X value is consumed directly when deriving the destination column. An out-of-line 256-row pointer path removes the ordinary per-column taken branch. Tested nonzero-height shapes now take `322 + c*(184 + 76*r)` versus the authentic `234 + c*(132 + 76*r)`; zero height uses `r=256` and a 176-clock column term. The per-byte cost is exact; the ordinary remaining difference is 88 fixed clocks plus 52 per column. A source-pointer carry still adds eight clocks beyond the authentic indexed-read page penalty. |
 | `$F018` pair stream | Partial, substantially improved | Emitted columns, the 260-clock row term, transparent/opaque pairs, and the groups used by Brick Blaster now match. Emitted bytes use the authentic 32-clock spacing. Its first call leaves an isolated +18-clock fixed residual (down from +70; A/N/Z/C and final scratch values are not reproduced, per a corpus liveness audit) independent of tested row and pair/group shape. Duration-only dispatch trials changed IRQ phase and were rejected. Minimal group 3 is four clocks short and group 4 four clocks long. All synthetic boundary/open-bus/flag cases retain matching non-timing behavior. Zero opaque counts and page-cross combinations remain open. |
-| `$F01B` row-run stream | Partial | Synthetic ordinary and escape/wrap cases matched UMC timing. Later callbacks, RAM aliases, decimal mode and interrupt-handler work are not fully timing-equivalent. |
+| `$F01B` row-run stream | Exact in tested contexts | Every LCD write in Brick Blaster's first call lands on the authentic master clock, and the duration, ports, registers, status, RAM and peripherals match. This holds across the corpus campaign (masked and live) and 1,200 randomized synthetic cases covering escapes, zero counts, page crossings and wraps in RAM and ROM, `$015` classes, D-set entry and random registers. |
 | `$F01E` tile-literal stream | Partial | A sampled context was 314,334 prototype clocks versus 324,556 authentic clocks; exact timing and broad stream variation remain open. |
 | `$F021` row-literal stream | Exact for the executable contract | All 406 authentic corpus calls and 450 synthetic cases matched the independent model, including exact uninterrupted timing and handler-time-only additions in 280 interrupt-spanning replays. Mutable aliases, nonterminating streams and handlers that alter service inputs remain outside the contract. |
 | `$F024` record initialization | Exact for the controlled contract | Synthetic D-clear record initialization matches 824 master clocks, 32 `$FF` writes, register/status and no peripheral effects. D-set, later callback and interrupt-spanning contexts remain open. |
