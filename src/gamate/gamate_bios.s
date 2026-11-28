@@ -964,6 +964,10 @@ tile_stream_pass:
 	; Unexecuted padding keeps pair_stream_pass and the following services at fixed addresses.
 	nop
 	nop
+	nop
+	nop
+	nop
+	nop
 f018_end:
 	pla
 	beq @second_pass
@@ -973,8 +977,6 @@ f018_end:
 @second_pass:
 	pla
 	sta $01
-	lda $00
-	sta $00
 	lda #$02
 	jmp pair_stream_pass
 draw_pair_stream:

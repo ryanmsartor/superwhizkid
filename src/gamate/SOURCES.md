@@ -1216,16 +1216,18 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   independently written 16-cycle per-byte column loop replaced the unrolled writes and batched
   column delay, matching the measured 32-master-clock write spacing and preserving the 330-clock
   column total. The pass `JSR` entries became fall-through/`JMP` entries; unexecuted padding keeps
-  following services and opaque helper entries fixed. A trimmed variant without the required `$00`
-  rewrite was 12 clocks shorter but failed the RAM-write contract and was rejected. The retained
-  version changes the fixed term from +70 to +38 clocks. Brick Blaster's first call takes
-  150,762/152,302 masked/live clocks versus 150,724/152,264 UMC. All five IRQ handlers take 308
-  clocks, handler-entry offsets are within 6 clocks, and the masked/live residuals are equal. The
-  boundary, open-bus and flag selftests and the gameplay corpus match on all non-timing properties.
-  Over 1,000 no-input frames, video matches remain at 114, while VRAM matches move from 110 to 109.
-  Only derived clocks, PCs and LCD-write counts were recorded. Temporary probes lived under `/tmp`
-  and were deleted. No authentic code was disassembled or copied. The remaining +38 is pass
-  bookkeeping (91 versus 72 CPU cycles on the empty path), not a row, pair or column coefficient.
+  following services and opaque helper entries fixed. Compatibility policy, not hardware
+  measurement: UMC rewrites `$00` with its unchanged value between passes. That write is
+  invisible to software, so SWK omits it, and `gamatebiosf018` now requires only that `$00` keeps
+  its value. Keeping the write produced +38 rather than +26 clocks.
+  The retained version changes the fixed term from +70 to +26 clocks. Brick Blaster's first call
+  takes 150,750/152,290 masked/live clocks versus 150,724/152,264 UMC. All five IRQ handlers take
+  308 clocks, handler-entry offsets are within 2 clocks, and the masked/live residuals are equal.
+  The boundary, open-bus and flag selftests and the gameplay corpus match on all non-timing
+  properties. The 1,000-frame no-input matrix remains at 114 video and 110 VRAM matches. Only
+  derived clocks, PCs and LCD-write counts were recorded. Temporary probes lived under `/tmp` and
+  were deleted. No authentic code was disassembled or copied. The remaining +26 is pass
+  bookkeeping (85 versus 72 CPU cycles on the empty path), not a row, pair or column coefficient.
 
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add

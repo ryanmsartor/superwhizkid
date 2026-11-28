@@ -341,7 +341,11 @@ static struct Result check(struct Gamate* g, struct Capture* capture, struct Mod
 		if (i >= 0x100 && i < 0x200) continue;
 		bool written = (g->diagnostics.ramWritten[i >> 3] & (1u << (i & 7))) != 0;
 		if (i < sizeof(expected->ram)) {
-			if (written != (expected->written[i] != 0) || g->ram[i] != expected->ram[i])
+			// Authentic firmware rewrites $00 with its unchanged value. The write is not observable
+			// to software, so SWK may omit it; only the preserved value is required.
+			bool writeOptional = i == 0;
+			if ((!writeOptional && written != (expected->written[i] != 0)) ||
+					g->ram[i] != expected->ram[i])
 				r.ram = false;
 		} else if (written) {
 			r.ram = false;
