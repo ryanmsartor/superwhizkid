@@ -550,8 +550,10 @@ static void readOptions(void) {
 	var.key = "superwhizkid_lcd_ghosting";
 	var.value = NULL;
 	const char* value = environCb(RETRO_ENVIRONMENT_GET_VARIABLE, &var) && var.value ? var.value : "off";
+	// darken = going from light to dark; fade = going from dark to light.
+	// lower values result in longer transition times.
 	static const unsigned darken[] = { 256, 256, 248, 240, 224, 208 };
-	static const unsigned fade[] = { 256, 224, 192, 160, 128, 96 };
+	static const unsigned fade[] = { 256, 220, 184, 148, 112, 76 };
 	int level = value[0] >= '1' && value[0] <= '5' && !value[1] ? value[0] - '0' : 0;
 	lcdDarken = darken[level];
 	lcdFade = fade[level];
