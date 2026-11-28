@@ -1244,6 +1244,16 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   untested game paths. Only derived pass/fail counts were retained; the temporary probe lived under
   `/tmp` and was deleted.
 
+- `$F018` page-as-marker trial and downstream call comparison (local experiments; UMC as a black
+  box): using the saved stream page as the first pass marker failed every functional check,
+  because the marker also indexes the plane base pointers and must be 0 or 2. Counted
+  alternatives (JSR return-address markers, pre-pushed second markers, fall-through reordering
+  and zero-page index offsets) each retain 81 empty-path cycles. A 200-frame `gamatebioscalls`
+  comparison of Brick Blaster then showed the next live disagreements to be larger:
+  `$F01B` -4,840 clocks, `$F015` +360 to +512 and `$F027` +1,316 to +2,958, with `$F003` waits
+  realigning frames. Only derived entry and duration clocks were recorded. Temporary reports were
+  deleted.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.

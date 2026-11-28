@@ -440,6 +440,25 @@ live residual is also +18. The no-input 1,000-frame matrix remains at 114 video 
 matches. The scratch policy saves no clocks by itself, but it frees `$18`-`$1B` for future
 pass-bookkeeping redesigns.
 
+A further bookkeeping trial used the saved stream page as the first pass's stack marker and zero
+as the second. On paper this removed exactly the remaining nine CPU cycles. It failed because the
+same stack byte also indexes the plane base pointers (`$06,X`/`$08,X`) in the transparent and
+opaque pair paths, so it must be 0 or 2. The following variants were also counted, and each
+again totals 81 empty-path cycles:
+- JSR return-address markers;
+- pre-pushing the second marker;
+- reordering the terminator and second-pass setup to fall through without a jump;
+- a zero-page index offset (marker values two apart).
+
+In each case, the saved jump or load moves elsewhere. The trial was reverted. The +18 residual
+appears to be the floor of this stack-marker architecture.
+
+A later call-sequence comparison over 200 Brick Blaster frames showed that `$F018` is no longer
+the dominant contaminant. SWK enters the following `$F01B` 18 clocks late but leaves it 4,840
+clocks earlier than UMC. Subsequent `$F015` calls run +360 to +512 clocks, and `$F027` calls
++1,316 to +2,958. The `$F003` IRQ waits then realign entries to within tens of clocks each frame.
+Framelock work should move to live `$F01B`, then `$F015` and `$F027`, before revisiting `$F018`.
+
 The 1,000-frame matrix retains the startup-only frame-1 presentation difference and the first later
 VRAM/video boundaries at frames 114/116. After the bit-7 correction, no-input matching is 110 VRAM
 and 114 video frames. Under the controller-cycle schedule, video matches on 720 frames and VRAM on
