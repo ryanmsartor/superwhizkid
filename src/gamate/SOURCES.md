@@ -1079,6 +1079,25 @@ the PSG runs at 4.433 MHz / 4; channel A goes left, B right, and C to both sides
   4 four clocks long. The repeated matrix retains 110/114 no-input VRAM/video matches and records
   720/720 controller-cycle matches. No cartridge payload was retained.
 
+- `$F018` fixed-term phase check: purpose-written ordinary streams with zero, one, two, three, and
+  four rows, plus transparent and opaque single-pair cases across groups 0, 1, 6, and 7, all retain
+  the same 70-master-clock residual. The term is therefore independent of row count and pair/group
+  shape in the tested domain. A withdrawn direct two-pass dispatch experiment reduced the masked
+  fixed residual from 70 to 44 clocks, but its changed instruction sequence moved Brick Blaster's
+  live interrupt boundary and increased the open-call residual to 336 clocks. Output, registers, RAM,
+  ports, and ROM-read order still matched, demonstrating that a duration-only reduction is
+  insufficient: the eventual 35-CPU-cycle fixed correction must preserve interrupt-visible phase.
+  The prototype was reverted; no firmware code or cartridge payload was retained.
+
+- `$F018` intra-column phase check: LCD-port timestamps show UMC spaces the eight tile bytes by 32
+  master clocks, while SWK's existing exact 330-clock column batches 92 clocks after its eighth
+  write. Redistributing that delay exactly matches UMC's byte spacing and leaves the standalone
+  column term unchanged, but changes instruction boundaries and grows the Brick Blaster open-call
+  residual to 114 clocks after code relocation. The 1,000-frame no-input matrix retained 114 matching
+  video frames but fell from 110 to 109 matching VRAM frames. That byte-delay redistribution was
+  therefore also reverted: successful framelock work must solve early-call phase, per-write spacing,
+  terminal fixed cost, and IRQ placement as one coupled change.
+
 - Local origin: all 62 user-supplied cartridges and both recognized BIOS revisions, read in place.
   The unattended baseline covers 1,000 post-entry frames; deterministic controller schedules add
   input-driven coverage. Local trace reports are not distributed.
